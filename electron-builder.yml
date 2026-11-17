@@ -1,0 +1,23 @@
+appId: io.github.cynicalk.glowtide
+productName: Glowtide
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!test/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+asarUnpack:
+  - resources/**
+win:
+  executableName: Glowtide
+  target: nsis
+nsis:
+  artifactName: Glowtide-${version}-setup.${ext}
+  shortcutName: Glowtide
+  uninstallDisplayName: Glowtide
+  createDesktopShortcut: always
+  oneClick: true
+npmRebuild: false

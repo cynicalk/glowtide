@@ -249,6 +249,14 @@ export default function SettingsPanel({ state, settings, onClose }) {
           onChange={(v) => set({ glow: { intensity: v } })}
         />
         <div className="srow">
+          <span>Moving light</span>
+          <Toggle
+            label="Moving light"
+            on={g.motion !== 'still'}
+            onChange={(v) => set({ glow: { motion: v ? 'flow' : 'still' } })}
+          />
+        </div>
+        <div className="srow">
           <span>Pulse with the music</span>
           <Toggle
             label="Pulse with the music"

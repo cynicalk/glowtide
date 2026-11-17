@@ -870,19 +870,31 @@ function scheduleSnapshot() {
       // What the overlay's current word is doing, sampled twice, to see the fill move.
       let overlay = null
       if (lyricsWin && !lyricsWin.isDestroyed()) {
-        const probe = `(() => { const el = document.querySelector('.w.cur, .aura-text, .wave-line, .beat-text, .caption'); if (!el) return null;
-          const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length, text: el.textContent, at: Date.now(),
+        const probe = `(() => { const el = document.querySelector('.w.cur:not(.leave), .aura-text:not(.leave), .wave-line:not(.leave), .beat-text:not(.leave), .caption:not(.leave)'); if (!el) return null;
+          const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length, text: el.textContent, at: Date.now(), leaving: [...document.querySelectorAll('.leave')].map((x) => +getComputedStyle(x).opacity),
           bg: cs.backgroundPosition, anim: cs.animationName, dur: cs.animationDuration } })()`
         overlay = []
-        for (let i = 0; i < 25; i++) {
+        for (let i = 0; i < Number(process.env.GLOWTIDE_PROBE_N || 25); i++) {
           overlay.push(await lyricsWin.webContents.executeJavaScript(probe))
           await new Promise((r) => setTimeout(r, 80))
         }
+      }
+      // The edge glow's travelling light: its angle, read twice half a second apart.
+      let flow = null
+      if (glowWins[0] && !glowWins[0].isDestroyed()) {
+        const read = () =>
+          glowWins[0].webContents.executeJavaScript(
+            "(document.querySelector('.edge-flow')?.style.getPropertyValue('--flow-a')) || null"
+          )
+        const a = await read()
+        await new Promise((r) => setTimeout(r, 500))
+        flow = [a, await read()]
       }
       writeFileSync(
         join(dir, 'state.json'),
         JSON.stringify(
           {
+            flow,
             ...state,
             lyricsCount: lyricsLines.length,
             overlay,

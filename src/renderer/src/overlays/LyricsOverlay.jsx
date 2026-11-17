@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { positionOf, useColours, useGlowtide } from '../lib/store'
 import { wordWindowAt, lineWindowAt, lineWordsAt } from '../../../shared/lyrics.mjs'
 import { Aura, Waves, Beat } from './LyricStyles'
+import { useSwap, useBeatVars } from '../lib/motion'
 import {
   buildFigures,
   labelledStars,
@@ -103,6 +104,7 @@ function Backdrop({ kind, strength, cover, on }) {
 }
 
 function Stack({ win, mode, measured, playing }) {
+  const { prev: leaving } = useSwap(win?.cur?.t ?? 'none', win?.cur?.w || '')
   if (!win) return null
   const len = win.cur?.w?.length || 0
   const lineScale = len <= 12 ? 0.9 : len <= 24 ? 0.68 : len <= 40 ? 0.52 : 0.42
@@ -125,8 +127,15 @@ function Stack({ win, mode, measured, playing }) {
       <div key={`p${win.prev?.t}`} className="w prev">
         {win.prev?.w || ' '}
       </div>
-      <div key={`c${win.cur?.t}`} className={`w cur ${wipe ? 'wipe' : ''}`} style={wipe}>
-        {win.cur?.w || ' '}
+      <div className="slot">
+        {leaving && (
+          <div key={`l${leaving.key}`} className="w cur leave">
+            {leaving.value}
+          </div>
+        )}
+        <div key={`c${win.cur?.t}`} className={`w cur ${wipe ? 'wipe' : ''}`} style={wipe}>
+          {win.cur?.w || ' '}
+        </div>
       </div>
       <div key={`n${win.next?.t}`} className="w next">
         {win.next && win.cur ? <span className="hl">{win.next.w}</span> : ' '}
@@ -168,6 +177,7 @@ function Starfield({ seed }) {
 
 /** A real constellation filling with the verse: lit stars glow, the rest wait faintly. */
 function Constellation({ sky, mode, scale }) {
+  const { prev: leavingCap } = useSwap(sky?.focus ? sky.key : 'none', sky?.focus?.text || '')
   if (!sky?.figure) return null
   const f = sky.focus
   // Small, recent and non-overlapping word labels; the caption carries the size setting.
@@ -185,7 +195,7 @@ function Constellation({ sky, mode, scale }) {
           return (
             <line
               key={i}
-              className={`edge ${e.lit ? 'lit' : ''}`}
+              className={`sky-edge ${e.lit ? 'lit' : ''}`}
               x1={p.x}
               y1={p.y}
               x2={q.x}
@@ -214,6 +224,18 @@ function Constellation({ sky, mode, scale }) {
           </g>
         )}
       </g>
+      {leavingCap && (
+        <text
+          key={`lcap${leavingCap.key}`}
+          className="caption leave"
+          x={VIEW.w / 2}
+          y={VIEW.h - 95}
+          textAnchor="middle"
+          style={{ fontSize: capSize * scale }}
+        >
+          {leavingCap.value}
+        </text>
+      )}
       {f && (
         <text
           key={`cap${sky.key}`}
@@ -262,6 +284,15 @@ export default function LyricsOverlay() {
     opts
   )
   const now = useClock()
+  const beatRef = useRef(null)
+  // Music energy for Aura, Waves and Beat (and nothing is listened to otherwise).
+  useBeatVars(beatRef, {
+    playing:
+      ['aura', 'waves', 'beat'].includes(style) &&
+      !!state?.playback?.isPlaying &&
+      !state?.playerFocused,
+    listen: !!settings?.glow.reactToAudio
+  })
 
   if (!state || !settings || !colours) return null
   // Step aside while Glowtide's own window is in use, so the overlay never covers its controls.
@@ -302,15 +333,12 @@ export default function LyricsOverlay() {
             playing={!!state.playback?.isPlaying}
           />
         )}
-        {style === 'aura' && <Aura win={win && 'cur' in win ? win : null} mode={mode} />}
-        {style === 'waves' && <Waves view={win && 'words' in win ? win : null} />}
+        {style === 'aura' && (
+          <Aura win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
+        )}
+        {style === 'waves' && <Waves view={win && 'words' in win ? win : null} beatRef={beatRef} />}
         {style === 'beat' && (
-          <Beat
-            win={win && 'cur' in win ? win : null}
-            mode={mode}
-            playing={active}
-            listen={settings.glow.reactToAudio}
-          />
+          <Beat win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
         )}
         {style === 'constellation' && (
           <svg

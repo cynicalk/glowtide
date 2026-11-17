@@ -1144,7 +1144,7 @@ input[type='range']:hover::-webkit-slider-thumb,
     opacity: 0;
   }
 }
-.edge {
+.sky-edge {
   stroke: var(--sec);
   stroke-width: 1.2;
   stroke-dasharray: 3 6;
@@ -1153,7 +1153,7 @@ input[type='range']:hover::-webkit-slider-thumb,
     opacity 0.6s,
     stroke-width 0.6s;
 }
-.edge.lit {
+.sky-edge.lit {
   stroke-dasharray: none;
   stroke-width: 1.6;
   opacity: 0.7;
@@ -1344,19 +1344,19 @@ input[type='range']:hover::-webkit-slider-thumb,
   mix-blend-mode: screen;
   animation: drift 14s ease-in-out infinite alternate;
 }
-.aura-cloud i:nth-child(1) {
+.aura-cloud i:nth-of-type(1) {
   left: 8%;
   top: 12%;
   background: var(--glow);
 }
-.aura-cloud i:nth-child(2) {
+.aura-cloud i:nth-of-type(2) {
   left: 40%;
   top: 22%;
   background: var(--hi);
   animation-duration: 17s;
   animation-direction: alternate-reverse;
 }
-.aura-cloud i:nth-child(3) {
+.aura-cloud i:nth-of-type(3) {
   left: 26%;
   top: 4%;
   background: var(--lyr);
@@ -1397,6 +1397,7 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 .aura-next {
   position: relative;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.75);
   margin-top: calc(var(--big) * 0.25);
   font-size: calc(var(--big) * 0.24);
   font-weight: 600;
@@ -1492,10 +1493,10 @@ input[type='range']:hover::-webkit-slider-thumb,
 @keyframes ripple {
   0%,
   100% {
-    transform: translateY(-0.09em) rotate(-1.5deg);
+    transform: translateY(calc(var(--amp) * -1)) rotate(calc(var(--tilt) * -1));
   }
   50% {
-    transform: translateY(0.09em) rotate(1.5deg);
+    transform: translateY(var(--amp)) rotate(var(--tilt));
   }
 }
 
@@ -1597,4 +1598,152 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 .style-tile.on svg {
   color: var(--glow);
+}
+
+/* ---------- lyric exits: the outgoing lyric fades away under the new one ---------- */
+.slot {
+  display: grid;
+  justify-items: center;
+  align-items: center;
+}
+.slot > * {
+  grid-area: 1 / 1;
+}
+.leave {
+  animation: leave 0.5s ease-in forwards !important;
+  pointer-events: none;
+}
+@keyframes leave {
+  to {
+    opacity: 0;
+    transform: translateY(-0.35em) scale(0.97);
+    filter: blur(6px);
+  }
+}
+.caption.leave {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* ---------- Waves move with the music ---------- */
+.waves {
+  --pulse: 0;
+  --energy: 0;
+}
+.wave-line span {
+  /* height of each word's bob: calm when quiet, bigger with the bass, kicked on a beat */
+  --amp: calc(0.05em + var(--energy) * 0.14em + var(--pulse) * 0.1em);
+  --tilt: calc(1deg + var(--energy) * 2.5deg);
+}
+.wave-swell {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleY(calc(0.7 + var(--energy) * 1.1 + var(--pulse) * 0.7));
+}
+.wl {
+  stroke-width: calc(1.2px + var(--pulse) * 1.6px);
+}
+.wave-line {
+  transform: scale(calc(1 + var(--pulse) * 0.03));
+}
+
+/* ---------- Aura: a living gradient ---------- */
+.aura {
+  --pulse: 0;
+  --energy: 0;
+}
+.aura-flow {
+  position: absolute;
+  inset: 6% 2%;
+  border-radius: 50%;
+  background: conic-gradient(
+    from var(--aura-a),
+    var(--glow),
+    var(--hi),
+    var(--lyr),
+    var(--sec),
+    var(--glow)
+  );
+  opacity: 0.55;
+  animation:
+    auraSpin 24s linear infinite,
+    auraHue 11s ease-in-out infinite alternate;
+}
+@property --aura-a {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes auraSpin {
+  to {
+    --aura-a: 360deg;
+  }
+}
+@keyframes auraHue {
+  from {
+    filter: hue-rotate(-14deg) saturate(1.1);
+  }
+  to {
+    filter: hue-rotate(14deg) saturate(1.35);
+  }
+}
+.aura-cloud i:nth-of-type(4) {
+  left: 52%;
+  top: 40%;
+  background: var(--sec);
+  opacity: 0.5;
+  animation-duration: 19s;
+  animation-direction: alternate-reverse;
+}
+.aura-cloud {
+  /* the whole cloud breathes a little with the music */
+  transform: translate(-50%, -50%) scale(calc(1 + var(--energy) * 0.1 + var(--pulse) * 0.06));
+}
+.aura-cloud.on {
+  opacity: calc(0.7 + var(--energy) * 0.3);
+}
+
+/* ---------- edge glow: a light that travels around the screen ---------- */
+.edge-flow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 0.8s;
+}
+.edge-flow i {
+  position: absolute;
+  inset: 0;
+  /* a bright band, a dimmer echo opposite, in the album's colours */
+  background: conic-gradient(
+    from var(--flow-a, 0deg),
+    transparent 0deg,
+    var(--c) 30deg,
+    var(--c3) 52deg,
+    var(--c2) 74deg,
+    transparent 120deg,
+    transparent 190deg,
+    color-mix(in srgb, var(--c2) 70%, transparent) 225deg,
+    transparent 270deg,
+    transparent 360deg
+  );
+  /* keep only a frame around the edge */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+.flow-sharp i {
+  padding: calc(var(--th) * 0.9);
+  filter: blur(0.6px);
+}
+.flow-soft {
+  position: absolute;
+  inset: 0;
+  /* blurring the masked frame as a whole turns its hard inner edge into a soft glow */
+  filter: blur(calc(var(--sp) * 0.35));
+  opacity: 0.9;
+}
+.flow-soft i {
+  padding: calc(var(--th) * 3 + var(--sp) * 0.25);
 }

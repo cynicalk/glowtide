@@ -6,6 +6,7 @@ export default function Glow() {
   const { state, settings } = useGlowtide()
   const colours = useColours(state, settings)
   const el = useRef(null)
+  const flow = useRef(null)
   const level = useRef({ pulse: 0, energy: 0, ok: true })
   const playing = !!state?.playback?.isPlaying
   const react = !!settings?.glow.reactToAudio
@@ -23,7 +24,19 @@ export default function Glow() {
     if (!settings || !colours) return
     let raf
     const g = settings.glow
+    let angle = 0
+    let last = performance.now()
     const loop = (t) => {
+      // The travelling light: a slow lap when quiet, faster with the music.
+      const dt = Math.min(0.1, (t - last) / 1000)
+      last = t
+      const live = playing && react && level.current.ok
+      const speed = 22 + (live ? level.current.energy * 70 + level.current.pulse * 110 : 0)
+      angle = (angle + dt * speed) % 360
+      if (flow.current) {
+        flow.current.style.setProperty('--flow-a', `${angle.toFixed(1)}deg`)
+        flow.current.style.opacity = !state?.track || (!playing && g.idle === 'off') ? '0' : ''
+      }
       const node = el.current
       if (node) {
         let strength
@@ -43,11 +56,31 @@ export default function Glow() {
   }, [settings, colours, playing, react, state?.track])
 
   if (!settings || !colours) return null
+  const moving = settings.glow.motion !== 'still'
+  const vars = {
+    '--c': colours.glow,
+    '--c2': colours.highlight,
+    '--c3': colours.lyrics,
+    '--th': `${settings.glow.thickness}px`,
+    '--sp': `${settings.glow.spread}px`
+  }
   return (
-    <div
-      ref={el}
-      className={`edge ${settings.colour.fade ? 'fade' : ''}`}
-      style={{ '--c': colours.glow, '--th': `${settings.glow.thickness}px`, opacity: 0 }}
-    />
+    <>
+      <div
+        ref={el}
+        className={`edge ${settings.colour.fade ? 'fade' : ''}`}
+        style={{ ...vars, opacity: 0 }}
+      />
+      {moving && (
+        <div ref={flow} className={`edge-flow ${settings.colour.fade ? 'fade' : ''}`} style={vars}>
+          <div className="flow-soft">
+            <i />
+          </div>
+          <div className="flow-sharp">
+            <i />
+          </div>
+        </div>
+      )}
+    </>
   )
 }

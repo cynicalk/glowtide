@@ -26,7 +26,8 @@ export const DEFAULT_SETTINGS = {
     intensity: 70,
     reactToAudio: true,
     displays: 'all', // 'all' | 'primary'
-    idle: 'steady' // 'steady' | 'off' when nothing plays
+    idle: 'steady', // 'steady' | 'off' when nothing plays
+    motion: 'flow' // 'flow' (light travels around the edge) | 'still'
   },
   lyrics: {
     overlay: true,

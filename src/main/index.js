@@ -864,17 +864,17 @@ function scheduleSnapshot() {
     }, 2500)
   // GLOWTIDE_SKY_PROBE=1: read the constellation's motion transforms twice, 2.5 s apart.
   if (process.env.GLOWTIDE_SKY_PROBE)
-    setTimeout(
-      async () => {
-        const js = `(() => { const q = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).transform : null }; return { cam: q('.sky-cam'), drift: q('.sky-drift'), field: q('.starfield') } })()`
-        const a = await lyricsWin?.webContents.executeJavaScript(js)
-        await new Promise((r) => setTimeout(r, 2500))
-        const b = await lyricsWin?.webContents.executeJavaScript(js)
-        mkdirSync(dir, { recursive: true })
-        writeFileSync(join(dir, 'sky.json'), JSON.stringify({ a, b }))
-      },
-      Number(process.env.GLOWTIDE_SNAPSHOT_MS || 6000) - 3500
-    )
+    setTimeout(async () => {
+      // Also the words on the figure and where they sit, to check a word never moves once placed.
+      const js = `(() => { const q = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).transform : null }; const fig = document.querySelector('.figure:not(.gone)'); return { cam: q('.sky-cam'), drift: q('.sky-drift'), field: q('.starfield'), figures: document.querySelectorAll('.figure').length, edges: fig ? fig.querySelectorAll('.sky-edge').length : 0, stars: fig ? fig.querySelectorAll('.star').length : 0, words: fig ? [...fig.querySelectorAll('.sky-word')].map((t) => [t.textContent, t.getAttribute('x'), t.getAttribute('y'), t.getAttribute('class')]) : [], focus: fig?.querySelector('.focus')?.style.transform || null, cap: document.querySelector('.sky-caption .cap:not(.leave)')?.textContent || null } })()`
+      const out = []
+      for (let i = 0; i < 8; i++) {
+        out.push(await lyricsWin?.webContents.executeJavaScript(js))
+        await new Promise((r) => setTimeout(r, 1500))
+      }
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'sky.json'), JSON.stringify(out, null, 1))
+    }, 6000)
   // GLOWTIDE_UNFOCUS=1: hand focus to a throwaway window so the overlay shows, as when using another app.
   if (process.env.GLOWTIDE_UNFOCUS)
     setTimeout(() => {
@@ -940,7 +940,7 @@ function scheduleSnapshot() {
       // What the overlay's current word is doing, sampled twice, to see the fill move.
       let overlay = null
       if (lyricsWin && !lyricsWin.isDestroyed()) {
-        const probe = `(() => { const el = document.querySelector('.w.cur:not(.leave), .aura-text:not(.leave), .wave-line:not(.leave), .beat-text:not(.leave), .caption:not(.leave), .k-line'); if (!el) return null;
+        const probe = `(() => { const el = document.querySelector('.w.cur:not(.leave), .aura-text:not(.leave), .wave-line:not(.leave), .beat-text:not(.leave), .sky-caption .cap:not(.leave), .k-line'); if (!el) return null;
           const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length, text: el.textContent, at: Date.now(), fills: [...document.querySelectorAll('.k-word')].map((x) => +getComputedStyle(x).getPropertyValue('--f') || 0), leaving: [...document.querySelectorAll('.leave')].map((x) => +getComputedStyle(x).opacity),
           bg: cs.backgroundPosition, anim: cs.animationName, dur: cs.animationDuration } })()`
         overlay = []

@@ -16,6 +16,18 @@ export function useSwap(key, value) {
 }
 
 /**
+ * The latest value for the current group, and the last value of the group before it, kept
+ * while it leaves. Unlike useSwap this follows every update within a group, so what leaves
+ * is the group as it finally stood (a finished constellation, not its first star).
+ */
+export function useHandoff(group, value) {
+  const [st, setSt] = useState({ group, value, leaving: null })
+  if (group !== st.group) setSt({ group, value, leaving: st.value })
+  else if (value !== st.value && value != null) setSt({ ...st, value })
+  return group !== st.group ? null : st.leaving
+}
+
+/**
  * Feeds --pulse (1 on a beat, decaying) and --energy (bass level) into an element's style
  * from the PC's sound output. With no sound, a slow breathe stands in.
  */

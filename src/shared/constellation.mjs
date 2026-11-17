@@ -190,28 +190,56 @@ export function constellationAt(
 }
 
 /**
- * Which lit stars get a word label: only words from the current and previous line, newest
- * first, and never one whose label box would overlap a label already placed. Keeps the
- * figure readable instead of a pile of words. Returns a Set of star indices.
+ * Where each lit star's word sits. The words build the figure, so every lit word is
+ * labelled, beside its own star and on the side facing away from the figure's centre, so
+ * the text sits outside the shape rather than across its lines.
+ *
+ * Placement is stable: the centre is the whole figure's (not just what is lit so far), and
+ * words are placed in the order they are sung, each avoiding every star and the words before
+ * it. So a word never moves once it has appeared. A word with no free spot is left out.
+ * Returns Map(starIndex -> { x, y, anchor: 'start' | 'middle' | 'end' }).
  */
-export function labelledStars(stars, { lines = 2, fontPx = 18 } = {}) {
-  const lit = stars
-    .map((s, i) => ({ ...s, i }))
-    .filter((s) => s.lit && !s.current && s.word && s.line != null)
-  if (!lit.length) return new Set()
-  const top = Math.max(...stars.filter((s) => s.lit).map((s) => s.line ?? -1))
-  const boxes = []
-  const out = new Set()
-  // The current word's spot is reserved for its sparkle.
-  for (const s of stars) if (s.current) boxes.push([s.x - 34, s.y - 34, s.x + 34, s.y + 34])
-  const cands = lit.filter((s) => s.line > top - lines).sort((a, b) => b.line - a.line || b.i - a.i)
-  for (const s of cands) {
-    const w = s.word.length * fontPx * 0.58 + 8
-    const box = [s.x + 10, s.y - 12 - fontPx, s.x + 10 + w, s.y - 8]
-    const hit = boxes.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])
-    if (hit) continue
-    boxes.push(box)
-    out.add(s.i)
-  }
+export function placeLabels(stars, { fontPx = 18 } = {}) {
+  const out = new Map()
+  if (!stars.length) return out
+  const cx = stars.reduce((a, s) => a + s.x, 0) / stars.length
+  const cy = stars.reduce((a, s) => a + s.y, 0) / stars.length
+  const boxes = stars.map((s) => [s.x - 8, s.y - 8, s.x + 8, s.y + 8])
+  const hits = (b, own) =>
+    boxes.some((o, k) => k !== own && b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])
+  const h = fontPx
+  stars.forEach((s, i) => {
+    if (!s.lit || !s.word) return
+    const w = s.word.length * fontPx * 0.56 + 4
+    let dx = s.x - cx
+    let dy = s.y - cy
+    const len = Math.hypot(dx, dy)
+    if (len < 1) [dx, dy] = [0, -1]
+    else [dx, dy] = [dx / len, dy / len]
+    const side = (ux) => (ux > 0.38 ? 'start' : ux < -0.38 ? 'end' : 'middle')
+    const at = (ux, uy, gap) => ({
+      x: s.x + ux * gap,
+      // text sits on its baseline: centre it on the star's side, above or below it
+      y: s.y + uy * gap + (Math.abs(uy) > 0.7 ? (uy > 0 ? h * 0.8 : 0) : h * 0.35),
+      anchor: side(ux)
+    })
+    const tries = [
+      at(dx, dy, 14),
+      at(dx, dy, 26),
+      at(0, -1, 14),
+      at(0, 1, 14),
+      at(dx >= 0 ? 1 : -1, 0, 14),
+      at(dx >= 0 ? -1 : 1, 0, 14)
+    ]
+    for (const t of tries) {
+      const x0 = t.anchor === 'start' ? t.x : t.anchor === 'end' ? t.x - w : t.x - w / 2
+      const box = [x0 - 3, t.y - h * 0.85, x0 + w + 3, t.y + h * 0.25]
+      if (!hits(box, i)) {
+        boxes.push(box)
+        out.set(i, t)
+        return
+      }
+    }
+  })
   return out
 }

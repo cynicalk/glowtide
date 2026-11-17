@@ -119,24 +119,6 @@ test('a line is never split across two constellations when a figure can hold it'
   }
 })
 
-test('labels: recent lines only, and no two label boxes overlap', async () => {
-  const { labelledStars } = await import('../src/shared/constellation.mjs')
-  const stars = [
-    { x: 100, y: 100, word: 'old', line: 0, lit: true },
-    { x: 400, y: 100, word: 'previous', line: 1, lit: true },
-    { x: 410, y: 104, word: 'crowding', line: 1, lit: true }, // right on top of "previous"
-    { x: 700, y: 300, word: 'this', line: 2, lit: true },
-    { x: 900, y: 300, word: 'now', line: 2, lit: true, current: true },
-    { x: 1100, y: 300, word: 'later', line: 3, lit: false }
-  ]
-  const set = labelledStars(stars)
-  assert.ok(!set.has(0), 'a line from long ago is not labelled')
-  assert.ok(set.has(3), 'the current line is labelled')
-  assert.ok(!set.has(4), 'the current word has the caption, not a label')
-  assert.ok(!set.has(5), 'unlit stars are not labelled')
-  assert.equal([1, 2].filter((i) => set.has(i)).length, 1, 'of two crowding labels only one shows')
-})
-
 test('captionLine: stars still light word by word, the caption is the whole line', () => {
   const t = lines[0].words[1].t + 10
   const sky = constellationAt(lines, t, { seed: 1, captionLine: true })
@@ -147,4 +129,39 @@ test('captionLine: stars still light word by word, the caption is the whole line
     1,
     'one focus star, so the rest get labels'
   )
+})
+
+test('every lit word sits outward from the figure, never on another word or star', async () => {
+  const { placeLabels } = await import('../src/shared/constellation.mjs')
+  const stars = [
+    { x: 500, y: 450, word: 'left', line: 1, lit: true },
+    { x: 900, y: 450, word: 'right', line: 1, lit: true },
+    { x: 700, y: 300, word: 'top', line: 1, lit: true },
+    { x: 700, y: 600, word: 'bottom', line: 1, lit: true },
+    { x: 905, y: 452, word: 'crowded', line: 1, lit: true },
+    { x: 700, y: 450, word: 'now', line: 1, lit: true, current: true },
+    { x: 1100, y: 450, word: 'later', line: 2, lit: false }
+  ]
+  const p = placeLabels(stars)
+  assert.equal(p.get(0).anchor, 'end', 'a star left of centre is labelled on its left')
+  assert.equal(p.get(1).anchor, 'start', 'a star right of centre is labelled on its right')
+  assert.ok(p.get(2).y < 300, 'a star above the centre is labelled above')
+  assert.ok(p.get(3).y > 600, 'a star below the centre is labelled below')
+  assert.ok(p.has(5), 'the word being sung is part of the figure too')
+  assert.ok(!p.has(6), 'a word not yet sung has no label')
+  assert.ok(
+    !(p.has(4) && p.get(4).y === p.get(1).y && p.get(4).anchor === p.get(1).anchor),
+    'crowding words do not stack on top of each other'
+  )
+})
+
+test('a placed word never moves as later words light', async () => {
+  const { placeLabels } = await import('../src/shared/constellation.mjs')
+  const sky = constellationAt(lines, 59000, { seed: 7 })
+  const all = sky.stars.map((s) => ({ ...s, lit: !!s.word }))
+  const final = placeLabels(all)
+  for (let n = 1; n <= all.length; n++) {
+    const part = placeLabels(all.map((s, i) => ({ ...s, lit: s.lit && i < n })))
+    for (const [i, at] of part) assert.deepEqual(at, final.get(i), `word ${i} moved`)
+  }
 })

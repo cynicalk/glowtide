@@ -465,19 +465,41 @@ html[data-route='stage'] body {
     transform: translate(16px, 8px) rotate(1.4deg) scale(1.01);
   }
 }
-/* a new figure glides in */
+/* a new figure fades in as its first star appears; a finished one fades as the next begins */
 .figure {
-  transform-box: view-box;
-  transform-origin: 50% 50%;
-  animation: fig-arrive 1.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: fig-arrive 0.9s ease-out;
 }
 @keyframes fig-arrive {
   from {
     opacity: 0;
-    transform: translate(60px, 10px) scale(0.93);
   }
 }
-/* stars breathe: lit halos swell, unlit stars twinkle, each on its own beat */
+.figure.gone {
+  pointer-events: none;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: fig-gone 1.6s ease-in-out forwards;
+}
+@keyframes fig-gone {
+  to {
+    opacity: 0;
+    transform: scale(1.06);
+    filter: blur(3px);
+  }
+}
+/* a completed figure glows a little brighter for a moment */
+.figure.complete .sky-edge {
+  animation:
+    edge-draw 0.9s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0s) forwards,
+    edge-glow 2.4s ease-in-out 0.6s;
+}
+@keyframes edge-glow {
+  40% {
+    opacity: 1;
+    stroke-width: 2.2;
+  }
+}
+/* stars breathe, each on its own beat */
 .star .halo {
   transform-box: fill-box;
   transform-origin: center;
@@ -486,21 +508,12 @@ html[data-route='stage'] body {
 }
 @keyframes halo-breathe {
   from {
-    transform: scale(0.82);
-    opacity: 0.12;
+    transform: scale(0.8);
+    opacity: 0.1;
   }
   to {
-    transform: scale(1.12);
-    opacity: 0.24;
-  }
-}
-.star:not(.lit) .core {
-  animation: twinkle-core 2.8s ease-in-out infinite alternate;
-  animation-delay: var(--tw, 0s);
-}
-@keyframes twinkle-core {
-  to {
-    opacity: 0.25;
+    transform: scale(1.15);
+    opacity: 0.22;
   }
 }
 /* the background stars drift slowly the other way, for depth */
@@ -537,8 +550,7 @@ html[data-route='stage'] body {
 .w.cur,
 .aura-text,
 .beat-text,
-.wave-line,
-.caption {
+.wave-line {
   animation:
     lyric-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
     lyric-float 4.5s ease-in-out 0.45s infinite alternate;
@@ -719,14 +731,32 @@ html[data-route='stage'] body {
   grid-template-columns: repeat(3, 1fr);
 }
 
-/* the constellation caption reads on any backdrop: near-white tinted by the cover, with a glow */
-.s-constellation .caption {
-  fill: color-mix(in srgb, var(--lyr) 28%, #ffffff);
-  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--lyr) 55%, transparent))
-    drop-shadow(0 6px 22px rgba(0, 0, 0, 0.7));
+/* the constellation's line caption: HTML, so it wraps and never runs off a screen of any shape */
+.sky-caption {
+  position: absolute;
+  left: 7vw;
+  right: 7vw;
+  bottom: 7vh;
+  z-index: 2;
+  display: grid;
+  place-items: end center;
+  font-size: var(--cap);
+  pointer-events: none;
 }
-.s-constellation .star.lit text {
-  fill: color-mix(in srgb, var(--sec) 40%, #ffffff);
+.sky-caption .cap {
+  grid-area: 1 / 1;
+  text-align: center;
+  text-wrap: balance;
+  line-height: 1.12;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: color-mix(in srgb, var(--lyr) 28%, #ffffff);
+  text-shadow:
+    0 0 18px color-mix(in srgb, var(--lyr) 50%, transparent),
+    0 6px 22px rgba(0, 0, 0, 0.7);
+  animation:
+    lyric-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
+    lyric-float 4.5s ease-in-out 0.5s infinite alternate;
 }
 
 /* ---------- folding settings sections ---------- */

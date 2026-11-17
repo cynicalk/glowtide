@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { positionOf, useColours, useGlowtide } from '../lib/store'
 import { wordWindowAt, lineWindowAt, lineWordsAt, karaokeAt } from '../../../shared/lyrics.mjs'
 import { Aura, Waves, Beat, Karaoke } from './LyricStyles'
-import { useSwap, useBeatVars } from '../lib/motion'
+import { useSwap, useBeatVars, useHandoff } from '../lib/motion'
 import {
   buildFigures,
-  labelledStars,
+  placeLabels,
   constellationAt,
   rand,
   seedOf,
@@ -188,98 +188,139 @@ function Starfield({ seed }) {
   )
 }
 
-/** A real constellation filling with the verse: lit stars glow, the rest wait faintly. */
-function Constellation({ sky, mode, scale }) {
-  const { prev: leavingCap } = useSwap(sky?.focus ? sky.key : 'none', sky?.focus?.text || '')
-  if (!sky?.figure) return null
-  const f = sky.focus
-  // Small, recent and non-overlapping word labels; the caption carries the size setting.
-  const labelPx = Math.round(17 * Math.min(1.15, Math.max(0.85, scale)))
-  const labels = labelledStars(sky.stars, { fontPx: labelPx })
-  // A line caption shrinks with its length so it stays on screen.
-  const capSize =
-    mode === 'lines' && f ? Math.min(96, Math.max(42, 1500 / Math.max(8, f.text.length))) : 104
-  // The view glides toward the star being sung, so the figure travels as it fills.
-  const cam = f
-    ? {
-        x: Math.max(-170, Math.min(170, (VIEW.w / 2 - f.x) * 0.32)),
-        y: Math.max(-25, Math.min(45, (430 - f.y) * 0.2))
-      }
-    : { x: 0, y: 0 }
+const r3 = (m) => (m === 1 ? 6 : m === 2 ? 4.8 : 3.8)
+
+/**
+ * One figure as the words have built it so far. Nothing is drawn ahead of the song: a star
+ * appears with its word, and the line to it draws itself out from the star before. When the
+ * verse's last word lands, any stars the verse had no words for light in a short cascade so
+ * the figure is whole. Words sit outside the shape (placeLabels) and never move once placed.
+ */
+function FigureView({ sky, labelPx, gone }) {
+  const placed = useMemo(() => placeLabels(sky.stars, { fontPx: labelPx }), [sky, labelPx])
+  const words = sky.stars.filter((s) => s.word).length
+  const complete = words > 0 && sky.stars.every((s) => !s.word || s.lit)
+  const shown = (s) => s.lit || (complete && !s.word)
+  // Wordless stars complete the figure one after another.
+  const delay = (i) => (sky.stars[i].word ? 0 : 0.25 + (i - words) * 0.14)
+  const lit = sky.stars.filter((s) => s.lit)
+  const top = Math.max(-1, ...lit.map((s) => s.line ?? -1))
+  // The newest star, or the focus while a word is being sung.
+  let last = -1
+  sky.stars.forEach((s, i) => {
+    if (s.lit) last = i
+  })
+  const f = sky.focus || (last >= 0 ? { ...sky.stars[last], idle: true } : null)
+  // The view leans gently toward the part of the figure being built.
+  const lx = lit.length ? lit.reduce((a, s) => a + s.x, 0) / lit.length : VIEW.w / 2
+  const ly = lit.length ? lit.reduce((a, s) => a + s.y, 0) / lit.length : 450
+  const cam = {
+    x: Math.max(-110, Math.min(110, (VIEW.w / 2 - lx) * 0.3)),
+    y: Math.max(-40, Math.min(40, (450 - ly) * 0.25))
+  }
+  return (
+    <g className={`figure ${gone ? 'gone' : ''} ${complete ? 'complete' : ''}`}>
+      <g className="sky-cam" style={{ transform: `translate(${cam.x}px, ${cam.y}px)` }}>
+        {sky.edges.map((e, i) => {
+          const [a, b] = e.a < e.b ? [e.a, e.b] : [e.b, e.a] // draw from the earlier star
+          if (!shown(sky.stars[a]) || !shown(sky.stars[b])) return null
+          const p = sky.stars[a]
+          const q = sky.stars[b]
+          return (
+            <path
+              key={`e${a}-${b}-${i}`}
+              className="sky-edge"
+              d={`M${p.x} ${p.y}L${q.x} ${q.y}`}
+              pathLength="1"
+              style={{ '--d': `${delay(b) + 0.08}s` }}
+            />
+          )
+        })}
+        {sky.stars.map((s, i) => {
+          if (!shown(s)) return null
+          const r = r3(s.m)
+          return (
+            <g
+              key={`s${i}`}
+              className={`star lit ${s.current ? 'cur' : ''}`}
+              style={{ '--tw': `${-((i * 0.83) % 4).toFixed(2)}s`, '--d': `${delay(i)}s` }}
+            >
+              <circle className="halo" cx={s.x} cy={s.y} r={r * 2.8} />
+              <circle className="core" cx={s.x} cy={s.y} r={r} />
+            </g>
+          )
+        })}
+        {sky.stars.map((s, i) => {
+          const at = placed.get(i)
+          if (!at) return null
+          const age = s.current ? 'cur' : s.line === top ? 'l0' : s.line === top - 1 ? 'l1' : 'l2'
+          return (
+            <text
+              key={`w${i}`}
+              className={`sky-word ${age}`}
+              x={at.x}
+              y={at.y}
+              textAnchor={at.anchor}
+              style={{ fontSize: labelPx }}
+            >
+              {s.word}
+            </text>
+          )
+        })}
+        {f && !gone && (
+          <g
+            className={`focus ${f.idle ? 'idle' : ''}`}
+            style={{ transform: `translate(${f.x}px, ${f.y}px)` }}
+          >
+            <circle key={last} className="ring" r={26} />
+            <path className="spark" d={SPARKLE} transform="scale(19)" />
+          </g>
+        )}
+      </g>
+    </g>
+  )
+}
+
+/**
+ * The constellation style: a real figure built by the words, with the whole line as a
+ * steady caption underneath. When a verse moves to a new figure the finished one fades
+ * while the next begins, rather than being swapped out.
+ */
+function Constellation({ sky, scale }) {
+  const fig = sky?.figure ? sky : null
+  const leaving = useHandoff(fig?.figure.n, fig)
+  const f = fig?.focus
+  const capLine = fig?.stars.find((s) => s.current)?.line
+  // The caption changes once per line, not once per word, so it never flickers.
+  const { prev: leavingCap } = useSwap(f ? `${capLine}|${f.text}` : 'none', f?.text || '')
+  const labelPx = Math.round(19 * Math.min(1.2, Math.max(0.85, scale)))
+  const len = f?.text.length || 0
+  const capEm = len <= 22 ? 1 : len <= 38 ? 0.82 : len <= 60 ? 0.68 : 0.56
+  const figures = [leaving, fig].filter((s, i, a) => s && a.indexOf(s) === i)
   return (
     <>
-      <g className="sky-cam" style={{ transform: `translate(${cam.x}px, ${cam.y}px)` }}>
+      <svg className="sky" viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMid meet">
         <g className="sky-drift">
-          <g key={sky.figure.n} className="figure">
-            {sky.edges.map((e, i) => {
-              const p = sky.stars[e.a]
-              const q = sky.stars[e.b]
-              return (
-                <line
-                  key={i}
-                  className={`sky-edge ${e.lit ? 'lit' : ''}`}
-                  x1={p.x}
-                  y1={p.y}
-                  x2={q.x}
-                  y2={q.y}
-                />
-              )
-            })}
-            {sky.stars.map((s, i) => {
-              const r = s.m === 1 ? 6.5 : s.m === 2 ? 5 : 3.8
-              return (
-                <g
-                  key={i}
-                  className={`star ${s.lit ? 'lit' : ''} ${s.current ? 'cur' : ''}`}
-                  style={{ '--tw': `${-((i * 0.83) % 4).toFixed(2)}s` }}
-                >
-                  {s.lit && <circle className="halo" cx={s.x} cy={s.y} r={r * 4.2} />}
-                  <circle className="core" cx={s.x} cy={s.y} r={s.lit ? r : r * 0.55} />
-                  {labels.has(i) && (
-                    <text x={s.x + 12} y={s.y - 12} style={{ fontSize: labelPx }}>
-                      {s.word}
-                    </text>
-                  )}
-                </g>
-              )
-            })}
-            {f && (
-              <g key={sky.key} className="focus">
-                <circle className="ring" cx={f.x} cy={f.y} r={28} />
-                <path
-                  className="spark"
-                  d={SPARKLE}
-                  transform={`translate(${f.x} ${f.y}) scale(22)`}
-                />
-              </g>
-            )}
-          </g>
+          {figures.map((s) => (
+            <FigureView key={s.figure.n} sky={s} labelPx={labelPx} gone={s === leaving} />
+          ))}
         </g>
-      </g>
-      {leavingCap && (
-        <text
-          key={`lcap${leavingCap.key}`}
-          className="caption leave"
-          x={VIEW.w / 2}
-          y={VIEW.h - 95}
-          textAnchor="middle"
-          style={{ fontSize: capSize * scale }}
-        >
-          {leavingCap.value}
-        </text>
-      )}
-      {f && (
-        <text
-          key={`cap${sky.key}`}
-          className="caption"
-          x={VIEW.w / 2}
-          y={VIEW.h - 95}
-          textAnchor="middle"
-          style={{ fontSize: capSize * scale }}
-        >
-          {f.text}
-        </text>
-      )}
+      </svg>
+      <div
+        className="sky-caption"
+        style={{ '--cap': `calc(min(4.6vw, 8.5vh) * ${scale * capEm})` }}
+      >
+        {leavingCap && (
+          <div key={`l${leavingCap.key}`} className="cap leave">
+            {leavingCap.value}
+          </div>
+        )}
+        {f && (
+          <div key={`c${capLine}|${f.text}`} className="cap">
+            {f.text}
+          </div>
+        )}
+      </div>
     </>
   )
 }
@@ -395,14 +436,16 @@ export default function LyricsOverlay() {
           <Beat win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
         )}
         {style === 'constellation' && (
-          <svg
-            className="sky"
-            viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
-            preserveAspectRatio="xMidYMid slice"
-          >
-            <Starfield seed={seed} />
-            <Constellation sky={win?.stars ? win : null} mode="lines" scale={scale} />
-          </svg>
+          <>
+            <svg
+              className="sky"
+              viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+              preserveAspectRatio="xMidYMid slice"
+            >
+              <Starfield seed={seed} />
+            </svg>
+            <Constellation sky={win?.stars ? win : null} scale={scale} />
+          </>
         )}
       </div>
     </div>

@@ -355,6 +355,14 @@ export default function SettingsPanel({ state, settings, onClose }) {
           />
         )}
         <div className="srow">
+          <span>Previous and next line</span>
+          <Toggle
+            label="Show the previous and next line"
+            on={!!l.context}
+            onChange={(v) => set({ lyrics: { context: v } })}
+          />
+        </div>
+        <div className="srow">
           <span>Line-timed songs</span>
           <div className="seg small">
             <button
@@ -540,6 +548,14 @@ function WidgetSettings({ settings, set }) {
         <span>Lives</span>
         <Seg value={v.placement} options={PLACES} onChange={(x) => sv({ placement: x })} />
       </div>
+      {v.enabled && (
+        <div className="srow">
+          <span>Position</span>
+          <button className="pill" onClick={() => api.widgetEdit('viz')}>
+            Move or resize
+          </button>
+        </div>
+      )}
       <label className="srow">
         <span>Style</span>
         <select value={v.style} onChange={(e) => sv({ style: e.target.value })}>
@@ -640,6 +656,12 @@ function WidgetSettings({ settings, set }) {
           <div className="srow">
             <span>Lives</span>
             <Seg value={c.placement} options={PLACES} onChange={(x) => sc({ placement: x })} />
+          </div>
+          <div className="srow">
+            <span>Position</span>
+            <button className="pill" onClick={() => api.widgetEdit('clock')}>
+              Move or resize
+            </button>
           </div>
           <div className="srow">
             <span>Face</span>

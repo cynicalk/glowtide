@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS = {
     backdrop: 'dim', // 'none' | 'dim' | 'cover' (blurred album art)
     dim: 35, // backdrop strength
     showClock: true,
+    context: false, // show the previous and next line around the current one
     clockFont: 'sans', // 'sans' | 'serif'
     estimated: 'lines', // line-timed songs: 'lines' (exact) | 'words' (guessed within lines)
     font: 'Segoe UI Variable Display',

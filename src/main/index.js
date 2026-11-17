@@ -697,6 +697,18 @@ function rebuildTray() {
         click: () => setSettings({ glow: { enabled: !s.glow.enabled } })
       },
       { type: 'separator' },
+      {
+        label: 'Move or resize the visualizer',
+        enabled: !!s.widgets?.viz.enabled,
+        click: () => widgets?.edit('viz')
+      },
+      {
+        label: 'Move or resize the clock',
+        enabled: !!s.widgets?.clock.enabled,
+        click: () => widgets?.edit('clock')
+      },
+      { label: 'Full screen (Ctrl+Alt+F)', click: () => widgets?.openStage() },
+      { type: 'separator' },
       { label: 'Quit Glowtide', click: () => ((quitting = true), app.quit()) }
     ])
   )
@@ -715,7 +727,10 @@ function setSettings(patch) {
     ])
   const prevWidgets = placeKey(before)
   const next = updateSettings(patch)
-  if (placeKey(next) !== prevWidgets) widgets?.sync()
+  if (placeKey(next) !== prevWidgets) {
+    widgets?.sync()
+    rebuildTray() // the Move entries follow which widgets are on
+  }
   if (
     JSON.stringify([next.glow.enabled, next.glow.displays]) !== prevGlow ||
     JSON.stringify([next.lyrics.overlay, next.lyrics.display]) !== prevLyr
@@ -791,6 +806,10 @@ function registerIpc() {
     else widgets?.openStage(player && screen.getDisplayMatching(player.getBounds()))
   })
   ipcMain.handle('widgets:toggle', () => widgets?.toggleHidden())
+  ipcMain.handle('widget:edit', (_, kind) => widgets?.edit(kind))
+  ipcMain.handle('widget:done', (_, kind) => widgets?.done(kind))
+  ipcMain.handle('widget:size', (_, kind) => widgets?.sizeOf(kind))
+  ipcMain.on('widget:resize', (_, kind, w, h) => widgets?.resize(kind, w, h))
   ipcMain.handle('displays', () => {
     const primary = screen.getPrimaryDisplay().id
     return screen.getAllDisplays().map((d, i) => ({
@@ -825,6 +844,24 @@ function scheduleSnapshot() {
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
   if (process.env.GLOWTIDE_MAXIMIZE) setTimeout(() => player?.maximize(), 1200)
   if (process.env.GLOWTIDE_STAGE) setTimeout(() => widgets?.openStage(), 2000)
+  // GLOWTIDE_EDIT_TEST=1: lift the visualizer, resize it, press Done, and record what happened.
+  if (process.env.GLOWTIDE_EDIT_TEST)
+    setTimeout(async () => {
+      const log = { before: loadSettings().widgets.viz.bounds }
+      await widgets.edit('viz')
+      const w1 = widgets.windows().find((w) => w.widgetKind === 'viz')
+      log.editPlace = w1?.widgetPlace
+      log.editTop = w1?.isAlwaysOnTop()
+      widgets.resize('viz', 640, 340)
+      await new Promise((r) => setTimeout(r, 700))
+      await widgets.done('viz')
+      const w2 = widgets.windows().find((w) => w.widgetKind === 'viz')
+      log.after = loadSettings().widgets.viz.bounds
+      log.backPlace = w2?.widgetPlace
+      log.wallpaper = w2?.wallpaperResult
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'edit.json'), JSON.stringify(log, null, 1))
+    }, 2500)
   // GLOWTIDE_SKY_PROBE=1: read the constellation's motion transforms twice, 2.5 s apart.
   if (process.env.GLOWTIDE_SKY_PROBE)
     setTimeout(

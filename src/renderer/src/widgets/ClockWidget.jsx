@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useGlowtide } from '../lib/store'
 import { vizPalette } from '../../../shared/viz.mjs'
 import { timeInWords } from '../../../shared/clock.mjs'
+import EditChrome from './EditChrome'
 
 const place = new URLSearchParams(window.location.hash.split('?')[1] || '').get('place')
 
@@ -121,6 +122,7 @@ export default function ClockWidget() {
         </div>
       )}
       {c.style === 'analog' && <Analog now={now} seconds={c.seconds} />}
+      <EditChrome kind="clock" place={place} />
       {c.style === 'words' && (
         <>
           <div className="ck-words ck-ink">it’s {timeInWords(hh, now.getMinutes())}</div>

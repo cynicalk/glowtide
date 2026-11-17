@@ -563,3 +563,76 @@ html[data-route='stage'] body {
 .wave-next {
   animation: lyric-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.06s both;
 }
+
+/* ---------- widget move / resize ---------- */
+.edit-frame {
+  position: fixed;
+  inset: 3px;
+  border: 2px dashed rgba(255, 255, 255, 0.7);
+  border-radius: 20px;
+  background: rgba(10, 10, 16, 0.28);
+  pointer-events: none;
+  z-index: 5;
+}
+.edit-hint {
+  position: absolute;
+  left: 50%;
+  top: 10px;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.edit-done {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 18px;
+  background: #fff;
+  color: #000;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.edit-grip {
+  position: fixed;
+  right: 4px;
+  bottom: 4px;
+  width: 22px;
+  height: 22px;
+  z-index: 6;
+  cursor: nwse-resize;
+  -webkit-app-region: no-drag;
+  border-right: 3px solid rgba(255, 255, 255, 0.85);
+  border-bottom: 3px solid rgba(255, 255, 255, 0.85);
+  border-bottom-right-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.vw:hover .edit-grip,
+.ck:hover .edit-grip,
+.edit-grip.show {
+  opacity: 1;
+}
+.ck {
+  overflow: hidden;
+}
+
+/* Only the line being sung: the lines around it are hidden unless asked for. */
+.lyr.solo .w.prev,
+.lyr.solo .w.next,
+.lyr.solo .aura-next,
+.lyr.solo .wave-prev,
+.lyr.solo .wave-next {
+  display: none;
+}

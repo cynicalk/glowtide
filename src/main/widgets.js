@@ -49,9 +49,12 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
     }, 400)
   }
 
-  async function create(kind) {
+  // "edit": lifted off the wallpaper so it can be dragged and resized, then put back.
+  const editing = { viz: false, clock: false }
+
+  async function create(kind, override) {
     const cfg = loadSettings().widgets[kind]
-    const place = cfg.placement || 'wallpaper'
+    const place = override || cfg.placement || 'wallpaper'
     const b = boundsFor(kind)
     const win = new BrowserWindow({
       ...b,
@@ -63,7 +66,8 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
       resizable: place !== 'wallpaper',
       movable: place !== 'wallpaper',
       focusable: place !== 'wallpaper',
-      alwaysOnTop: place === 'top',
+      maximizable: false,
+      alwaysOnTop: place === 'top' || place === 'edit',
       minWidth: 200,
       minHeight: 100,
       title: kind === 'viz' ? 'Glowtide visualizer' : 'Glowtide clock',
@@ -72,6 +76,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
     win.widgetKind = kind
     win.widgetPlace = place
     if (place === 'top') win.setAlwaysOnTop(true, 'floating')
+    if (place === 'edit') win.setAlwaysOnTop(true, 'screen-saver')
     win.on('moved', () => remember(kind, win))
     win.on('resized', () => remember(kind, win))
     load(win, `${kind === 'viz' ? 'widget' : 'clock'}?place=${place}`)
@@ -86,16 +91,20 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
         win.moveTop()
       }
       win.wallpaperResult = res
+    } else if (place === 'edit') {
+      win.show()
+      win.focus()
     } else {
       win.showInactive()
     }
-    if (hidden) win.hide()
+    if (hidden && place !== 'edit') win.hide()
     return win
   }
 
   async function sync() {
     const s = loadSettings().widgets
     for (const kind of ['viz', 'clock']) {
+      if (editing[kind]) continue // being moved: leave it alone until Done
       const want = s[kind].enabled
       const cur = wins[kind]
       const place = s[kind].placement || 'wallpaper'
@@ -119,6 +128,41 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
       }
     }
   }, 15000)
+
+  /** Lift a widget off the wallpaper so it can be moved and resized. */
+  async function edit(kind) {
+    if (!loadSettings().widgets[kind].enabled || editing[kind]) return
+    editing[kind] = true
+    const cur = wins[kind]
+    if (cur && !cur.isDestroyed()) cur.destroy()
+    wins[kind] = await create(kind, 'edit')
+    onWindowsChanged()
+  }
+
+  /** Keep the new spot and size, and put the widget back where it lives. */
+  async function done(kind) {
+    const cur = wins[kind]
+    if (cur && !cur.isDestroyed()) {
+      updateSettings({ widgets: { [kind]: { bounds: cur.getBounds() } } })
+      cur.destroy()
+    }
+    wins[kind] = null
+    editing[kind] = false
+    await sync()
+  }
+
+  /** Resize from the widget's own corner grip (see-through windows have no resize edges). */
+  function resize(kind, width, height) {
+    const w = wins[kind]
+    if (!w || w.isDestroyed() || w.widgetPlace === 'wallpaper') return
+    const b = w.getBounds()
+    w.setBounds({
+      ...b,
+      width: Math.max(200, Math.round(width)),
+      height: Math.max(100, Math.round(height))
+    })
+    remember(kind, w)
+  }
 
   function toggleHidden() {
     hidden = !hidden
@@ -161,6 +205,10 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
 
   return {
     sync,
+    edit,
+    done,
+    resize,
+    sizeOf: (kind) => wins[kind]?.getBounds(),
     toggleHidden,
     openStage,
     closeStage,

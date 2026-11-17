@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Pin, PictureInPicture2, AppWindow } from 'lucide-react'
 import { api, useGlowtide } from '../lib/store'
 import Visualizer from '../viz/Visualizer'
+import EditChrome from './EditChrome'
 import { vizPalette, VIZ_STYLES } from '../../../shared/viz.mjs'
 
 const place = new URLSearchParams(window.location.hash.split('?')[1] || '').get('place')
@@ -58,6 +59,7 @@ export default function VizWidget() {
         />
       </div>
       {t && c.card !== 'none' && <NowCard layout={c.card} track={t} />}
+      <EditChrome kind="viz" place={place} />
       {editable && (
         <div className="vw-bar">
           <button title="Previous style" onClick={() => step(-1)}>
@@ -67,16 +69,20 @@ export default function VizWidget() {
           <button title="Next style" onClick={() => step(1)}>
             <ChevronRight size={14} />
           </button>
-          <i />
-          <button title="Put it on the wallpaper" onClick={() => setPlace('wallpaper')}>
-            <Pin size={13} />
-          </button>
-          <button
-            title={place === 'top' ? 'Ordinary window' : 'Always on top'}
-            onClick={() => setPlace(place === 'top' ? 'window' : 'top')}
-          >
-            {place === 'top' ? <AppWindow size={13} /> : <PictureInPicture2 size={13} />}
-          </button>
+          {place !== 'edit' && (
+            <>
+              <i />
+              <button title="Put it on the wallpaper" onClick={() => setPlace('wallpaper')}>
+                <Pin size={13} />
+              </button>
+              <button
+                title={place === 'top' ? 'Ordinary window' : 'Always on top'}
+                onClick={() => setPlace(place === 'top' ? 'window' : 'top')}
+              >
+                {place === 'top' ? <AppWindow size={13} /> : <PictureInPicture2 size={13} />}
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

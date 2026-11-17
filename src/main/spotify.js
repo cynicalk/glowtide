@@ -58,7 +58,17 @@ export function createSpotify(auth) {
     }
     if (res.status === 204 || res.status === 202) return null
     const text = await res.text()
-    const data = text ? JSON.parse(text) : null
+    // Player commands (next, previous, play...) sometimes answer 200 with a plain-text id
+    // rather than JSON or an empty body. That is a success, not an error to show.
+    let data = null
+    if (text) {
+      try {
+        data = JSON.parse(text)
+      } catch {
+        if (res.ok) return null
+        data = { error: { message: `Spotify error ${res.status}` } }
+      }
+    }
     if (!res.ok) {
       const e = data?.error || {}
       let msg = e.message || `Spotify error ${res.status}`

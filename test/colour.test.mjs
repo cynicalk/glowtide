@@ -74,6 +74,17 @@ test('resolveColours uses the chosen swatch per part', () => {
   assert.equal(c.highlightText, textOn('#e0a040'))
 })
 
+test('resolveColours: secondary text has its own swatch and falls back to the lyrics one', () => {
+  const pal = ['#e07a3a', '#f1d9a8', '#e0a040', '#6b2e17', '#c0c0c0']
+  assert.equal(
+    resolveColours(pal, { source: 'album', lyrics: 1, secondary: 4 }).secondary,
+    '#c0c0c0'
+  )
+  assert.equal(resolveColours(pal, { source: 'album', lyrics: 1 }).secondary, '#f1d9a8')
+  const dark = resolveColours(pal, { source: 'album', lyrics: 1, secondary: 3 }).secondary
+  assert.ok((luminance(dark) + 0.05) / 0.05 >= 3, 'a dark secondary pick is lifted')
+})
+
 test('resolveColours custom mode ignores the cover', () => {
   const c = resolveColours(['#e07a3a'], { source: 'custom', custom: '#5fb4ff' })
   assert.equal(c.glow, '#5fb4ff')

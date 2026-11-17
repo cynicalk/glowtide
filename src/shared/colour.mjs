@@ -163,18 +163,22 @@ export function resolveColours(palette, settings) {
   const pal = palette?.length ? palette : DEFAULT_PALETTE
   const pick = (i) => pal[Math.min(pal.length - 1, Math.max(0, i ?? 0))]
   const adj = { brightness: settings.brightness ?? 0, saturation: settings.saturation ?? 0 }
-  let glow, lyrics, highlight
+  let glow, lyrics, highlight, secondary
   if (settings.source === 'custom') {
     glow = adjust(settings.custom || '#5fb4ff', adj)
     highlight = glow
     lyrics = adjust('#f3ece6', { brightness: adj.brightness })
+    secondary = adjust('#b9b2bb', { brightness: adj.brightness })
   } else {
     glow = adjust(pick(settings.glow), adj)
     lyrics = adjust(pick(settings.lyrics), adj)
     highlight = adjust(pick(settings.highlight), adj)
+    // Secondary text: words already sung, constellation labels and lines.
+    secondary = adjust(pick(settings.secondary ?? settings.lyrics), adj)
   }
   glow = readableOnDark(glow, 0.08)
   lyrics = readableOnDark(lyrics)
   highlight = readableOnDark(highlight, 0.12)
-  return { glow, lyrics, highlight, highlightText: textOn(highlight) }
+  secondary = readableOnDark(secondary, 0.14)
+  return { glow, lyrics, highlight, secondary, highlightText: textOn(highlight) }
 }

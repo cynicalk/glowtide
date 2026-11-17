@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS = {
     glow: 0, // swatch index for each part
     lyrics: 1,
     highlight: 2,
+    secondary: 1,
     brightness: 0,
     saturation: 0,
     custom: '#5fb4ff',
@@ -29,12 +30,17 @@ export const DEFAULT_SETTINGS = {
   },
   lyrics: {
     overlay: true,
+    style: 'stack', // 'stack' | 'constellation'
     size: 100,
-    dim: 35,
+    backdrop: 'dim', // 'none' | 'dim' | 'cover' (blurred album art)
+    dim: 35, // backdrop strength
     showClock: true,
+    clockFont: 'sans', // 'sans' | 'serif'
     estimated: 'lines', // line-timed songs: 'lines' (exact) | 'words' (guessed within lines)
-    font: 'Segoe UI Variable Display'
-  }
+    font: 'Segoe UI Variable Display',
+    display: 'primary' // 'primary' | a display id
+  },
+  awake: false // keep the screen awake while music plays
 }
 
 const file = () => join(app.getPath('userData'), 'settings.json')

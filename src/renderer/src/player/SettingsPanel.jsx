@@ -1,14 +1,46 @@
+import { useEffect, useState } from 'react'
 import { api } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
 
+// Fonts that ship with Windows 10/11, so every choice renders.
 const FONTS = [
   'Segoe UI Variable Display',
+  'Segoe UI Black',
   'Bahnschrift',
   'Arial Black',
+  'Trebuchet MS',
   'Georgia',
+  'Cambria',
+  'Palatino Linotype',
+  'Constantia',
   'Consolas',
-  'Impact'
+  'Impact',
+  'Ink Free'
 ]
+
+function Seg({ value, options, onChange }) {
+  return (
+    <div className="seg small">
+      {options.map(([k, label]) => (
+        <button key={k} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function useDisplays() {
+  const [list, setList] = useState([])
+  useEffect(() => {
+    let alive = true
+    api.displays().then((d) => alive && setList(d))
+    return () => {
+      alive = false
+    }
+  }, [])
+  return list
+}
 
 function Toggle({ on, onChange, label }) {
   return (
@@ -66,6 +98,7 @@ function SwatchPick({ label, palette, value, onChange, disabled }) {
 }
 
 export default function SettingsPanel({ state, settings, onClose }) {
+  const displays = useDisplays()
   const c = settings.colour
   const g = settings.glow
   const l = settings.lyrics
@@ -120,6 +153,13 @@ export default function SettingsPanel({ state, settings, onClose }) {
           value={c.highlight}
           disabled={!album}
           onChange={(v) => set({ colour: { highlight: v } })}
+        />
+        <SwatchPick
+          label="Secondary text"
+          palette={palette}
+          value={c.secondary ?? c.lyrics}
+          disabled={!album}
+          onChange={(v) => set({ colour: { secondary: v } })}
         />
         {!album && (
           <label className="srow">
@@ -253,6 +293,17 @@ export default function SettingsPanel({ state, settings, onClose }) {
             onChange={(v) => set({ lyrics: { overlay: v } })}
           />
         </div>
+        <div className="srow">
+          <span>Style</span>
+          <Seg
+            value={l.style || 'stack'}
+            options={[
+              ['stack', 'Stack'],
+              ['constellation', 'Constellation']
+            ]}
+            onChange={(v) => set({ lyrics: { style: v } })}
+          />
+        </div>
         <Slider
           label="Size"
           min={50}
@@ -261,14 +312,28 @@ export default function SettingsPanel({ state, settings, onClose }) {
           unit="%"
           onChange={(v) => set({ lyrics: { size: v } })}
         />
-        <Slider
-          label="Dim desktop"
-          min={0}
-          max={85}
-          value={l.dim}
-          unit="%"
-          onChange={(v) => set({ lyrics: { dim: v } })}
-        />
+        <div className="srow">
+          <span>Backdrop</span>
+          <Seg
+            value={l.backdrop || 'dim'}
+            options={[
+              ['none', 'None'],
+              ['dim', 'Dim'],
+              ['cover', 'Album art']
+            ]}
+            onChange={(v) => set({ lyrics: { backdrop: v } })}
+          />
+        </div>
+        {(l.backdrop || 'dim') !== 'none' && (
+          <Slider
+            label="Backdrop strength"
+            min={5}
+            max={100}
+            value={l.dim}
+            unit="%"
+            onChange={(v) => set({ lyrics: { dim: v } })}
+          />
+        )}
         <div className="srow">
           <span>Line-timed songs</span>
           <div className="seg small">
@@ -291,12 +356,24 @@ export default function SettingsPanel({ state, settings, onClose }) {
           can drift within a line. Word-timed songs always go word by word.
         </p>
         <div className="srow">
-          <span>Show clock</span>
-          <Toggle
-            label="Show clock"
-            on={l.showClock}
-            onChange={(v) => set({ lyrics: { showClock: v } })}
-          />
+          <span>Clock</span>
+          <span className="acct">
+            {l.showClock && (
+              <Seg
+                value={l.clockFont || 'sans'}
+                options={[
+                  ['sans', 'Sans'],
+                  ['serif', 'Serif']
+                ]}
+                onChange={(v) => set({ lyrics: { clockFont: v } })}
+              />
+            )}
+            <Toggle
+              label="Show clock"
+              on={l.showClock}
+              onChange={(v) => set({ lyrics: { showClock: v } })}
+            />
+          </span>
         </div>
         <label className="srow">
           <span>Font</span>
@@ -308,9 +385,40 @@ export default function SettingsPanel({ state, settings, onClose }) {
             ))}
           </select>
         </label>
+        {displays.length > 1 && (
+          <label className="srow">
+            <span>Show on</span>
+            <select
+              value={String(l.display ?? 'primary')}
+              onChange={(e) =>
+                set({
+                  lyrics: {
+                    display: e.target.value === 'primary' ? 'primary' : Number(e.target.value)
+                  }
+                })
+              }
+            >
+              <option value="primary">Main display</option>
+              {displays.map((d) => (
+                <option key={d.id} value={String(d.id)}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <div className="srow">
+          <span>Keep screen awake</span>
+          <Toggle
+            label="Keep screen awake"
+            on={!!settings.awake}
+            onChange={(v) => set({ awake: v })}
+          />
+        </div>
         <p className="fine">
-          The overlay steps aside while you’re using this window and comes back when you click into
-          another app. Ctrl+Alt+L turns it on or off from anywhere.
+          Keeps the display on while music plays. The overlay steps aside while you’re using this
+          window and comes back when you click into another app. Ctrl+Alt+L turns it on or off from
+          anywhere.
         </p>
       </section>
 

@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   globalShortcut,
+  powerSaveBlocker,
   Menu,
   Tray,
   desktopCapturer,
@@ -83,7 +84,29 @@ function all() {
 }
 function broadcast() {
   for (const w of all()) w.webContents.send('state', state)
+  syncAwake()
 }
+
+// Keep the display on while music plays, if asked.
+let awakeId = null
+function syncAwake() {
+  const want = !!loadSettings().awake && !!state.playback?.isPlaying
+  if (want && awakeId === null) awakeId = powerSaveBlocker.start('prevent-display-sleep')
+  if (!want && awakeId !== null) {
+    powerSaveBlocker.stop(awakeId)
+    awakeId = null
+  }
+}
+
+/** The display the lyrics overlay lives on: the chosen one if still connected, else the main one. */
+function lyricsDisplay() {
+  const want = loadSettings().lyrics.display
+  return (
+    (want !== 'primary' && screen.getAllDisplays().find((d) => d.id === want)) ||
+    screen.getPrimaryDisplay()
+  )
+}
+let lyricsDisplayId = null
 function sendLyrics() {
   for (const w of all()) w.webContents.send('lyrics', lyricsLines)
 }
@@ -583,11 +606,15 @@ function syncOverlays() {
       s.glow.displays === 'primary' ? [screen.getPrimaryDisplay()] : screen.getAllDisplays()
     glowWins = displays.map((d, i) => overlayWindow(d.bounds, `glow?d=${i}`))
   }
-  if (s.lyrics.overlay && !lyricsWin)
-    lyricsWin = overlayWindow(screen.getPrimaryDisplay().bounds, 'lyrics')
-  if (!s.lyrics.overlay && lyricsWin) {
+  const target = lyricsDisplay()
+  // Moved to another display (or that display's size changed): rebuild the overlay there.
+  if (lyricsWin && (lyricsDisplayId !== target.id || !s.lyrics.overlay)) {
     lyricsWin.destroy()
     lyricsWin = null
+  }
+  if (s.lyrics.overlay && !lyricsWin) {
+    lyricsWin = overlayWindow(target.bounds, 'lyrics')
+    lyricsDisplayId = target.id
   }
   rebuildTray()
 }
@@ -631,14 +658,15 @@ function rebuildTray() {
 function setSettings(patch) {
   const before = loadSettings()
   const prevGlow = JSON.stringify([before.glow.enabled, before.glow.displays])
-  const prevLyr = before.lyrics.overlay
+  const prevLyr = JSON.stringify([before.lyrics.overlay, before.lyrics.display])
   const next = updateSettings(patch)
   if (
     JSON.stringify([next.glow.enabled, next.glow.displays]) !== prevGlow ||
-    next.lyrics.overlay !== prevLyr
+    JSON.stringify([next.lyrics.overlay, next.lyrics.display]) !== prevLyr
   )
     syncOverlays()
   sendSettings()
+  syncAwake()
   return next
 }
 
@@ -701,6 +729,13 @@ function registerIpc() {
     state.google = false
     broadcast()
   })
+  ipcMain.handle('displays', () => {
+    const primary = screen.getPrimaryDisplay().id
+    return screen.getAllDisplays().map((d, i) => ({
+      id: d.id,
+      label: `Display ${i + 1} · ${d.size.width}×${d.size.height}${d.id === primary ? ' (main)' : ''}`
+    }))
+  })
   ipcMain.handle('window', (_, action) => {
     if (action === 'minimize') player?.minimize()
     if (action === 'close') player?.hide()
@@ -721,6 +756,12 @@ function scheduleSnapshot() {
   if (!dir) return
   const panel = process.env.GLOWTIDE_PANEL
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
+  // GLOWTIDE_UNFOCUS=1: hand focus to a throwaway window so the overlay shows, as when using another app.
+  if (process.env.GLOWTIDE_UNFOCUS)
+    setTimeout(() => {
+      const other = new BrowserWindow({ width: 200, height: 120, x: 0, y: 0, skipTaskbar: true })
+      other.focus()
+    }, 1500)
   // GLOWTIDE_FOCUS_TEST=1: record the overlay's visibility with Glowtide's window unfocused, then focused.
   if (process.env.GLOWTIDE_FOCUS_TEST) {
     const stage = () =>
@@ -809,6 +850,10 @@ function scheduleSnapshot() {
 }
 
 // ---------- app ----------
+// GLOWTIDE_PROFILE=<dir>: a separate settings folder and single-instance lock, so a test run
+// never touches the user's settings or closes the Glowtide they have open.
+if (process.env.GLOWTIDE_PROFILE) app.setPath('userData', process.env.GLOWTIDE_PROFILE)
+
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
   app.on('second-instance', () => {

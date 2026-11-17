@@ -35,6 +35,18 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 
   The player says which one is showing ("Word-timed lyrics · AMLL TTML DB" or "word timing
   estimated"), and only measured timing gets the karaoke fill.
+- **Lyric styles**:
+  - **Stack**: the word or line big in the middle.
+  - **Constellation**: each verse fills a real constellation, one star per word. All 88
+    are included, drawn from real sky coordinates. The figure's outline shows faintly
+    and lights up as the words are sung, with its name, meaning and a short note in the
+    corner.
+- **Overlay options**:
+  - Backdrop: none, dim, or blurred album art with film grain.
+  - Serif or sans clock, and 12 Windows fonts.
+  - Which display the overlay uses.
+  - Keep the screen awake while music plays.
+  - The overlay steps aside while Glowtide's own window is in use. Ctrl+Alt+L toggles it.
 - **Colours**: a 5-swatch palette from each cover. Pick which swatch drives the glow, the
   lyrics and the highlight, then adjust brightness and saturation. Dark picks are lifted so
   they stay readable. Or choose Custom. Colours crossfade between songs.
@@ -124,7 +136,14 @@ src/shared/    pure logic, unit-tested: LRC + enhanced LRC + TTML parsing, AMLL 
                YouTube titles/links, media-session app names and track info
 src/main/      Electron main: OAuth (PKCE), Spotify + YouTube clients, YouTube player host,
                media-session helper supervisor, LRCLIB, windows, tray
+scripts/       build-sky.mjs: regenerates src/shared/skyData.mjs from d3-celestial
 resources/     smtc.ps1: the Windows media-session helper (unpacked from the asar)
 src/preload/   window.glowtide bridge
 src/renderer/  React: #/player, #/glow, #/lyrics
 ```
+
+## Credits
+
+Constellation figures: [d3-celestial](https://github.com/ofrohn/d3-celestial) © 2015 Olaf
+Frohn (BSD 3-Clause). Word-timed lyrics: [AMLL TTML DB](https://github.com/amll-dev/amll-ttml-db)
+(CC0). Synced lyrics: [LRCLIB](https://lrclib.net). See THIRD_PARTY_NOTICES.md.

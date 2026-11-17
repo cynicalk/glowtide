@@ -118,3 +118,21 @@ test('a line is never split across two constellations when a figure can hold it'
     for (const [line, set] of owner) assert.equal(set.size, 1, `seed ${seed} line ${line} split`)
   }
 })
+
+test('labels: recent lines only, and no two label boxes overlap', async () => {
+  const { labelledStars } = await import('../src/shared/constellation.mjs')
+  const stars = [
+    { x: 100, y: 100, word: 'old', line: 0, lit: true },
+    { x: 400, y: 100, word: 'previous', line: 1, lit: true },
+    { x: 410, y: 104, word: 'crowding', line: 1, lit: true }, // right on top of "previous"
+    { x: 700, y: 300, word: 'this', line: 2, lit: true },
+    { x: 900, y: 300, word: 'now', line: 2, lit: true, current: true },
+    { x: 1100, y: 300, word: 'later', line: 3, lit: false }
+  ]
+  const set = labelledStars(stars)
+  assert.ok(!set.has(0), 'a line from long ago is not labelled')
+  assert.ok(set.has(3), 'the current line is labelled')
+  assert.ok(!set.has(4), 'the current word has the caption, not a label')
+  assert.ok(!set.has(5), 'unlit stars are not labelled')
+  assert.equal([1, 2].filter((i) => set.has(i)).length, 1, 'of two crowding labels only one shows')
+})

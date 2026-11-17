@@ -4,6 +4,7 @@ import { wordWindowAt, lineWindowAt, lineWordsAt } from '../../../shared/lyrics.
 import { Aura, Waves, Beat } from './LyricStyles'
 import {
   buildFigures,
+  labelledStars,
   constellationAt,
   rand,
   seedOf,
@@ -169,45 +170,50 @@ function Starfield({ seed }) {
 function Constellation({ sky, mode, scale }) {
   if (!sky?.figure) return null
   const f = sky.focus
+  // Small, recent and non-overlapping word labels; the caption carries the size setting.
+  const labelPx = Math.round(17 * Math.min(1.15, Math.max(0.85, scale)))
+  const labels = labelledStars(sky.stars, { fontPx: labelPx })
   // A line caption shrinks with its length so it stays on screen.
   const capSize =
     mode === 'lines' && f ? Math.min(96, Math.max(42, 1500 / Math.max(8, f.text.length))) : 104
   return (
-    <g key={sky.figure.n} className="figure">
-      {sky.edges.map((e, i) => {
-        const p = sky.stars[e.a]
-        const q = sky.stars[e.b]
-        return (
-          <line
-            key={i}
-            className={`edge ${e.lit ? 'lit' : ''}`}
-            x1={p.x}
-            y1={p.y}
-            x2={q.x}
-            y2={q.y}
-          />
-        )
-      })}
-      {sky.stars.map((s, i) => {
-        const r = s.m === 1 ? 6.5 : s.m === 2 ? 5 : 3.8
-        return (
-          <g key={i} className={`star ${s.lit ? 'lit' : ''} ${s.current ? 'cur' : ''}`}>
-            {s.lit && <circle className="halo" cx={s.x} cy={s.y} r={r * 4.2} />}
-            <circle className="core" cx={s.x} cy={s.y} r={s.lit ? r : r * 0.55} />
-            {s.lit && !s.current && s.word && (
-              <text x={s.x + 12} y={s.y - 12} style={{ fontSize: 20 * scale }}>
-                {s.word}
-              </text>
-            )}
+    <>
+      <g key={sky.figure.n} className="figure">
+        {sky.edges.map((e, i) => {
+          const p = sky.stars[e.a]
+          const q = sky.stars[e.b]
+          return (
+            <line
+              key={i}
+              className={`edge ${e.lit ? 'lit' : ''}`}
+              x1={p.x}
+              y1={p.y}
+              x2={q.x}
+              y2={q.y}
+            />
+          )
+        })}
+        {sky.stars.map((s, i) => {
+          const r = s.m === 1 ? 6.5 : s.m === 2 ? 5 : 3.8
+          return (
+            <g key={i} className={`star ${s.lit ? 'lit' : ''} ${s.current ? 'cur' : ''}`}>
+              {s.lit && <circle className="halo" cx={s.x} cy={s.y} r={r * 4.2} />}
+              <circle className="core" cx={s.x} cy={s.y} r={s.lit ? r : r * 0.55} />
+              {labels.has(i) && (
+                <text x={s.x + 12} y={s.y - 12} style={{ fontSize: labelPx }}>
+                  {s.word}
+                </text>
+              )}
+            </g>
+          )
+        })}
+        {f && (
+          <g key={sky.key} className="focus">
+            <circle className="ring" cx={f.x} cy={f.y} r={28} />
+            <path className="spark" d={SPARKLE} transform={`translate(${f.x} ${f.y}) scale(22)`} />
           </g>
-        )
-      })}
-      {f && (
-        <g key={sky.key} className="focus">
-          <circle className="ring" cx={f.x} cy={f.y} r={28} />
-          <path className="spark" d={SPARKLE} transform={`translate(${f.x} ${f.y}) scale(22)`} />
-        </g>
-      )}
+        )}
+      </g>
       {f && (
         <text
           key={`cap${sky.key}`}
@@ -220,7 +226,7 @@ function Constellation({ sky, mode, scale }) {
           {f.text}
         </text>
       )}
-    </g>
+    </>
   )
 }
 

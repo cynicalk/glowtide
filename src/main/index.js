@@ -23,6 +23,7 @@ import { createGoogleAuth, createYouTube } from './youtube'
 import { startYtHost, YT_HOST_ORIGIN } from './ytHost'
 import { fetchLyrics } from './lyricsSource'
 import { loadAmllIndex } from './amll'
+import { offsetFor, saveOffset } from './offsets'
 import { createDemo } from './demo'
 import { extractPalette } from '../shared/colour.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
@@ -148,7 +149,8 @@ function clearTrack() {
 async function onTrackChange(track) {
   state.palette = null
   state.liked = null
-  state.lyricsOffsetMs = 0 // the nudge is per song
+  // The nudge is per song, and remembered: a mistimed lyric file only needs fixing once.
+  state.lyricsOffsetMs = offsetFor(track)
   state.lyricsStatus = 'loading'
   state.lyricsTiming = null
   state.lyricsSource = null
@@ -207,7 +209,7 @@ async function poll() {
       if (s.track.id !== state.track?.id) {
         state.track = s.track
         state.palette = s.palette
-        state.lyricsOffsetMs = 0
+        state.lyricsOffsetMs = offsetFor(s.track)
         state.lyricsStatus = s.lyrics.status
         state.lyricsTiming = 'line'
         state.lyricsSource = 'Demo'
@@ -730,6 +732,7 @@ function registerIpc() {
   ipcMain.handle('lyrics:nudge', (_, delta) => {
     state.lyricsOffsetMs =
       delta === 0 ? 0 : Math.max(-5000, Math.min(5000, state.lyricsOffsetMs + delta))
+    saveOffset(state.track, state.lyricsOffsetMs)
     broadcast()
   })
   ipcMain.handle('auth:connect', async () => {
@@ -867,7 +870,7 @@ function scheduleSnapshot() {
       // What the overlay's current word is doing, sampled twice, to see the fill move.
       let overlay = null
       if (lyricsWin && !lyricsWin.isDestroyed()) {
-        const probe = `(() => { const el = document.querySelector('.w.cur'); if (!el) return null;
+        const probe = `(() => { const el = document.querySelector('.w.cur, .aura-text, .wave-line, .beat-text, .caption'); if (!el) return null;
           const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length, text: el.textContent, at: Date.now(),
           bg: cs.backgroundPosition, anim: cs.animationName, dur: cs.animationDuration } })()`
         overlay = []

@@ -853,7 +853,7 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 .w.cur {
   font-size: var(--big);
-  animation: pop 0.24s cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  animation: pop 0.16s ease-out;
 }
 .w.next {
   font-size: calc(var(--big) * 0.44);
@@ -871,8 +871,8 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 @keyframes pop {
   from {
-    transform: translateY(35%) scale(0.55);
-    opacity: 0.3;
+    transform: scale(0.9);
+    opacity: 0.85;
   }
 }
 @keyframes lift {
@@ -1031,7 +1031,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   text-shadow: none;
   filter: drop-shadow(0 6px 22px rgba(0, 0, 0, 0.55));
   animation:
-    pop 0.24s cubic-bezier(0.2, 0.9, 0.25, 1.15),
+    pop 0.16s ease-out,
     wipe var(--d) linear var(--delay) both;
 }
 @keyframes wipe {
@@ -1211,7 +1211,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   font-weight: 800;
   letter-spacing: -0.02em;
   filter: drop-shadow(0 6px 22px rgba(0, 0, 0, 0.65));
-  animation: capin 0.4s cubic-bezier(0.2, 0.9, 0.25, 1.1);
+  animation: capin 0.15s ease-out;
 }
 @keyframes ringin {
   from {
@@ -1262,8 +1262,8 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 @keyframes capin {
   from {
-    opacity: 0;
-    transform: translateY(18px);
+    opacity: 0.8;
+    transform: translateY(6px);
   }
 }
 
@@ -1387,13 +1387,12 @@ input[type='range']:hover::-webkit-slider-thumb,
   text-shadow:
     0 0 calc(var(--big) * 0.25) var(--lyr),
     0 6px 30px rgba(0, 0, 0, 0.45);
-  animation: auraIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: auraIn 0.15s ease-out;
 }
 @keyframes auraIn {
   from {
-    opacity: 0;
-    filter: blur(14px);
-    transform: scale(0.94);
+    opacity: 0.8;
+    transform: scale(0.96);
   }
 }
 .aura-next {
@@ -1470,7 +1469,6 @@ input[type='range']:hover::-webkit-slider-thumb,
   text-align: center;
   max-width: min(84vw, 1500px);
   line-height: 1.25;
-  animation: fadein 0.5s;
 }
 .wave-line span {
   display: inline-block;
@@ -1543,6 +1541,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   text-wrap: balance;
   line-height: 1.02;
   transform: scale(calc(1 + var(--pulse) * 0.11));
+  animation: none;
   text-shadow:
     0 0 calc(10px + var(--pulse) * 40px) var(--glow),
     0 6px 30px rgba(0, 0, 0, 0.5);

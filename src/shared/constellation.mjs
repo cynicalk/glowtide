@@ -164,7 +164,7 @@ export function constellationAt(lines, posMs, { mode = 'words', seed = 0, figure
     const w = fig.words[si]
     const lit = !!w && si < litCount
     const current = lit && !quiet && (mode === 'lines' ? w.line === curLine : si === litCount - 1)
-    return { ...p, word: w ? w.w : null, lit, current }
+    return { ...p, word: w ? w.w : null, line: w ? w.line : null, lit, current }
   })
   const edges = fig.cons.edges.map(([a, b]) => ({ a, b, lit: stars[a].lit && stars[b].lit }))
   // Where the focus is: the current word's star, or the latest lit star of the line.
@@ -181,4 +181,31 @@ export function constellationAt(lines, posMs, { mode = 'words', seed = 0, figure
     focus,
     key: `${mode}|${figIdx}|${litCount}|${quiet ? 'q' : ''}|${curLine}`
   }
+}
+
+/**
+ * Which lit stars get a word label: only words from the current and previous line, newest
+ * first, and never one whose label box would overlap a label already placed. Keeps the
+ * figure readable instead of a pile of words. Returns a Set of star indices.
+ */
+export function labelledStars(stars, { lines = 2, fontPx = 18 } = {}) {
+  const lit = stars
+    .map((s, i) => ({ ...s, i }))
+    .filter((s) => s.lit && !s.current && s.word && s.line != null)
+  if (!lit.length) return new Set()
+  const top = Math.max(...stars.filter((s) => s.lit).map((s) => s.line ?? -1))
+  const boxes = []
+  const out = new Set()
+  // The current word's spot is reserved for its sparkle.
+  for (const s of stars) if (s.current) boxes.push([s.x - 34, s.y - 34, s.x + 34, s.y + 34])
+  const cands = lit.filter((s) => s.line > top - lines).sort((a, b) => b.line - a.line || b.i - a.i)
+  for (const s of cands) {
+    const w = s.word.length * fontPx * 0.58 + 8
+    const box = [s.x + 10, s.y - 12 - fontPx, s.x + 10 + w, s.y - 8]
+    const hit = boxes.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])
+    if (hit) continue
+    boxes.push(box)
+    out.add(s.i)
+  }
+  return out
 }

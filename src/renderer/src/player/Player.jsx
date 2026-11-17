@@ -283,7 +283,10 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
             <MicVocal size={13} /> Lyrics
           </button>
           {synced && (
-            <div className="nudge" title="Lyrics early or late? Nudge them for this song.">
+            <div
+              className="nudge"
+              title="Lyrics early or late? Nudge them; Glowtide remembers it for this song. Double-click to reset."
+            >
               <button
                 className="rd sm"
                 aria-label="Lyrics earlier"

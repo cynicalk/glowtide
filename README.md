@@ -4,6 +4,19 @@ A music companion for Windows that lights the edges of your screen in the colour
 cover and puts the song's lyrics on the desktop, word by word. It follows **any music app**
 with no setup, or plays **YouTube Music (free)** and controls **Spotify** itself.
 
+## Install
+
+1. Download `Glowtide-<version>-setup.exe` from the latest release and run it. It installs for
+   your Windows account only (no administrator prompt), starts Glowtide, and adds Start menu and
+   desktop shortcuts.
+2. The installer isn't code-signed yet, so Windows SmartScreen may say "Windows protected
+   your PC". Choose **More info → Run anyway**.
+3. Glowtide lives in the tray (by the clock). Closing its window hides it there; quit from the
+   tray menu.
+
+Settings, sign-in tokens and `glowtide.log` (errors, if any) are in `%APPDATA%Glowtide`.
+Uninstall from Settings → Apps; your settings folder is kept unless you delete it.
+
 ## Music sources
 
 | | Costs | Playback | Library |
@@ -56,10 +69,13 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   - **Waves**: the whole line rides a ripple, sung words light up, flowing lines behind.
   - **Beat**: the word pulses and a ring ripples out on every beat (system audio,
     never the microphone; a slow breathe when there is no sound).
-  - **Constellation**: each verse fills a real constellation, one star per word. All 88
-    are included, drawn from real sky coordinates. The figure's outline shows faintly
-    and lights up as the words are sung, with its name, meaning and a short note in the
-    corner.
+  - **Karaoke**: the line with a colour sweep across each word, a 3-2-1 count-in
+    after a long gap, and the next line waiting below.
+  - **Constellation**: the words build a real constellation. Each sung word brings in its
+    own star, sitting beside it, and the line to it draws itself from the star before.
+    When the verse ends the figure completes, and the next verse starts a new one. All 88
+    are included, drawn from real sky coordinates, with the name, meaning and a short note
+    in the corner and the whole line as a caption underneath.
 - **Overlay options**:
   - Backdrop: none, dim, or blurred album art with film grain.
   - Serif or sans clock, and 12 Windows fonts.
@@ -134,10 +150,18 @@ Sign-in uses PKCE in your browser, with no server. Tokens are encrypted with Win
 npm install
 npm run dev          # hot-reload
 npm test             # lyrics, colour and YouTube helper tests
-npm run build:win    # installer in dist/
+npm run build:win    # lint + tests + build, then the installer in dist/
+npm run build:icon   # re-render build/icon.ico and the tray icon from scripts/build-icon.mjs
 ```
 
-PowerShell variables used for debugging:
+The installer is unsigned. To sign it, set `CSC_LINK` (a .pfx path or base64) and
+`CSC_KEY_PASSWORD` before `build:win`; electron-builder picks them up.
+
+PowerShell variables used for debugging. They work in `npm run dev` and in an unpacked build
+started with `$env:GLOWTIDE_DEV=1`; an installed copy ignores them.
+
+- `$env:GLOWTIDE_PROFILE="C:somewhere"` uses a separate settings folder, so a test run never
+  touches your real settings or closes the Glowtide you have open.
 
 - `$env:GLOWTIDE_DEMO=1` starts in demo mode. `$env:GLOWTIDE_FRESH=1` resets settings.
 - `$env:GLOWTIDE_SNAPSHOT="C:\shots"` writes each window's PNG and `state.json` after
@@ -155,7 +179,8 @@ src/shared/    pure logic, unit-tested: LRC + enhanced LRC + TTML parsing, AMLL 
                YouTube titles/links, media-session app names and track info
 src/main/      Electron main: OAuth (PKCE), Spotify + YouTube clients, YouTube player host,
                media-session helper supervisor, LRCLIB, windows, tray
-scripts/       build-sky.mjs: regenerates src/shared/skyData.mjs from d3-celestial
+scripts/       build-sky.mjs: regenerates src/shared/skyData.mjs from d3-celestial;
+               build-icon.mjs: renders the app icon
 resources/     smtc.ps1: the Windows media-session helper (unpacked from the asar)
 src/preload/   window.glowtide bridge
 src/renderer/  React: #/player, #/glow, #/lyrics

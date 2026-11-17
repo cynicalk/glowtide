@@ -1,7 +1,7 @@
 {
   "name": "glowtide",
-  "version": "0.1.0",
-  "description": "Spotify player for Windows with album-coloured edge glow and kinetic lyrics",
+  "version": "1.0.0",
+  "description": "A music companion for Windows: album-coloured edge glow, kinetic lyrics and desktop visualizers for Spotify, YouTube Music and any app",
   "main": "./out/main/index.js",
   "author": "Glowtide",
   "scripts": {
@@ -12,17 +12,17 @@
     "build": "electron-vite build",
     "postinstall": "install-electron && electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
-    "test": "node --test \"test/*.test.mjs\""
+    "build:win": "npm run lint && npm test && npm run build && electron-builder --win",
+    "test": "node --test \"test/*.test.mjs\"",
+    "build:icon": "electron scripts/build-icon.mjs"
   },
   "dependencies": {
-    "@electron-toolkit/preload": "^3.0.2",
-    "@electron-toolkit/utils": "^4.0.0",
-    "lucide-react": "^0.468.0"
+    "@electron-toolkit/utils": "^4.0.0"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^3.0.0",
     "@electron-toolkit/eslint-config-prettier": "^3.0.1",
+    "@electron-toolkit/preload": "^3.0.2",
     "@vitejs/plugin-react": "^6.1.2",
     "electron": "^44.7.2",
     "electron-builder": "^26.15.3",
@@ -31,10 +31,12 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
+    "lucide-react": "^0.468.0",
     "prettier": "^3.9.10",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "vite": "^8.3.4"
   },
-  "productName": "Glowtide"
+  "productName": "Glowtide",
+  "private": true
 }

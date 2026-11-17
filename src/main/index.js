@@ -13,7 +13,7 @@ import {
   shell
 } from 'electron'
 import { join } from 'path'
-import { writeFileSync, mkdirSync, rmSync } from 'fs'
+import { writeFileSync, mkdirSync, rmSync, appendFileSync, statSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { loadSettings, updateSettings } from './settings'
@@ -30,6 +30,32 @@ import { extractPalette } from '../shared/colour.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
 import { appLabel, systemTrack, repeatFromSmtc } from '../shared/media.mjs'
 import { createSmtc } from './smtc'
+
+// The GLOWTIDE_* test hooks (snapshots, probes, separate profiles) only work in a development
+// run, or in a packaged build started with GLOWTIDE_DEV=1. An installed copy ignores them.
+const DEV = !app.isPackaged || process.env.GLOWTIDE_DEV === '1'
+
+// A main-process error is written to glowtide.log in the settings folder rather than shown as
+// Electron's raw "A JavaScript error occurred" dialog. The log is kept under 1 MB.
+function logError(kind, e) {
+  try {
+    const file = join(app.getPath('userData'), 'glowtide.log')
+    try {
+      if (statSync(file).size > 1_000_000) writeFileSync(file, '')
+    } catch {
+      /* no log yet */
+    }
+    appendFileSync(
+      file,
+      `${new Date().toISOString()} ${kind} ${e?.stack || e}
+`
+    )
+  } catch {
+    /* nowhere to write: nothing more to do */
+  }
+}
+process.on('uncaughtException', (e) => logError('uncaught', e))
+process.on('unhandledRejection', (e) => logError('unhandled', e))
 
 const spotifyAuth = createSpotifyAuth(() => loadSettings().clientId)
 const spotify = createSpotify(spotifyAuth)
@@ -346,7 +372,7 @@ function onSystemMessage(m) {
   if (m.type === 'sessions') {
     // Glowtide's own session (its YouTube player) is not "another app" to follow.
     state.systemApps = (m.apps || [])
-      .filter((id) => process.env.GLOWTIDE_SYS_TEST || id !== 'io.github.cynicalk.glowtide')
+      .filter((id) => (DEV && process.env.GLOWTIDE_SYS_TEST) || id !== 'io.github.cynicalk.glowtide')
       .map((id) => ({ id, label: appLabel(id) }))
     return broadcast()
   }
@@ -561,6 +587,15 @@ function setSource(src) {
 
 // ---------- windows ----------
 function load(win, route) {
+  // If a window's page crashes, log it and bring the page back rather than leaving a blank
+  // window or a hole where the overlay was.
+  if (!win.glowtideGuarded) {
+    win.glowtideGuarded = true
+    win.webContents.on('render-process-gone', (_e, d) => {
+      logError(`renderer ${route}`, d.reason)
+      if (d.reason !== 'clean-exit' && !win.isDestroyed()) setTimeout(() => load(win, route), 1000)
+    })
+  }
   if (is.dev && process.env.ELECTRON_RENDERER_URL)
     win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#/${route}`)
   else win.loadFile(join(__dirname, '../renderer/index.html'), { hash: `/${route}` })
@@ -568,7 +603,8 @@ function load(win, route) {
 
 const prefs = {
   preload: join(__dirname, '../preload/index.js'),
-  sandbox: false,
+  sandbox: true,
+  devTools: DEV,
   backgroundThrottling: false
 }
 
@@ -838,7 +874,7 @@ function registerIpc() {
 
 // ---------- debug snapshots (GLOWTIDE_SNAPSHOT=<dir>) ----------
 function scheduleSnapshot() {
-  const dir = process.env.GLOWTIDE_SNAPSHOT
+  const dir = DEV && process.env.GLOWTIDE_SNAPSHOT
   if (!dir) return
   const panel = process.env.GLOWTIDE_PANEL
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
@@ -984,7 +1020,7 @@ function scheduleSnapshot() {
 // ---------- app ----------
 // GLOWTIDE_PROFILE=<dir>: a separate settings folder and single-instance lock, so a test run
 // never touches the user's settings or closes the Glowtide they have open.
-if (process.env.GLOWTIDE_PROFILE) app.setPath('userData', process.env.GLOWTIDE_PROFILE)
+if (DEV && process.env.GLOWTIDE_PROFILE) app.setPath('userData', process.env.GLOWTIDE_PROFILE)
 
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
@@ -995,12 +1031,14 @@ else {
 
   app.whenReady().then(async () => {
     app.setAppUserModelId('io.github.cynicalk.glowtide')
-    if (process.env.GLOWTIDE_FRESH)
+    // No application menu in an installed copy: it would carry Reload and Developer Tools.
+    if (!DEV) Menu.setApplicationMenu(null)
+    if (DEV && process.env.GLOWTIDE_FRESH)
       rmSync(join(app.getPath('userData'), 'settings.json'), { force: true })
     const s = loadSettings()
     state.connected = spotifyAuth.load()
     state.google = googleAuth.load()
-    state.source = process.env.GLOWTIDE_DEMO === '1' ? 'demo' : s.source
+    state.source = DEV && process.env.GLOWTIDE_DEMO === '1' ? 'demo' : s.source
     state.demo = state.source === 'demo'
     state.systemSelected = s.systemApp || 'auto'
     smtc.select(state.systemSelected)

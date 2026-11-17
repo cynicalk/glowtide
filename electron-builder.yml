@@ -1,11 +1,14 @@
 appId: io.github.cynicalk.glowtide
 productName: Glowtide
+copyright: Copyright © 2026 Glowtide
 directories:
   buildResources: build
 files:
   - '!**/.vscode/*'
   - '!src/*'
   - '!test/*'
+  - '!scripts/*'
+  - '!{THIRD_PARTY_NOTICES.md,electron-builder.yml}'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'

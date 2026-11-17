@@ -25,6 +25,7 @@ import SettingsPanel from './SettingsPanel'
 import YouTubeStage from './YouTubeStage'
 import { SearchPanel, LibraryPanel, QueuePanel, DevicesPanel } from './Panels'
 import { YtSearch, YtLibrary, YtQueue } from './YtPanels'
+import { SystemInfo, SystemApps } from './SystemPanels'
 
 const LYRIC_STATUS = {
   loading: 'Looking for lyrics…',
@@ -35,7 +36,7 @@ const LYRIC_STATUS = {
   error: "Couldn't reach the lyrics service"
 }
 
-const SOURCE_TAG = { demo: 'Demo', youtube: 'YouTube', spotify: 'Spotify' }
+const SOURCE_TAG = { demo: 'Demo', youtube: 'YouTube', spotify: 'Spotify', system: 'Any app' }
 
 export default function Player() {
   const { state, settings, lyrics } = useGlowtide()
@@ -49,6 +50,9 @@ export default function Player() {
   if (!state.source) screen = 'welcome'
   else if (state.source === 'spotify' && !state.connected) screen = 'spotify-setup'
   const yt = state.source === 'youtube'
+  const sys = state.source === 'system'
+  const tag =
+    sys && state.systemApp ? `Following ${state.systemApp.label}` : SOURCE_TAG[state.source]
 
   return (
     <div
@@ -60,7 +64,7 @@ export default function Player() {
         '--hi-text': colours.highlightText
       }}
     >
-      <TitleBar tag={screen === 'player' ? SOURCE_TAG[state.source] : null} />
+      <TitleBar tag={screen === 'player' ? tag : null} />
       {screen === 'welcome' && <Welcome state={state} setPanel={setPanel} />}
       {screen === 'spotify-setup' && (
         <Connect state={state} settings={settings} onBack={() => api.setSource(null)} />
@@ -70,11 +74,32 @@ export default function Player() {
       )}
       {panel && (
         <Sheet title={PANEL_TITLES[panel]} onClose={() => setPanel(null)}>
-          {panel === 'search' && (yt ? <YtSearch state={state} /> : <SearchPanel state={state} />)}
+          {panel === 'search' &&
+            (sys ? (
+              <SystemInfo state={state} what="Search" />
+            ) : yt ? (
+              <YtSearch state={state} />
+            ) : (
+              <SearchPanel state={state} />
+            ))}
           {panel === 'library' &&
-            (yt ? <YtLibrary state={state} settings={settings} /> : <LibraryPanel state={state} />)}
-          {panel === 'queue' && (yt ? <YtQueue state={state} /> : <QueuePanel state={state} />)}
-          {panel === 'devices' && <DevicesPanel state={state} />}
+            (sys ? (
+              <SystemInfo state={state} what="Pick music" />
+            ) : yt ? (
+              <YtLibrary state={state} settings={settings} />
+            ) : (
+              <LibraryPanel state={state} />
+            ))}
+          {panel === 'queue' &&
+            (sys ? (
+              <SystemInfo state={state} what="Your queue lives" />
+            ) : yt ? (
+              <YtQueue state={state} />
+            ) : (
+              <QueuePanel state={state} />
+            ))}
+          {(panel === 'devices' || panel === 'apps') &&
+            (sys ? <SystemApps state={state} /> : <DevicesPanel state={state} />)}
           {panel === 'settings' && <SettingsPanel state={state} settings={settings} />}
         </Sheet>
       )}
@@ -87,6 +112,7 @@ const PANEL_TITLES = {
   library: 'Library',
   queue: 'Queue',
   devices: 'Devices',
+  apps: 'Follow which app?',
   settings: 'Settings'
 }
 
@@ -116,7 +142,14 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
   const yt = state.source === 'youtube'
   // Free Spotify: Spotify won't take remote control, so Glowtide follows along instead.
   const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
+  const sys = state.source === 'system'
   const noDevices = yt || state.source === 'demo'
+  // "Any app": each app decides which controls it accepts from outside.
+  const can = (action) => (followOnly ? false : sys ? !!state.caps?.[action] : true)
+  const noControls =
+    sys &&
+    state.track &&
+    !['play', 'pause', 'next', 'previous', 'seek'].some((a) => state.caps?.[a])
 
   let lyricNote = LYRIC_STATUS[state.lyricsStatus] || ''
   if (yt && state.lyricsStatus === 'synced')
@@ -128,8 +161,8 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
       <div className="np-main">
         {yt ? (
           <YouTubeStage state={state} onOpenLibrary={() => setPanel('library')} />
-        ) : track ? (
-          <img className="cover" src={track.cover} alt={`${track.album} cover`} />
+        ) : track?.cover ? (
+          <img className="cover" src={track.cover} alt={`${track.album || track.name} cover`} />
         ) : (
           <div className="cover placeholder" />
         )}
@@ -148,7 +181,7 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
                 min={0}
                 max={track.durationMs || 1}
                 value={drag ?? pos}
-                disabled={followOnly}
+                disabled={!can('seek')}
                 onChange={(e) => setDrag(Number(e.target.value))}
                 onPointerUp={() => {
                   if (drag != null) api.control('seek', drag)
@@ -164,9 +197,11 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
           <div className="empty">
             <div className="title">Nothing playing</div>
             <div className="artist">
-              {yt
-                ? 'Open your library, search, or paste a YouTube Music link.'
-                : 'Start something in Spotify, or pick from your library.'}
+              {sys
+                ? 'Play music in Spotify, your browser or any music app.'
+                : yt
+                  ? 'Open your library, search, or paste a YouTube Music link.'
+                  : 'Start something in Spotify, or pick from your library.'}
             </div>
           </div>
         )}
@@ -175,7 +210,7 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
           <button
             className={`rd ${playback?.shuffle ? 'on' : ''}`}
             aria-label="Shuffle"
-            disabled={followOnly}
+            disabled={!can('shuffle')}
             onClick={() => api.control('shuffle', !playback?.shuffle)}
           >
             <Shuffle size={15} />
@@ -183,7 +218,7 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
           <button
             className="rd"
             aria-label="Previous"
-            disabled={followOnly}
+            disabled={!can('previous')}
             onClick={() => api.control('previous')}
           >
             <SkipBack size={16} />
@@ -191,7 +226,7 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
           <button
             className="rd big"
             aria-label={playing ? 'Pause' : 'Play'}
-            disabled={followOnly}
+            disabled={!can(playing ? 'pause' : 'play')}
             onClick={() => api.control(playing ? 'pause' : 'play')}
           >
             {playing ? <Pause size={20} /> : <Play size={20} />}
@@ -199,7 +234,7 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
           <button
             className="rd"
             aria-label="Next"
-            disabled={followOnly}
+            disabled={!can('next')}
             onClick={() => api.control('next')}
           >
             <SkipForward size={16} />
@@ -207,12 +242,17 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
           <button
             className={`rd ${playback?.repeat && playback.repeat !== 'off' ? 'on' : ''}`}
             aria-label="Repeat"
-            disabled={followOnly}
+            disabled={!can('repeat')}
             onClick={() => api.control('repeat', repeatNext)}
           >
             {playback?.repeat === 'track' ? <Repeat1 size={15} /> : <Repeat size={15} />}
           </button>
         </div>
+        {noControls && (
+          <div className="status">
+            {state.systemApp?.label} doesn’t accept controls from other apps. Glowtide follows along.
+          </div>
+        )}
         {followOnly && (
           <div className="status">
             Free Spotify account: play and skip in Spotify, Glowtide follows along.
@@ -276,7 +316,7 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
           className="rd"
           aria-label="Devices"
           disabled={noDevices}
-          onClick={() => setPanel('devices')}
+          onClick={() => setPanel(sys ? 'apps' : 'devices')}
         >
           <MonitorSpeaker size={15} />
         </button>

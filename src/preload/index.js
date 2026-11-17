@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('glowtide', {
   control: (action, arg) => ipcRenderer.invoke('control', action, arg),
   query: (kind, arg) => ipcRenderer.invoke('query', kind, arg),
   setSource: (src) => ipcRenderer.invoke('source', src),
+  selectSystemApp: (appId) => ipcRenderer.invoke('system:select', appId),
   nudgeLyrics: (delta) => ipcRenderer.invoke('lyrics:nudge', delta),
   connect: () => ipcRenderer.invoke('auth:connect'),
   disconnect: () => ipcRenderer.invoke('auth:disconnect'),

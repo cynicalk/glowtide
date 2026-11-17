@@ -1,4 +1,4 @@
-import { Music2, Youtube, Sparkles, ChevronRight } from 'lucide-react'
+import { Music2, Youtube, Sparkles, ChevronRight, AudioLines } from 'lucide-react'
 import { api } from '../lib/store'
 
 export default function Welcome({ setPanel }) {
@@ -14,6 +14,19 @@ export default function Welcome({ setPanel }) {
         <p>Glowtide lights up your screen and shows the lyrics, whichever you use.</p>
       </div>
       <div className="choices">
+        <button className="choice" onClick={() => pick('system')}>
+          <AudioLines size={22} />
+          <div>
+            <div className="t">
+              Any app <span className="badge">Free · no setup</span>
+            </div>
+            <div className="s">
+              Follows what’s playing in Spotify (free or Premium), YouTube Music in your browser,
+              Apple Music, TIDAL and more.
+            </div>
+          </div>
+          <ChevronRight size={16} />
+        </button>
         <button className="choice" onClick={() => pick('youtube')}>
           <Youtube size={22} />
           <div>

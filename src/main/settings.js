@@ -3,7 +3,8 @@ import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 
 export const DEFAULT_SETTINGS = {
-  source: null, // 'spotify' | 'youtube' | 'demo' | null (not chosen yet)
+  source: null, // 'system' | 'spotify' | 'youtube' | 'demo' | null (not chosen yet)
+  systemApp: 'auto', // which app's media session "Any app" follows
   clientId: '', // Spotify
   googleClientId: '',
   googleClientSecret: '', // a Google "desktop app" secret is not confidential by design

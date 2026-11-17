@@ -50,9 +50,12 @@ export async function fetchLyrics(track, { toleranceS = 4 } = {}) {
         artist_name: track.artist
       })
       const list = (await get(`https://lrclib.net/api/search?${s}`)) || []
-      const near = list
-        .filter((x) => x.syncedLyrics && Math.abs((x.duration || 0) - durS) <= toleranceS)
-        .sort((a, b) => Math.abs(a.duration - durS) - Math.abs(b.duration - durS))
+      // Some players don't report a duration: then keep LRCLIB's own ranking.
+      const near = durS
+        ? list
+            .filter((x) => x.syncedLyrics && Math.abs((x.duration || 0) - durS) <= toleranceS)
+            .sort((a, b) => Math.abs(a.duration - durS) - Math.abs(b.duration - durS))
+        : list.filter((x) => x.syncedLyrics)
       hit = near[0] || hit || list.find((x) => x.instrumental || x.plainLyrics) || null
     }
     if (!hit) result = { status: 'none', lines: [] }

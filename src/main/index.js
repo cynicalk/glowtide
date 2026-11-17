@@ -23,6 +23,8 @@ import { fetchLyrics } from './lyricsSource'
 import { createDemo } from './demo'
 import { extractPalette } from '../shared/colour.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
+import { appLabel, systemTrack, repeatFromSmtc } from '../shared/media.mjs'
+import { createSmtc } from './smtc'
 
 const spotifyAuth = createSpotifyAuth(() => loadSettings().clientId)
 const spotify = createSpotify(spotifyAuth)
@@ -32,6 +34,7 @@ const googleAuth = createGoogleAuth(() => ({
 }))
 const yt = createYouTube(googleAuth)
 const demo = createDemo()
+const smtc = createSmtc((m) => onSystemMessage(m))
 
 let player = null
 let lyricsWin = null
@@ -41,8 +44,12 @@ let quitting = false
 
 // ---------- state ----------
 const state = {
-  source: null, // 'spotify' | 'youtube' | 'demo' | null
+  source: null, // 'system' | 'spotify' | 'youtube' | 'demo' | null
   demo: false, // derived: source === 'demo'
+  systemApps: [], // [{ id, label }] apps with a Windows media session
+  systemApp: null, // { id, label } the one being followed
+  systemSelected: 'auto',
+  caps: null, // what the followed app lets us do: { play, pause, next, previous, seek, shuffle, repeat }
   connected: false, // Spotify
   spotifyPlan: null, // 'premium' | 'free' | null (unknown)
   google: false,
@@ -82,7 +89,9 @@ function ytCommand(action, arg) {
 
 async function paletteFor(url) {
   try {
-    const buf = Buffer.from(await (await fetch(url)).arrayBuffer())
+    const buf = url.startsWith('data:')
+      ? Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')
+      : Buffer.from(await (await fetch(url)).arrayBuffer())
     const img = nativeImage.createFromBuffer(buf)
     if (img.isEmpty()) return null
     const small = img.resize({ width: 64, height: 64, quality: 'good' })
@@ -111,14 +120,16 @@ async function onTrackChange(track) {
   lyricsLines = []
   sendLyrics()
   const id = track.id
-  paletteFor(track.cover).then((p) => {
-    if (state.track?.id === id) {
-      state.palette = p
-      broadcast()
-    }
-  })
+  if (track.cover)
+    paletteFor(track.cover).then((p) => {
+      if (state.track?.id === id) {
+        state.palette = p
+        broadcast()
+      }
+    })
   // Music videos often run longer than the song (intros, outros): match more loosely.
-  fetchLyrics(track, { toleranceS: state.source === 'youtube' ? 20 : 4 }).then((l) => {
+  const video = state.source === 'youtube' || (state.source === 'system' && !track.album)
+  fetchLyrics(track, { toleranceS: video ? 20 : 4 }).then((l) => {
     if (state.track?.id !== id) return
     state.lyricsStatus = l.status
     lyricsLines = l.lines
@@ -269,7 +280,97 @@ function onYtMessage(m) {
   broadcast()
 }
 
+// ---------- "Any app": Windows media sessions ----------
+let sysThumb = { key: null, dataUrl: null }
+
+function onSystemMessage(m) {
+  if (state.source !== 'system' || !m) return
+  if (m.type === 'sessions') {
+    // Glowtide's own session (its YouTube player) is not "another app" to follow.
+    state.systemApps = (m.apps || [])
+      .filter((id) => process.env.GLOWTIDE_SYS_TEST || id !== 'io.github.cynicalk.glowtide')
+      .map((id) => ({ id, label: appLabel(id) }))
+    return broadcast()
+  }
+  if (m.type === 'error') {
+    state.error = m.message
+    return broadcast()
+  }
+  if (m.type === 'thumb') {
+    sysThumb = { key: m.key, dataUrl: m.dataUrl }
+    if (state.track && state.track.smtcKey === m.key && !state.track.cover) {
+      state.track = { ...state.track, cover: m.dataUrl, thumb: m.dataUrl }
+      const id = state.track.id
+      paletteFor(m.dataUrl).then((p) => {
+        if (state.track?.id === id) {
+          state.palette = p
+          broadcast()
+        }
+      })
+      broadcast()
+    }
+    return
+  }
+  if (m.type !== 'state') return
+  if (state.error && /helper|PowerShell|media info/i.test(state.error)) state.error = null
+  if (!m.app) {
+    state.systemApp = null
+    state.caps = null
+    if (state.track) clearTrack()
+    return broadcast()
+  }
+  state.systemApp = { id: m.app, label: appLabel(m.app) }
+  state.caps = m.can || null
+  const base = systemTrack(m)
+  const nothing = !m.title && !m.artist
+  state.playback = nothing
+    ? null
+    : {
+        isPlaying: !!m.playing,
+        progressMs: m.positionMs || 0,
+        at: Date.now(),
+        shuffle: !!m.shuffle,
+        repeat: repeatFromSmtc(m.repeat),
+        volume: null,
+        device: { name: state.systemApp.label, type: 'Computer' }
+      }
+  if (nothing) {
+    if (state.track) clearTrack()
+  } else if (base.id !== state.track?.id) {
+    const cover = sysThumb.key === m.key ? sysThumb.dataUrl : null
+    const track = { ...base, smtcKey: m.key, cover, thumb: cover }
+    state.track = track
+    onTrackChange(track)
+  } else if (base.durationMs && !state.track.durationMs) {
+    // Some apps fill in the duration a moment after the title.
+    state.track = { ...state.track, durationMs: base.durationMs }
+  }
+  broadcast()
+}
+
 async function control(action, arg) {
+  if (state.source === 'system') {
+    const c = state.caps || {}
+    const allowed = {
+      play: c.play,
+      pause: c.pause,
+      next: c.next,
+      previous: c.previous,
+      seek: c.seek,
+      shuffle: c.shuffle,
+      repeat: c.repeat
+    }
+    if (!(action in allowed))
+      return { error: `Use ${state.systemApp?.label || 'the app'} for that.` }
+    if (!allowed[action])
+      return { error: `${state.systemApp?.label || 'This app'} doesn't allow that from outside.` }
+    smtc.send(`${action}${arg !== undefined ? ` ${arg}` : ''}`)
+    if (state.playback && (action === 'play' || action === 'pause')) {
+      state.playback = { ...state.playback, isPlaying: action === 'play', at: Date.now() }
+      broadcast()
+    }
+    return { ok: true }
+  }
   if (state.source === 'demo') {
     demo.control(action, arg)
     return poll()
@@ -367,6 +468,13 @@ async function query(kind, arg) {
 
 function setSource(src) {
   if (state.source === 'youtube' && src !== 'youtube') ytCommand('pause')
+  if (src === 'system') smtc.start()
+  else smtc.stop()
+  if (src !== 'system') {
+    state.systemApp = null
+    state.systemApps = []
+    state.caps = null
+  }
   state.source = src
   state.demo = src === 'demo'
   state.error = null
@@ -473,6 +581,7 @@ function rebuildTray() {
     Menu.buildFromTemplate([
       { label: 'Show player', click: () => (player.show(), player.focus()) },
       { type: 'separator' },
+      src('system', 'Any app'),
       src('spotify', 'Spotify'),
       src('youtube', 'YouTube Music'),
       src('demo', 'Demo'),
@@ -516,6 +625,12 @@ function registerIpc() {
   ipcMain.handle('control', (_, action, arg) => control(action, arg))
   ipcMain.handle('query', (_, kind, arg) => query(kind, arg))
   ipcMain.handle('source', (_, src) => setSource(src))
+  ipcMain.handle('system:select', (_, appId) => {
+    state.systemSelected = appId || 'auto'
+    updateSettings({ systemApp: state.systemSelected })
+    smtc.select(state.systemSelected)
+    broadcast()
+  })
   ipcMain.on('yt:state', (e, m) => {
     if (e.sender === player?.webContents) onYtMessage(m)
   })
@@ -582,6 +697,16 @@ function scheduleSnapshot() {
   if (!dir) return
   const panel = process.env.GLOWTIDE_PANEL
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
+  // GLOWTIDE_SYS_TEST=<app id>: follow that app; GLOWTIDE_SYS_TEST_CMD=<command>: send it after 6 s.
+  const sysTest = process.env.GLOWTIDE_SYS_TEST
+  if (sysTest)
+    setTimeout(() => {
+      setSource('system')
+      state.systemSelected = sysTest
+      smtc.select(sysTest)
+      const cmd = process.env.GLOWTIDE_SYS_TEST_CMD
+      if (cmd) setTimeout(() => control(...cmd.split(' ')), 6000)
+    }, 1000)
   const ytTest = process.env.GLOWTIDE_YT_TEST
   if (ytTest)
     setTimeout(() => {
@@ -634,6 +759,9 @@ else {
     state.google = googleAuth.load()
     state.source = process.env.GLOWTIDE_DEMO === '1' ? 'demo' : s.source
     state.demo = state.source === 'demo'
+    state.systemSelected = s.systemApp || 'auto'
+    smtc.select(state.systemSelected)
+    if (state.source === 'system') smtc.start()
 
     try {
       await startYtHost()
@@ -662,7 +790,10 @@ else {
     scheduleSnapshot()
   })
 
-  app.on('before-quit', () => (quitting = true))
+  app.on('before-quit', () => {
+    quitting = true
+    smtc.stop()
+  })
   app.on('window-all-closed', () => {
     /* stay in the tray */
   })

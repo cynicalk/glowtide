@@ -30,11 +30,14 @@ export function parseYouTubeTitle(rawTitle = '', channel = '') {
   }
   const m = rawTitle.match(/^(.+?)\s+[-–—]\s+(.+)$/)
   if (m) return { artist: cleanSongTitle(m[1]), title: cleanSongTitle(m[2]) }
-  const artist = ch
-    .replace(/VEVO$/i, '')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\s*-\s*Topic$/i, '')
-    .trim()
+  // VEVO channels glue the artist's words together ("BandNameVEVO"); other channel
+  // names are left alone, or "McFly" would become "Mc Fly".
+  const artist = /VEVO$/i.test(ch)
+    ? ch
+        .replace(/VEVO$/i, '')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .trim()
+    : ch.replace(/\s*-\s*Topic$/i, '').trim()
   return { artist: artist || ch, title: cleanSongTitle(rawTitle) }
 }
 

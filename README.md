@@ -1,13 +1,14 @@
 # Glowtide for Windows
 
-A music player for Windows that lights the edges of your screen in the colours of the album
-cover and puts the song's lyrics on the desktop, word by word. It plays from **YouTube Music
-(free)** or **Spotify**.
+A music companion for Windows that lights the edges of your screen in the colours of the album
+cover and puts the song's lyrics on the desktop, word by word. It follows **any music app**
+with no setup, or plays **YouTube Music (free)** and controls **Spotify** itself.
 
 ## Music sources
 
 | | Costs | Playback | Library |
 |---|---|---|---|
+| **Any app** (recommended) | Free, no setup | Whatever is playing: Spotify (free or Premium), YouTube Music or YouTube in a browser, Apple Music, TIDAL, foobar2000… | Lives in that app. Glowtide follows it and sends play/pause/skip/seek where the app allows |
 | **YouTube Music** | Free | YouTube's official embedded player, inside Glowtide | Paste any link with no account. Sign in with Google for your playlists, liked music and search |
 | **Spotify Premium** | Premium | Spotify app, controlled from Glowtide | Liked songs, playlists, recent, search, queue, devices |
 | **Spotify Free** | Free | Spotify app | Glowtide *follows* what plays: glow, lyrics and colours work, but Spotify doesn't allow remote control |
@@ -31,6 +32,14 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 
 ## Honest limits
 
+- **Any app**
+  - Reads Windows' media session, the same info the volume flyout and media keys use, through
+    a small Windows PowerShell helper (`resources/smtc.ps1`).
+  - It only sees apps that publish a session. Most do; a few (for example some NetEase
+    builds) don't.
+  - The position is carried forward from the app's last update, so a player that reports
+    rarely can drift. Pausing and playing resyncs, and the lyric nudge is still there.
+  - Which controls work is up to the app. Glowtide only enables the buttons the app accepts.
 - **YouTube**
   - Some videos can't be embedded. Labels often block their official videos, so YouTube shows
     "Video unavailable". Glowtide says so (after about 9 seconds at most) and skips ahead inside a
@@ -53,6 +62,9 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 - **No lock screen.** Windows doesn't let apps draw there.
 
 ## Setup
+
+**Any app**: nothing to set up. Pick it and play music anywhere. Devices (the speaker icon)
+chooses which app to follow when several are playing.
 
 **YouTube**
 - **No setup needed for links:** choose YouTube Music and paste a link.
@@ -85,14 +97,18 @@ PowerShell variables used for debugging:
 - `$env:GLOWTIDE_SNAPSHOT="C:\shots"` writes each window's PNG and `state.json` after
   `GLOWTIDE_SNAPSHOT_MS` (default 6000), then quits. `$env:GLOWTIDE_PANEL="library"` opens a panel.
 - `$env:GLOWTIDE_YT_TEST=<videoId>` switches to YouTube and plays that video.
+  `$env:GLOWTIDE_SYS_TEST=<app id>` follows that app; add `GLOWTIDE_SYS_TEST_CMD="pause"` to send a
+  command after 6 s.
   `$env:GLOWTIDE_DEBUG=1` logs player messages.
 
 ## Layout
 
 ```
-src/shared/    pure logic, unit-tested: LRC parsing, word timing, palette, colour, YouTube titles/links
+src/shared/    pure logic, unit-tested: LRC parsing, word timing, palette, colour,
+               YouTube titles/links, media-session app names and track info
 src/main/      Electron main: OAuth (PKCE), Spotify + YouTube clients, YouTube player host,
-               LRCLIB, windows, tray
+               media-session helper supervisor, LRCLIB, windows, tray
+resources/     smtc.ps1: the Windows media-session helper (unpacked from the asar)
 src/preload/   window.glowtide bridge
 src/renderer/  React: #/player, #/glow, #/lyrics
 ```

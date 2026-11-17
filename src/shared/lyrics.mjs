@@ -43,7 +43,8 @@ const MIN_WORD_MS = 120
 export function estimateWordTiming(lines, durationMs) {
   return lines.map((line, i) => {
     const words = line.text.split(/\s+/).filter(Boolean)
-    const nextT = i + 1 < lines.length ? lines[i + 1].t : (durationMs ?? line.t + 5000)
+    // An unknown duration (0) must not squash the last line: assume a few seconds.
+    const nextT = i + 1 < lines.length ? lines[i + 1].t : durationMs || line.t + 5000
     const available = Math.max(0, nextT - line.t)
     if (!words.length) return { ...line, end: line.t, words: [] }
     const sung = Math.min(

@@ -300,6 +300,7 @@ export default function SettingsPanel({ state, settings }) {
           <span>Play from</span>
           <div className="seg small">
             {[
+              ['system', 'Any app'],
               ['youtube', 'YouTube'],
               ['spotify', 'Spotify'],
               ['demo', 'Demo']

@@ -1,5 +1,6 @@
 // Extra lyric styles: Aura, Waves and Beat.
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { positionOf } from '../lib/store'
 import { useSwap } from '../lib/motion'
 
 const NBSP = ' '
@@ -120,6 +121,56 @@ export function Beat({ win, mode, beatRef }) {
           <i key={i} style={{ '--i': Math.abs(i - 11.5) / 11.5 }} />
         ))}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Karaoke: the line low on the screen, each word sweeping into colour as it is sung; a
+ * 3-2-1 count-in after long breaks. The sweep is set every frame from the song position.
+ */
+export function Karaoke({ view, playback, durationMs, offsetMs, showNext, colour }) {
+  const refs = useRef([])
+  const words = view?.line?.words || null
+  useEffect(() => {
+    if (!words) return
+    let raf
+    const loop = () => {
+      const pos = positionOf(playback, durationMs) + (offsetMs || 0)
+      words.forEach((w, i) => {
+        const el = refs.current[i]
+        if (!el) return
+        const f = Math.min(1, Math.max(0, (pos - w.t) / Math.max(60, w.end - w.t)))
+        el.style.setProperty('--f', f.toFixed(3))
+      })
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(raf)
+  }, [words, playback, durationMs, offsetMs])
+  const len = words ? words.map((w) => w.w).join(' ').length : 0
+  return (
+    <div className="karaoke" style={{ '--kf': colour }}>
+      {view?.countdown > 0 && (
+        <div className="k-count">
+          {[3, 2, 1].map((n) => (
+            <i key={n} className={n <= view.countdown ? 'on' : ''} />
+          ))}
+        </div>
+      )}
+      {words && (
+        <div key={view.key} className="k-line" style={{ '--k': fitLine(len) }}>
+          {words.map((w, i) => (
+            <span key={i} className="k-word" ref={(el) => (refs.current[i] = el)}>
+              <span className="k-base">{w.w}</span>
+              <span className="k-fill" aria-hidden="true">
+                {w.w}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      {showNext && view?.next && <div className="k-next">{view.next}</div>}
     </div>
   )
 }

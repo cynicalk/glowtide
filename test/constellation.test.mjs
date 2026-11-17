@@ -136,3 +136,15 @@ test('labels: recent lines only, and no two label boxes overlap', async () => {
   assert.ok(!set.has(5), 'unlit stars are not labelled')
   assert.equal([1, 2].filter((i) => set.has(i)).length, 1, 'of two crowding labels only one shows')
 })
+
+test('captionLine: stars still light word by word, the caption is the whole line', () => {
+  const t = lines[0].words[1].t + 10
+  const sky = constellationAt(lines, t, { seed: 1, captionLine: true })
+  assert.equal(sky.stars.filter((s) => s.lit).length, 2)
+  assert.equal(sky.focus.text, 'paper lanterns rise')
+  assert.equal(
+    sky.stars.filter((s) => s.current).length,
+    1,
+    'one focus star, so the rest get labels'
+  )
+})

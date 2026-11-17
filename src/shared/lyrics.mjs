@@ -210,3 +210,31 @@ export function lineWordsAt(lines, posMs, mode = 'lines') {
     key: `${w.index}|${lit}`
   }
 }
+
+/**
+ * Karaoke: the line being sung with each word's timing (for the colour sweep), the next
+ * line, and a countdown (3, 2, 1) in the last seconds before a line that follows a long
+ * break, so the singer knows when to come in.
+ */
+export function karaokeAt(lines, posMs, { countFromMs = 3000, breakMs = 4000 } = {}) {
+  const w = lineWindowAt(lines, posMs)
+  const sung = lines.filter((l) => l.text && l.text.trim())
+  if (w.cur) {
+    return {
+      line: { t: w.cur.t, words: w.cur.words.map((x) => ({ w: x.w, t: x.t, end: x.end })) },
+      next: w.next?.text ?? null,
+      countdown: 0,
+      key: `l${w.cur.t}`
+    }
+  }
+  // In a break: count in to the next line if it is close and the break was long.
+  const next = w.next
+  let countdown = 0
+  if (next) {
+    const prevSung = [...sung].reverse().find((l) => l.t < next.t)
+    const gap = prevSung ? next.t - (prevSung.end ?? prevSung.t) : next.t
+    const left = next.t - posMs
+    if (gap >= breakMs && left > 0 && left <= countFromMs) countdown = Math.ceil(left / 1000)
+  }
+  return { line: null, next: next?.text ?? null, countdown, key: `c${next?.t}|${countdown}` }
+}

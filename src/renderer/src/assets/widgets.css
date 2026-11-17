@@ -636,3 +636,130 @@ html[data-route='stage'] body {
 .lyr.solo .wave-next {
   display: none;
 }
+
+/* ---------- Karaoke ---------- */
+.lyr.s-karaoke .lyr-stage {
+  position: fixed;
+  inset: 0;
+  justify-content: space-between;
+  padding: 7vh 0 12vh;
+}
+.karaoke {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100vw;
+}
+.k-line {
+  max-width: min(88vw, 1600px);
+  text-align: center;
+  text-wrap: balance;
+  font-size: calc(var(--big) * var(--k) * 0.9);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.k-word {
+  position: relative;
+  display: inline-block;
+  margin: 0 0.14em;
+  --f: 0;
+}
+/* not yet sung: white with a dark outline, like a karaoke screen */
+.k-base {
+  color: #fff;
+  -webkit-text-stroke: 0.06em rgba(0, 0, 0, 0.75);
+  paint-order: stroke fill;
+}
+/* the sweep: the same word in the highlight colour, revealed left to right */
+.k-fill {
+  position: absolute;
+  inset: 0;
+  color: var(--kf, var(--hi));
+  -webkit-text-stroke: 0.06em rgba(0, 0, 0, 0.8);
+  paint-order: stroke fill;
+  /* generous top/bottom so the glow is never cut into a box; only the sweep edge clips */
+  clip-path: inset(-60% calc((1 - var(--f)) * 100%) -60% -10%);
+  text-shadow: 0 0 0.22em color-mix(in srgb, var(--kf, var(--hi)) 65%, transparent);
+}
+.k-next {
+  margin-top: calc(var(--big) * 0.3);
+  font-size: calc(var(--big) * 0.32);
+  font-weight: 700;
+  color: #fff;
+  opacity: 0.55;
+  -webkit-text-stroke: 0.05em rgba(0, 0, 0, 0.7);
+  paint-order: stroke fill;
+  max-width: 80vw;
+  text-align: center;
+}
+.k-count {
+  display: flex;
+  gap: calc(var(--big) * 0.16);
+  margin-bottom: calc(var(--big) * 0.25);
+}
+.k-count i {
+  width: calc(var(--big) * 0.16);
+  height: calc(var(--big) * 0.16);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  transition:
+    background 0.3s,
+    box-shadow 0.3s;
+}
+.k-count i.on {
+  background: var(--kf, var(--hi));
+  box-shadow: 0 0 18px var(--kf, var(--hi));
+}
+.k-line {
+  animation: lyric-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* six style tiles fit two rows of three */
+.styles {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* the constellation caption reads on any backdrop: near-white tinted by the cover, with a glow */
+.s-constellation .caption {
+  fill: color-mix(in srgb, var(--lyr) 28%, #ffffff);
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--lyr) 55%, transparent))
+    drop-shadow(0 6px 22px rgba(0, 0, 0, 0.7));
+}
+.s-constellation .star.lit text {
+  fill: color-mix(in srgb, var(--sec) 40%, #ffffff);
+}
+
+/* ---------- folding settings sections ---------- */
+.fold > .sh {
+  cursor: pointer;
+  margin: 0;
+  padding: 6px 0;
+  border-radius: 8px;
+  user-select: none;
+}
+.fold > .sh:hover h3 {
+  color: var(--glow);
+}
+.fold > .sh h3::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 10px 2px 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.2s;
+}
+.fold.open > .sh h3::before {
+  transform: rotate(45deg);
+}
+.fold:not(.open) > :not(.sh) {
+  display: none;
+}
+.fold.open > .sh {
+  margin-bottom: 8px;
+}
+.settings .fold {
+  padding: 8px 4px;
+}

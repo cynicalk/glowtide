@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlignCenter, Sparkles, Sun, Waves as WavesIcon, Activity } from 'lucide-react'
+import { AlignCenter, Sparkles, Sun, Waves as WavesIcon, Activity, Mic2 } from 'lucide-react'
 import { api } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
 import { THEMES, VIZ_STYLES, vizPalette } from '../../../shared/viz.mjs'
@@ -22,11 +22,43 @@ const FONTS = [
 
 const STYLES = [
   ['stack', 'Stack', AlignCenter, 'Big word or line in the middle'],
+  ['karaoke', 'Karaoke', Mic2, 'Words sweep into colour as they are sung, with a count-in'],
   ['constellation', 'Stars', Sparkles, 'Each verse fills a real constellation'],
   ['aura', 'Aura', Sun, 'Lyrics over a glowing cloud of the cover’s colours'],
   ['waves', 'Waves', WavesIcon, 'The whole line rides a ripple'],
   ['beat', 'Beat', Activity, 'Pulses with the music']
 ]
+
+/**
+ * A settings section that folds: click its header to open or close it. Switches and
+ * buttons in the header still work without folding. Open/closed is remembered.
+ */
+function Fold({ k, open: startOpen = false, children }) {
+  const [open, setOpen] = useState(() => {
+    try {
+      const v = localStorage.getItem(`fold:${k}`)
+      return v == null ? startOpen : v === '1'
+    } catch {
+      return startOpen
+    }
+  })
+  const click = (e) => {
+    if (!e.target.closest('.sh') || e.target.closest('button, input, select, label')) return
+    setOpen((o) => {
+      try {
+        localStorage.setItem(`fold:${k}`, o ? '0' : '1')
+      } catch {
+        /* remembering is optional */
+      }
+      return !o
+    })
+  }
+  return (
+    <section className={`fold ${open ? 'open' : ''}`} onClick={click}>
+      {children}
+    </section>
+  )
+}
 
 function Seg({ value, options, onChange }) {
   return (
@@ -119,7 +151,7 @@ export default function SettingsPanel({ state, settings, onClose }) {
 
   return (
     <div className="settings">
-      <section>
+      <Fold k="colours">
         <div className="sh">
           <h3>Colours</h3>
           <div className="seg small">
@@ -214,9 +246,9 @@ export default function SettingsPanel({ state, settings, onClose }) {
           </span>
         </div>
         <p className="fine">Dark colours are lifted automatically so lyrics stay readable.</p>
-      </section>
+      </Fold>
 
-      <section>
+      <Fold k="glow">
         <div className="sh">
           <h3>Edge glow</h3>
           <Toggle
@@ -300,9 +332,9 @@ export default function SettingsPanel({ state, settings, onClose }) {
             </button>
           </div>
         </div>
-      </section>
+      </Fold>
 
-      <section>
+      <Fold k="lyrics">
         <div className="sh">
           <h3>Lyrics overlay</h3>
           <Toggle
@@ -448,11 +480,11 @@ export default function SettingsPanel({ state, settings, onClose }) {
           window and comes back when you click into another app. Ctrl+Alt+L turns it on or off from
           anywhere.
         </p>
-      </section>
+      </Fold>
 
       <WidgetSettings settings={settings} set={set} />
 
-      <section>
+      <Fold k="source">
         <div className="sh">
           <h3>Music source</h3>
         </div>
@@ -515,7 +547,7 @@ export default function SettingsPanel({ state, settings, onClose }) {
             YouTube’s terms don’t allow playing with the video hidden. YouTube may show ads.
           </p>
         )}
-      </section>
+      </Fold>
     </div>
   )
 }
@@ -535,217 +567,221 @@ function WidgetSettings({ settings, set }) {
   const sc = (patch) => set({ widgets: { clock: patch } })
   const themes = ['album', ...Object.keys(THEMES), 'custom']
   return (
-    <section>
-      <div className="sh">
-        <h3>Desktop visualizer</h3>
-        <Toggle label="Desktop visualizer" on={v.enabled} onChange={(x) => sv({ enabled: x })} />
-      </div>
-      <p className="fine">
-        A live visualizer on your wallpaper, behind every window, showing what’s playing. Ctrl+Alt+M
-        hides and shows the widgets.
-      </p>
-      <div className="srow">
-        <span>Lives</span>
-        <Seg value={v.placement} options={PLACES} onChange={(x) => sv({ placement: x })} />
-      </div>
-      {v.enabled && (
-        <div className="srow">
-          <span>Position</span>
-          <button className="pill" onClick={() => api.widgetEdit('viz')}>
-            Move or resize
-          </button>
+    <>
+      <Fold k="viz">
+        <div className="sh">
+          <h3>Desktop visualizer</h3>
+          <Toggle label="Desktop visualizer" on={v.enabled} onChange={(x) => sv({ enabled: x })} />
         </div>
-      )}
-      <label className="srow">
-        <span>Style</span>
-        <select value={v.style} onChange={(e) => sv({ style: e.target.value })}>
-          {VIZ_STYLES.map((k) => (
-            <option key={k} value={k}>
-              {k[0].toUpperCase() + k.slice(1)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="sect">Colours</div>
-      <div className="theme-row">
-        {themes.map((k) => (
-          <button
-            key={k}
-            className={`theme-chip ${v.theme === k ? 'on' : ''}`}
-            onClick={() => sv({ theme: k })}
-          >
-            {k !== 'album' && k !== 'custom' && (
-              <i
-                style={{
-                  background: `linear-gradient(90deg, ${vizPalette(k).join(', ')})`
-                }}
-              />
-            )}
-            {k === 'album' ? 'Album' : k}
-          </button>
-        ))}
-      </div>
-      {v.theme === 'custom' && (
-        <label className="srow">
-          <span>Accent</span>
-          <input type="color" value={v.accent} onChange={(e) => sv({ accent: e.target.value })} />
-        </label>
-      )}
-      <Slider
-        label="Density"
-        min={16}
-        max={96}
-        step={4}
-        value={v.density}
-        onChange={(x) => sv({ density: x })}
-      />
-      <Slider
-        label="Sensitivity"
-        min={40}
-        max={200}
-        step={10}
-        value={v.sensitivity}
-        unit="%"
-        onChange={(x) => sv({ sensitivity: x })}
-      />
-      <Slider
-        label="Backdrop"
-        min={0}
-        max={90}
-        value={v.backdrop}
-        unit="%"
-        onChange={(x) => sv({ backdrop: x })}
-      />
-      <Slider
-        label="Opacity"
-        min={20}
-        max={100}
-        value={v.opacity}
-        unit="%"
-        onChange={(x) => sv({ opacity: x })}
-      />
-      <div className="srow">
-        <span>Glow</span>
-        <Toggle label="Glow" on={v.glow} onChange={(x) => sv({ glow: x })} />
-      </div>
-      <div className="srow">
-        <span>Now playing</span>
-        <Seg
-          value={v.card}
-          options={[
-            ['compact', 'Compact'],
-            ['centred', 'Centred'],
-            ['cover', 'Cover'],
-            ['text', 'Text'],
-            ['none', 'Off']
-          ]}
-          onChange={(x) => sv({ card: x })}
-        />
-      </div>
-      <div className="srow">
-        <span>Album art glow</span>
-        <Toggle label="Album art glow" on={v.artGlow} onChange={(x) => sv({ artGlow: x })} />
-      </div>
-
-      <div className="sh" style={{ marginTop: 14 }}>
-        <h3>Desktop clock</h3>
-        <Toggle label="Desktop clock" on={c.enabled} onChange={(x) => sc({ enabled: x })} />
-      </div>
-      {c.enabled && (
-        <>
-          <div className="srow">
-            <span>Lives</span>
-            <Seg value={c.placement} options={PLACES} onChange={(x) => sc({ placement: x })} />
-          </div>
+        <p className="fine">
+          A live visualizer on your wallpaper, behind every window, showing what’s playing.
+          Ctrl+Alt+M hides and shows the widgets.
+        </p>
+        <div className="srow">
+          <span>Lives</span>
+          <Seg value={v.placement} options={PLACES} onChange={(x) => sv({ placement: x })} />
+        </div>
+        {v.enabled && (
           <div className="srow">
             <span>Position</span>
-            <button className="pill" onClick={() => api.widgetEdit('clock')}>
+            <button className="pill" onClick={() => api.widgetEdit('viz')}>
               Move or resize
             </button>
           </div>
-          <div className="srow">
-            <span>Face</span>
-            <Seg
-              value={c.style}
-              options={[
-                ['digital', 'Digital'],
-                ['stacked', 'Stacked'],
-                ['minimal', 'Minimal'],
-                ['analog', 'Analog'],
-                ['words', 'Words']
-              ]}
-              onChange={(x) => sc({ style: x })}
-            />
-          </div>
-          <div className="srow">
-            <span>Colour</span>
-            <Seg
-              value={c.colour}
-              options={[
-                ['theme', 'Theme'],
-                ['gradient', 'Gradient'],
-                ['solid', 'White']
-              ]}
-              onChange={(x) => sc({ colour: x })}
-            />
-          </div>
-          <div className="srow">
-            <span>Date</span>
-            <Seg
-              value={c.date}
-              options={[
-                ['long', 'Long'],
-                ['short', 'Short'],
-                ['none', 'Off']
-              ]}
-              onChange={(x) => sc({ date: x })}
-            />
-          </div>
-          <div className="srow">
-            <span>24-hour</span>
-            <Toggle label="24-hour" on={c.h24} onChange={(x) => sc({ h24: x })} />
-          </div>
-          <div className="srow">
-            <span>Seconds</span>
-            <Toggle label="Seconds" on={c.seconds} onChange={(x) => sc({ seconds: x })} />
-          </div>
-          <div className="srow">
-            <span>Glow</span>
-            <Toggle label="Clock glow" on={c.glow} onChange={(x) => sc({ glow: x })} />
-          </div>
-          <Slider
-            label="Opacity"
-            min={20}
-            max={100}
-            value={c.opacity}
-            unit="%"
-            onChange={(x) => sc({ opacity: x })}
-          />
-        </>
-      )}
-
-      <div className="sh" style={{ marginTop: 14 }}>
-        <h3>Full screen</h3>
-        <button className="pill" onClick={() => api.stage('open')}>
-          Open
-        </button>
-      </div>
-      <p className="fine">
-        Ctrl+Alt+F from anywhere. Space plays or pauses, the arrows skip, V changes the visualizer,
-        C the colours, Esc leaves.
-      </p>
-      <div className="srow">
-        <span>Frame rate</span>
-        <Seg
-          value={String(w.fps)}
-          options={[
-            ['30', '30 fps'],
-            ['60', '60 fps']
-          ]}
-          onChange={(x) => set({ widgets: { fps: Number(x) } })}
+        )}
+        <label className="srow">
+          <span>Style</span>
+          <select value={v.style} onChange={(e) => sv({ style: e.target.value })}>
+            {VIZ_STYLES.map((k) => (
+              <option key={k} value={k}>
+                {k[0].toUpperCase() + k.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="sect">Colours</div>
+        <div className="theme-row">
+          {themes.map((k) => (
+            <button
+              key={k}
+              className={`theme-chip ${v.theme === k ? 'on' : ''}`}
+              onClick={() => sv({ theme: k })}
+            >
+              {k !== 'album' && k !== 'custom' && (
+                <i
+                  style={{
+                    background: `linear-gradient(90deg, ${vizPalette(k).join(', ')})`
+                  }}
+                />
+              )}
+              {k === 'album' ? 'Album' : k}
+            </button>
+          ))}
+        </div>
+        {v.theme === 'custom' && (
+          <label className="srow">
+            <span>Accent</span>
+            <input type="color" value={v.accent} onChange={(e) => sv({ accent: e.target.value })} />
+          </label>
+        )}
+        <Slider
+          label="Density"
+          min={16}
+          max={96}
+          step={4}
+          value={v.density}
+          onChange={(x) => sv({ density: x })}
         />
-      </div>
-      <p className="fine">Widgets drop to 20 fps on their own when nothing is playing.</p>
-    </section>
+        <Slider
+          label="Sensitivity"
+          min={40}
+          max={200}
+          step={10}
+          value={v.sensitivity}
+          unit="%"
+          onChange={(x) => sv({ sensitivity: x })}
+        />
+        <Slider
+          label="Backdrop"
+          min={0}
+          max={90}
+          value={v.backdrop}
+          unit="%"
+          onChange={(x) => sv({ backdrop: x })}
+        />
+        <Slider
+          label="Opacity"
+          min={20}
+          max={100}
+          value={v.opacity}
+          unit="%"
+          onChange={(x) => sv({ opacity: x })}
+        />
+        <div className="srow">
+          <span>Glow</span>
+          <Toggle label="Glow" on={v.glow} onChange={(x) => sv({ glow: x })} />
+        </div>
+        <div className="srow">
+          <span>Now playing</span>
+          <Seg
+            value={v.card}
+            options={[
+              ['compact', 'Compact'],
+              ['centred', 'Centred'],
+              ['cover', 'Cover'],
+              ['text', 'Text'],
+              ['none', 'Off']
+            ]}
+            onChange={(x) => sv({ card: x })}
+          />
+        </div>
+        <div className="srow">
+          <span>Album art glow</span>
+          <Toggle label="Album art glow" on={v.artGlow} onChange={(x) => sv({ artGlow: x })} />
+        </div>
+      </Fold>
+      <Fold k="clock">
+        <div className="sh">
+          <h3>Desktop clock</h3>
+          <Toggle label="Desktop clock" on={c.enabled} onChange={(x) => sc({ enabled: x })} />
+        </div>
+        {c.enabled && (
+          <>
+            <div className="srow">
+              <span>Lives</span>
+              <Seg value={c.placement} options={PLACES} onChange={(x) => sc({ placement: x })} />
+            </div>
+            <div className="srow">
+              <span>Position</span>
+              <button className="pill" onClick={() => api.widgetEdit('clock')}>
+                Move or resize
+              </button>
+            </div>
+            <div className="srow">
+              <span>Face</span>
+              <Seg
+                value={c.style}
+                options={[
+                  ['digital', 'Digital'],
+                  ['stacked', 'Stacked'],
+                  ['minimal', 'Minimal'],
+                  ['analog', 'Analog'],
+                  ['words', 'Words']
+                ]}
+                onChange={(x) => sc({ style: x })}
+              />
+            </div>
+            <div className="srow">
+              <span>Colour</span>
+              <Seg
+                value={c.colour}
+                options={[
+                  ['theme', 'Theme'],
+                  ['gradient', 'Gradient'],
+                  ['solid', 'White']
+                ]}
+                onChange={(x) => sc({ colour: x })}
+              />
+            </div>
+            <div className="srow">
+              <span>Date</span>
+              <Seg
+                value={c.date}
+                options={[
+                  ['long', 'Long'],
+                  ['short', 'Short'],
+                  ['none', 'Off']
+                ]}
+                onChange={(x) => sc({ date: x })}
+              />
+            </div>
+            <div className="srow">
+              <span>24-hour</span>
+              <Toggle label="24-hour" on={c.h24} onChange={(x) => sc({ h24: x })} />
+            </div>
+            <div className="srow">
+              <span>Seconds</span>
+              <Toggle label="Seconds" on={c.seconds} onChange={(x) => sc({ seconds: x })} />
+            </div>
+            <div className="srow">
+              <span>Glow</span>
+              <Toggle label="Clock glow" on={c.glow} onChange={(x) => sc({ glow: x })} />
+            </div>
+            <Slider
+              label="Opacity"
+              min={20}
+              max={100}
+              value={c.opacity}
+              unit="%"
+              onChange={(x) => sc({ opacity: x })}
+            />
+          </>
+        )}
+      </Fold>
+      <Fold k="fullscreen">
+        <div className="sh">
+          <h3>Full screen</h3>
+          <button className="pill" onClick={() => api.stage('open')}>
+            Open
+          </button>
+        </div>
+        <p className="fine">
+          Ctrl+Alt+F from anywhere. Space plays or pauses, the arrows skip, V changes the
+          visualizer, C the colours, Esc leaves.
+        </p>
+        <div className="srow">
+          <span>Frame rate</span>
+          <Seg
+            value={String(w.fps)}
+            options={[
+              ['30', '30 fps'],
+              ['60', '60 fps']
+            ]}
+            onChange={(x) => set({ widgets: { fps: Number(x) } })}
+          />
+        </div>
+        <p className="fine">Widgets drop to 20 fps on their own when nothing is playing.</p>
+      </Fold>
+    </>
   )
 }

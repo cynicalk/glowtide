@@ -940,8 +940,8 @@ function scheduleSnapshot() {
       // What the overlay's current word is doing, sampled twice, to see the fill move.
       let overlay = null
       if (lyricsWin && !lyricsWin.isDestroyed()) {
-        const probe = `(() => { const el = document.querySelector('.w.cur:not(.leave), .aura-text:not(.leave), .wave-line:not(.leave), .beat-text:not(.leave), .caption:not(.leave)'); if (!el) return null;
-          const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length, text: el.textContent, at: Date.now(), leaving: [...document.querySelectorAll('.leave')].map((x) => +getComputedStyle(x).opacity),
+        const probe = `(() => { const el = document.querySelector('.w.cur:not(.leave), .aura-text:not(.leave), .wave-line:not(.leave), .beat-text:not(.leave), .caption:not(.leave), .k-line'); if (!el) return null;
+          const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length, text: el.textContent, at: Date.now(), fills: [...document.querySelectorAll('.k-word')].map((x) => +getComputedStyle(x).getPropertyValue('--f') || 0), leaving: [...document.querySelectorAll('.leave')].map((x) => +getComputedStyle(x).opacity),
           bg: cs.backgroundPosition, anim: cs.animationName, dur: cs.animationDuration } })()`
         overlay = []
         for (let i = 0; i < Number(process.env.GLOWTIDE_PROBE_N || 25); i++) {

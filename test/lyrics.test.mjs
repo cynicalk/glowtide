@@ -127,3 +127,25 @@ test('lineWordsAt: whole line, words lit as they are reached', async () => {
   assert.ok(whole.words.every((w) => w.lit))
   assert.equal(lineWordsAt(lines, 5000, 'lines').words, null)
 })
+
+test('karaoke: line with word times, then a 3-2-1 count-in after a long break', async () => {
+  const { karaokeAt } = await import('../src/shared/lyrics.mjs')
+  const lines = estimateWordTiming(
+    parseLrc('[00:05.00] first line here\n[00:09.00]\n[00:20.00] back again'),
+    60000
+  )
+  const k = karaokeAt(lines, 5500)
+  assert.equal(k.line.words.length, 3)
+  assert.ok(k.line.words[1].t > k.line.words[0].t)
+  assert.equal(karaokeAt(lines, 12000).countdown, 0, 'too early to count in')
+  assert.equal(karaokeAt(lines, 17500).countdown, 3)
+  assert.equal(karaokeAt(lines, 18500).countdown, 2)
+  assert.equal(karaokeAt(lines, 19500).countdown, 1)
+  assert.equal(karaokeAt(lines, 20100).line.words[0].w, 'back')
+})
+
+test('karaoke: no count-in between lines that follow closely', async () => {
+  const { karaokeAt } = await import('../src/shared/lyrics.mjs')
+  const lines = estimateWordTiming(parseLrc('[00:05.00] one two\n[00:08.00] three four'), 60000)
+  for (let t = 5000; t < 8000; t += 250) assert.equal(karaokeAt(lines, t).countdown, 0)
+})

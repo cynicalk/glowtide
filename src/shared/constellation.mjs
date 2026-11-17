@@ -112,7 +112,11 @@ export function buildFigures(lines, seed = 0) {
  * Returns { figure, stars, edges, focus, key } or { figure: null } before the first word.
  * figure: { id, name, title, desc, n }. stars: [{ x, y, m, word, lit, current }].
  */
-export function constellationAt(lines, posMs, { mode = 'words', seed = 0, figures } = {}) {
+export function constellationAt(
+  lines,
+  posMs,
+  { mode = 'words', seed = 0, figures, captionLine = false } = {}
+) {
   const figs = figures || buildFigures(lines, seed)
   const none = { figure: null, stars: [], edges: [], focus: null, key: 'none' }
   if (!figs.length) return none
@@ -154,7 +158,9 @@ export function constellationAt(lines, posMs, { mode = 'words', seed = 0, figure
   if (mode === 'words' && lastWord) {
     const lineEnd = lines[lastWord.line].end ?? lastWord.end
     if (posMs > lineEnd + 900) quiet = true
-    focusText = lastWord.w
+    // captionLine: stars light word by word, but the caption shows the whole line, which
+    // stays in sync even when the word timing is only estimated.
+    focusText = captionLine ? lines[lastWord.line].text : lastWord.w
   }
 
   const fig = figs[figIdx]

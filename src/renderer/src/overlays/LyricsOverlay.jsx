@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { positionOf, useColours, useGlowtide } from '../lib/store'
-import { wordWindowAt, lineWindowAt, lineWordsAt } from '../../../shared/lyrics.mjs'
-import { Aura, Waves, Beat } from './LyricStyles'
+import { wordWindowAt, lineWindowAt, lineWordsAt, karaokeAt } from '../../../shared/lyrics.mjs'
+import { Aura, Waves, Beat, Karaoke } from './LyricStyles'
 import { useSwap, useBeatVars } from '../lib/motion'
 import {
   buildFigures,
@@ -61,6 +61,19 @@ function stackView(lines, pos, { mode }) {
 
 // Splitting the song into figures is done once per song, not every frame.
 let figCache = { lines: null, seed: null, figures: [] }
+/** The sweep needs a vivid colour: a greyish highlight (black-and-white cover) gets a bright one. */
+function karaokeColour(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+  const mx = Math.max(r, g, b)
+  const mn = Math.min(r, g, b)
+  const sat = mx === mn ? 0 : (mx - mn) / (1 - Math.abs(mx + mn - 1))
+  return sat < 0.3 ? '#4cc9ff' : hex
+}
+
+function karaokeView(lines, pos) {
+  return karaokeAt(lines, pos)
+}
+
 function wavesView(lines, pos, { mode }) {
   return lineWordsAt(lines, pos, mode)
 }
@@ -190,7 +203,7 @@ function Constellation({ sky, mode, scale }) {
   const cam = f
     ? {
         x: Math.max(-170, Math.min(170, (VIEW.w / 2 - f.x) * 0.32)),
-        y: Math.max(-90, Math.min(90, (430 - f.y) * 0.32))
+        y: Math.max(-25, Math.min(45, (430 - f.y) * 0.2))
       }
     : { x: 0, y: 0 }
   return (
@@ -287,15 +300,27 @@ export default function LyricsOverlay() {
   const { state, settings, lyrics } = useGlowtide()
   const colours = useColours(state, settings)
   const l = settings?.lyrics
-  const STYLES = ['stack', 'constellation', 'aura', 'waves', 'beat']
+  const STYLES = ['stack', 'karaoke', 'constellation', 'aura', 'waves', 'beat']
   const style = STYLES.includes(l?.style) ? l.style : 'stack'
   // Word-timed lyrics go word by word. Line-timed lyrics show whole lines unless the
   // listener asked for estimated words.
   const mode = state?.lyricsTiming === 'word' || l?.estimated === 'words' ? 'words' : 'lines'
   const seed = seedOf(state?.track?.id)
-  const opts = useMemo(() => ({ mode, seed }), [mode, seed])
+  const opts = useMemo(
+    () =>
+      // Constellation always lights its stars word by word, like the original; the
+      // caption carries the whole line.
+      style === 'constellation' ? { mode: 'words', seed, captionLine: true } : { mode, seed },
+    [mode, seed, style]
+  )
   const win = useLyricView(
-    style === 'constellation' ? skyView : style === 'waves' ? wavesView : stackView,
+    style === 'constellation'
+      ? skyView
+      : style === 'waves'
+        ? wavesView
+        : style === 'karaoke'
+          ? karaokeView
+          : stackView,
     lyrics,
     state?.playback,
     state?.track?.durationMs,
@@ -352,6 +377,16 @@ export default function LyricsOverlay() {
             playing={!!state.playback?.isPlaying}
           />
         )}
+        {style === 'karaoke' && (
+          <Karaoke
+            view={win && 'countdown' in win ? win : null}
+            playback={state.playback}
+            durationMs={state.track?.durationMs}
+            offsetMs={state.lyricsOffsetMs}
+            showNext={!!l.context}
+            colour={karaokeColour(colours.highlight)}
+          />
+        )}
         {style === 'aura' && (
           <Aura win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
         )}
@@ -366,7 +401,7 @@ export default function LyricsOverlay() {
             preserveAspectRatio="xMidYMid slice"
           >
             <Starfield seed={seed} />
-            <Constellation sky={win?.stars ? win : null} mode={mode} scale={scale} />
+            <Constellation sky={win?.stars ? win : null} mode="lines" scale={scale} />
           </svg>
         )}
       </div>

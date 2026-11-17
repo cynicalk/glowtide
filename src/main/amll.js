@@ -57,7 +57,13 @@ export function loadAmllIndex() {
  * length than the song (a live or extended version) is rejected.
  */
 export async function amllLyrics(track, { spotifyId, toleranceS = 8 } = {}) {
-  const idx = await loadAmllIndex()
+  // Never hold a song's lyrics hostage to the index download (first run, daily refresh):
+  // wait briefly, then let LRCLIB answer while the index keeps loading for the next song.
+  const idx = await Promise.race([
+    loadAmllIndex(),
+    new Promise((r) => setTimeout(() => r(null), 1500))
+  ])
+  if (!idx) return null
   const hit = findAmll(idx, track, { spotifyId })
   if (!hit) return null
   let xml = files.get(hit.file)

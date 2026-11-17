@@ -65,7 +65,7 @@ function SwatchPick({ label, palette, value, onChange, disabled }) {
   )
 }
 
-export default function SettingsPanel({ state, settings }) {
+export default function SettingsPanel({ state, settings, onClose }) {
   const c = settings.colour
   const g = settings.glow
   const l = settings.lyrics
@@ -330,7 +330,11 @@ export default function SettingsPanel({ state, settings }) {
               <button
                 key={k}
                 className={state.source === k ? 'on' : ''}
-                onClick={() => api.setSource(k)}
+                onClick={() => {
+                  api.setSource(k)
+                  // Spotify without a connection opens its own setup screen: get out of its way.
+                  if (k === 'spotify' && !state.connected) onClose?.()
+                }}
               >
                 {label}
               </button>

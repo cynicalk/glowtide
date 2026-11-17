@@ -72,7 +72,8 @@ export default function Player() {
       {screen === 'player' && (
         <NowPlaying state={state} settings={settings} lyrics={lyrics} setPanel={setPanel} />
       )}
-      {panel && (
+      {/* Panels belong to the player screen: never let one cover Welcome or Connect Spotify. */}
+      {panel && screen === 'player' && (
         <Sheet title={PANEL_TITLES[panel]} onClose={() => setPanel(null)}>
           {panel === 'search' &&
             (sys ? (
@@ -100,7 +101,9 @@ export default function Player() {
             ))}
           {(panel === 'devices' || panel === 'apps') &&
             (sys ? <SystemApps state={state} /> : <DevicesPanel state={state} />)}
-          {panel === 'settings' && <SettingsPanel state={state} settings={settings} />}
+          {panel === 'settings' && (
+            <SettingsPanel state={state} settings={settings} onClose={() => setPanel(null)} />
+          )}
         </Sheet>
       )}
     </div>

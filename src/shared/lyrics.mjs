@@ -6,8 +6,18 @@
 // because inventing timing for a whole song would be worse than showing nothing.
 
 const TIME_TAG = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g
+// Enhanced (A2) LRC puts per-word times inside the line: [00:12.00]<00:12.00>Hey <00:12.40>you
+const WORD_TAG = /<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>/g
 
-/** Parse LRC text into [{ t, text }] sorted by time (ms). Empty-text lines are kept: they mark gaps. */
+const tagMs = (m) =>
+  Number(m[1]) * 60000 + Number(m[2]) * 1000 + (m[3] ? Number(m[3].padEnd(3, '0').slice(0, 3)) : 0)
+
+/** True when the LRC carries real per-word times. */
+export function hasWordTags(lrc) {
+  return typeof lrc === 'string' && /<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/.test(lrc)
+}
+
+/** Parse LRC text into [{ t, text, body }] sorted by time (ms). Empty-text lines are kept: they mark gaps. */
 export function parseLrc(lrc) {
   if (!lrc || typeof lrc !== 'string') return []
   let offset = 0
@@ -20,15 +30,52 @@ export function parseLrc(lrc) {
     }
     const tags = [...raw.matchAll(TIME_TAG)]
     if (!tags.length) continue
-    const text = raw.replace(TIME_TAG, '').trim()
+    const body = raw.replace(TIME_TAG, '')
+    const text = body.replace(WORD_TAG, '').replace(/\s+/g, ' ').trim()
     for (const m of tags) {
-      const frac = m[3] ? Number(m[3].padEnd(3, '0').slice(0, 3)) : 0
-      const t = Number(m[1]) * 60000 + Number(m[2]) * 1000 + frac
       // LRC [offset:+n] means lyrics appear n ms earlier.
-      out.push({ t: Math.max(0, t - offset), text })
+      out.push({ t: Math.max(0, tagMs(m) - offset), text, body, offset })
     }
   }
   return out.sort((a, b) => a.t - b.t)
+}
+
+/**
+ * Lines with MEASURED word times from enhanced LRC. A segment between two word tags
+ * that holds several words (some files tag phrases, not words) is split by length
+ * inside its own measured span, so no time is invented outside what the file says.
+ * Lines without word tags fall back to the estimate.
+ */
+export function enhancedLrcLines(lrc, durationMs) {
+  const base = parseLrc(lrc)
+  const estimated = estimateWordTiming(base, durationMs)
+  return base.map((line, i) => {
+    const nextT = i + 1 < base.length ? base[i + 1].t : durationMs || line.t + 5000
+    const marks = [...line.body.matchAll(WORD_TAG)]
+    if (!marks.length) return estimated[i]
+    const segs = []
+    marks.forEach((m, k) => {
+      const from = m.index + m[0].length
+      const to = k + 1 < marks.length ? marks[k + 1].index : line.body.length
+      segs.push({ t: Math.max(0, tagMs(m) - line.offset), text: line.body.slice(from, to) })
+    })
+    const words = []
+    segs.forEach((s, k) => {
+      const parts = s.text.split(/\s+/).filter(Boolean)
+      if (!parts.length) return // a closing tag: it only marks where the previous word ends
+      const end = k + 1 < segs.length ? segs[k + 1].t : Math.min(nextT, s.t + parts.length * 600)
+      const span = Math.max(0, end - s.t)
+      const total = parts.reduce((n, p) => n + p.length + 1, 0)
+      let t = s.t
+      for (const p of parts) {
+        const d = (span * (p.length + 1)) / total
+        words.push({ w: p, t: Math.round(t), end: Math.round(t + d) })
+        t += d
+      }
+    })
+    if (!words.length) return estimated[i]
+    return { t: line.t, text: line.text, end: words[words.length - 1].end, words }
+  })
 }
 
 const PER_WORD_MS = 420

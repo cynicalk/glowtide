@@ -20,6 +20,7 @@ import { createSpotify, createSpotifyAuth, slimTrack } from './spotify'
 import { createGoogleAuth, createYouTube } from './youtube'
 import { startYtHost, YT_HOST_ORIGIN } from './ytHost'
 import { fetchLyrics } from './lyricsSource'
+import { loadAmllIndex } from './amll'
 import { createDemo } from './demo'
 import { extractPalette } from '../shared/colour.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
@@ -61,6 +62,8 @@ const state = {
   playback: null,
   liked: null,
   lyricsStatus: 'none',
+  lyricsTiming: null, // 'word' (measured) | 'line' (words estimated)
+  lyricsSource: null,
   lyricsOffsetMs: 0,
   error: null,
   redirectUri: REDIRECT_URI
@@ -107,6 +110,8 @@ function clearTrack() {
   state.playback = null
   state.liked = null
   state.lyricsStatus = 'none'
+  state.lyricsTiming = null
+  state.lyricsSource = null
   state.ytQueue = null
   lyricsLines = []
   sendLyrics()
@@ -117,6 +122,8 @@ async function onTrackChange(track) {
   state.liked = null
   state.lyricsOffsetMs = 0 // the nudge is per song
   state.lyricsStatus = 'loading'
+  state.lyricsTiming = null
+  state.lyricsSource = null
   lyricsLines = []
   sendLyrics()
   const id = track.id
@@ -129,9 +136,13 @@ async function onTrackChange(track) {
     })
   // Music videos often run longer than the song (intros, outros): match more loosely.
   const video = state.source === 'youtube' || (state.source === 'system' && !track.album)
-  fetchLyrics(track, { toleranceS: video ? 20 : 4 }).then((l) => {
+  // Only the Spotify source knows Spotify's track id; the others match by title and artist.
+  const spotifyId = state.source === 'spotify' ? track.id : undefined
+  fetchLyrics(track, { toleranceS: video ? 20 : 4, spotifyId }).then((l) => {
     if (state.track?.id !== id) return
     state.lyricsStatus = l.status
+    state.lyricsTiming = l.timing || null
+    state.lyricsSource = l.source || null
     lyricsLines = l.lines
     sendLyrics()
     broadcast()
@@ -170,6 +181,8 @@ async function poll() {
         state.palette = s.palette
         state.lyricsOffsetMs = 0
         state.lyricsStatus = s.lyrics.status
+        state.lyricsTiming = 'line'
+        state.lyricsSource = 'Demo'
         lyricsLines = s.lyrics.lines
         sendLyrics()
       }
@@ -731,9 +744,21 @@ function scheduleSnapshot() {
         const img = await w.webContents.capturePage()
         writeFileSync(join(dir, `${name}${panel ? '-' + panel : ''}.png`), img.toPNG())
       }
+      // What the overlay's current word is doing, sampled twice, to see the fill move.
+      let overlay = null
+      if (lyricsWin && !lyricsWin.isDestroyed()) {
+        const probe = `(() => { const el = document.querySelector('.w.cur'); if (!el) return null;
+          const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length,
+          bg: cs.backgroundPosition, anim: cs.animationName, dur: cs.animationDuration } })()`
+        overlay = []
+        for (let i = 0; i < 25; i++) {
+          overlay.push(await lyricsWin.webContents.executeJavaScript(probe))
+          await new Promise((r) => setTimeout(r, 80))
+        }
+      }
       writeFileSync(
         join(dir, 'state.json'),
-        JSON.stringify({ ...state, lyricsCount: lyricsLines.length }, null, 2)
+        JSON.stringify({ ...state, lyricsCount: lyricsLines.length, overlay }, null, 2)
       )
       quitting = true
       app.quit()
@@ -777,6 +802,7 @@ else {
         .catch(() => cb({}))
     })
 
+    loadAmllIndex() // warm the word-timed lyrics index so the first song doesn't wait
     registerIpc()
     createPlayer()
     syncOverlays()

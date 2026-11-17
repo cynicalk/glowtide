@@ -4,11 +4,14 @@ import { parseLrc, estimateWordTiming, wordWindowAt, lineIndexAt } from '../src/
 
 test('parses timestamps with 2- and 3-digit fractions, sorted', () => {
   const l = parseLrc('[00:12.50] second\n[00:01.123] first\nno tag line\n[01:02] third')
-  assert.deepEqual(l, [
-    { t: 1123, text: 'first' },
-    { t: 12500, text: 'second' },
-    { t: 62000, text: 'third' }
-  ])
+  assert.deepEqual(
+    l.map(({ t, text }) => ({ t, text })),
+    [
+      { t: 1123, text: 'first' },
+      { t: 12500, text: 'second' },
+      { t: 62000, text: 'third' }
+    ]
+  )
 })
 
 test('a line with several time tags repeats at each time', () => {

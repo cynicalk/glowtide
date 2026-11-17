@@ -152,8 +152,10 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
     !['play', 'pause', 'next', 'previous', 'seek'].some((a) => state.caps?.[a])
 
   let lyricNote = LYRIC_STATUS[state.lyricsStatus] || ''
+  if (state.lyricsStatus === 'synced' && state.lyricsTiming === 'word')
+    lyricNote = `Word-timed lyrics · ${state.lyricsSource}`
   if (yt && state.lyricsStatus === 'synced')
-    lyricNote = 'Lyrics matched by title · nudge if the video runs early or late'
+    lyricNote += ' · matched by title, nudge if the video runs early or late'
 
   return (
     <div className="np">

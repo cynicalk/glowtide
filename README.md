@@ -24,7 +24,17 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   the cover, and it pulses on the beat by listening to the PC's sound output (loopback),
   never the microphone. With no audio signal it breathes slowly rather than faking a beat.
 - **Kinetic lyrics**: a click-through overlay with the clock and three stacked words. The
-  word being sung is large and the next one sits in a highlight block.
+  word being sung is large and the next one sits in a highlight block. With word-timed
+  lyrics, a karaoke fill sweeps across each word over its real duration.
+- **Lyrics, best source first**:
+  1. [AMLL TTML DB](https://github.com/amll-dev/amll-ttml-db): community word-by-word timing,
+     CC0. Matched by Spotify track id when Glowtide knows it, otherwise by title plus a shared
+     artist. A title match whose file is a different length is rejected as another version.
+  2. LRCLIB enhanced LRC: per-word tags in the file.
+  3. LRCLIB line-synced LRC: words spread across each line, labelled as estimated.
+
+  The player says which one is showing ("Word-timed lyrics · AMLL TTML DB" or "word timing
+  estimated"), and only measured timing gets the karaoke fill.
 - **Colours**: a 5-swatch palette from each cover. Pick which swatch drives the glow, the
   lyrics and the highlight, then adjust brightness and saturation. Dark picks are lifted so
   they stay readable. Or choose Custom. Colours crossfade between songs.
@@ -56,7 +66,12 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 - **Spotify**
   - Controlling playback needs **Premium**.
   - Music plays in the Spotify app, because playing inside Glowtide would need Widevine DRM.
-- **Lyrics** come from LRCLIB and are timed by line. Word timing within a line is
+- **Word-timed lyrics are limited**: the AMLL database has about 3,500 songs, mostly Chinese
+  and Japanese, with some Western pop (Taylor Swift, The Weeknd, Sabrina Carpenter…).
+  Everything else falls back to LRCLIB, timed by line with words *estimated*. The index
+  (~1.7 MB) is downloaded at most once a day. Background vocals and translations in TTML
+  files are skipped for now.
+- **Lyrics** from LRCLIB are timed by line. Word timing within a line is
   *estimated*. Songs with only untimed lyrics get no overlay. YouTube lyrics are matched by
   title, so a music video with an intro may need the ±0.25 s nudge.
 - **No lock screen.** Windows doesn't let apps draw there.
@@ -104,7 +119,8 @@ PowerShell variables used for debugging:
 ## Layout
 
 ```
-src/shared/    pure logic, unit-tested: LRC parsing, word timing, palette, colour,
+src/shared/    pure logic, unit-tested: LRC + enhanced LRC + TTML parsing, AMLL matching,
+               word timing, palette, colour,
                YouTube titles/links, media-session app names and track info
 src/main/      Electron main: OAuth (PKCE), Spotify + YouTube clients, YouTube player host,
                media-session helper supervisor, LRCLIB, windows, tray

@@ -28,7 +28,8 @@ function useWordWindow(lines, playback, durationMs, offsetMs) {
       const key = `${w.index}|${w.cur?.t}|${w.next?.t}`
       if (key !== last) {
         last = key
-        setWin(w)
+        // How far into the word we already are (a seek or a late frame), for the karaoke fill.
+        setWin({ ...w, elapsed: w.cur ? Math.max(0, pos - w.cur.t) : 0 })
       }
       raf = requestAnimationFrame(loop)
     }
@@ -53,6 +54,17 @@ export default function LyricsOverlay() {
   const l = settings.lyrics
   const active = state.lyricsStatus === 'synced' && lyrics.length > 0 && !!state.playback?.isPlaying
   const scale = l.size / 100
+  // The fill sweeps across the word in its measured duration. Estimated timing gets no
+  // fill: a sweep would claim a precision the estimate doesn't have.
+  const measured = state.lyricsTiming === 'word'
+  const wipe =
+    measured && win.cur
+      ? {
+          '--d': `${Math.max(80, win.cur.end - win.cur.t)}ms`,
+          '--delay': `${-Math.min(win.elapsed || 0, win.cur.end - win.cur.t)}ms`,
+          animationPlayState: state.playback?.isPlaying ? 'running' : 'paused'
+        }
+      : undefined
 
   return (
     <div
@@ -90,7 +102,7 @@ export default function LyricsOverlay() {
           <div key={`p${win.prev?.t}`} className="w prev">
             {win.prev?.w || ' '}
           </div>
-          <div key={`c${win.cur?.t}`} className="w cur">
+          <div key={`c${win.cur?.t}`} className={`w cur ${wipe ? 'wipe' : ''}`} style={wipe}>
             {win.cur?.w || ' '}
           </div>
           <div key={`n${win.next?.t}`} className="w next">

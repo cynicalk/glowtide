@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Copy, Check, ExternalLink } from 'lucide-react'
 import { api } from '../lib/store'
 
-export default function Connect({ state, settings }) {
+export default function Connect({ state, settings, onBack }) {
   const [clientId, setClientId] = useState(settings.clientId)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -27,7 +27,7 @@ export default function Connect({ state, settings }) {
       <div className="hero">
         <div className="orb" />
         <h1>Connect Spotify</h1>
-        <p>Glowtide controls Spotify on this PC and lights up your screen with the song.</p>
+        <p>Glowtide follows Spotify on this PC and lights up your screen with the song.</p>
       </div>
       <ol className="steps">
         <li>
@@ -75,11 +75,11 @@ export default function Connect({ state, settings }) {
         {busy ? 'Waiting for Spotify…' : 'Connect Spotify'}
       </button>
       <p className="fine">
-        Play, pause and skip need Spotify Premium. Sign-in happens on Spotify’s own page in your
-        browser.
+        Free accounts work too: Glowtide follows what Spotify plays. Controlling Spotify from Glowtide needs
+        Premium. Sign-in happens on Spotify’s own page in your browser.
       </p>
-      <button className="link" onClick={() => api.setDemo(true)}>
-        Try the demo first
+      <button className="link" onClick={onBack}>
+        Back
       </button>
     </div>
   )

@@ -294,21 +294,61 @@ export default function SettingsPanel({ state, settings }) {
 
       <section>
         <div className="sh">
-          <h3>Account</h3>
+          <h3>Music source</h3>
         </div>
         <div className="srow">
-          <span>Demo mode</span>
-          <Toggle label="Demo mode" on={state.demo} onChange={(v) => api.setDemo(v)} />
-        </div>
-        {state.connected ? (
-          <div className="srow">
-            <span>Spotify connected</span>
-            <button className="pill" onClick={() => api.disconnect()}>
-              Disconnect
-            </button>
+          <span>Play from</span>
+          <div className="seg small">
+            {[
+              ['youtube', 'YouTube'],
+              ['spotify', 'Spotify'],
+              ['demo', 'Demo']
+            ].map(([k, label]) => (
+              <button
+                key={k}
+                className={state.source === k ? 'on' : ''}
+                onClick={() => api.setSource(k)}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-        ) : (
-          <p className="fine">Not connected. Turn off demo mode to connect Spotify.</p>
+        </div>
+        <div className="srow">
+          <span>Spotify</span>
+          {state.connected ? (
+            <span className="acct">
+              {state.spotifyPlan === 'free'
+                ? 'Free · follow along'
+                : state.spotifyPlan === 'premium'
+                  ? 'Premium'
+                  : 'Connected'}
+              <button className="pill" onClick={() => api.disconnect()}>
+                Disconnect
+              </button>
+            </span>
+          ) : (
+            <span className="acct muted">Not connected</span>
+          )}
+        </div>
+        <div className="srow">
+          <span>YouTube library</span>
+          {state.google ? (
+            <span className="acct">
+              Signed in
+              <button className="pill" onClick={() => api.googleDisconnect()}>
+                Sign out
+              </button>
+            </span>
+          ) : (
+            <span className="acct muted">Links only · sign in from Library</span>
+          )}
+        </div>
+        {state.source === 'youtube' && (
+          <p className="fine">
+            YouTube plays in Glowtide’s window and pauses when the window is hidden or minimised.
+            YouTube’s terms don’t allow playing with the video hidden. YouTube may show ads.
+          </p>
         )}
       </section>
     </div>

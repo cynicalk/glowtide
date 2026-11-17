@@ -3,7 +3,10 @@ import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 
 export const DEFAULT_SETTINGS = {
-  clientId: '',
+  source: null, // 'spotify' | 'youtube' | 'demo' | null (not chosen yet)
+  clientId: '', // Spotify
+  googleClientId: '',
+  googleClientSecret: '', // a Google "desktop app" secret is not confidential by design
   colour: {
     source: 'album', // 'album' | 'custom'
     glow: 0, // swatch index for each part

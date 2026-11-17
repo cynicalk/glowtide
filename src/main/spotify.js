@@ -1,7 +1,7 @@
 // Thin Spotify Web API client. Playback control needs Spotify Premium;
 // Spotify answers 403 PREMIUM_REQUIRED otherwise and we surface that as-is.
 
-import { getAccessToken, forceExpire } from './auth'
+import { createOAuth } from './oauth'
 
 export class SpotifyError extends Error {
   constructor(status, message, reason) {
@@ -11,9 +11,31 @@ export class SpotifyError extends Error {
   }
 }
 
-export function createSpotify(getClientId) {
+export function createSpotifyAuth(getClientId) {
+  return createOAuth({
+    name: 'spotify',
+    label: 'Spotify',
+    authUrl: 'https://accounts.spotify.com/authorize',
+    tokenUrl: 'https://accounts.spotify.com/api/token',
+    scopes: [
+      'user-read-playback-state',
+      'user-modify-playback-state',
+      'user-read-currently-playing',
+      'user-library-read',
+      'user-library-modify',
+      'playlist-read-private',
+      'playlist-read-collaborative',
+      'user-read-recently-played',
+      'user-read-private'
+    ],
+    getClient: () => ({ clientId: getClientId() })
+  })
+}
+
+export function createSpotify(auth) {
+  const { getAccessToken, forceExpire } = auth
   async function call(method, path, { query, body, retry = true } = {}) {
-    const token = await getAccessToken(getClientId())
+    const token = await getAccessToken()
     const url = new URL(path.startsWith('http') ? path : `https://api.spotify.com/v1${path}`)
     for (const [k, v] of Object.entries(query || {}))
       if (v !== undefined && v !== null) url.searchParams.set(k, v)

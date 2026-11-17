@@ -27,19 +27,23 @@ async function get(url) {
  * status: 'synced' | 'plain' (text but no timing; we do not invent it) |
  *         'instrumental' | 'none' | 'error'
  */
-export async function fetchLyrics(track) {
+export async function fetchLyrics(track, { toleranceS = 4 } = {}) {
   if (!track?.id) return { status: 'none', lines: [] }
   if (cache.has(track.id)) return cache.get(track.id)
   let result
   try {
     const durS = Math.round(track.durationMs / 1000)
-    const q = new URLSearchParams({
-      track_name: track.name,
-      artist_name: track.artist,
-      album_name: track.album,
-      duration: String(durS)
-    })
-    let hit = await get(`https://lrclib.net/api/get?${q}`)
+    let hit = null
+    // The exact lookup needs an album; YouTube videos have none, so they go straight to search.
+    if (track.album) {
+      const q = new URLSearchParams({
+        track_name: track.name,
+        artist_name: track.artist,
+        album_name: track.album,
+        duration: String(durS)
+      })
+      hit = await get(`https://lrclib.net/api/get?${q}`)
+    }
     if (!hit?.syncedLyrics) {
       const s = new URLSearchParams({
         track_name: cleanTitle(track.name),
@@ -47,7 +51,7 @@ export async function fetchLyrics(track) {
       })
       const list = (await get(`https://lrclib.net/api/search?${s}`)) || []
       const near = list
-        .filter((x) => x.syncedLyrics && Math.abs((x.duration || 0) - durS) <= 4)
+        .filter((x) => x.syncedLyrics && Math.abs((x.duration || 0) - durS) <= toleranceS)
         .sort((a, b) => Math.abs(a.duration - durS) - Math.abs(b.duration - durS))
       hit = near[0] || hit || list.find((x) => x.instrumental || x.plainLyrics) || null
     }

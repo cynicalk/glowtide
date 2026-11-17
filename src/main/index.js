@@ -11,17 +11,26 @@ import {
   shell
 } from 'electron'
 import { join } from 'path'
-import { writeFileSync, mkdirSync } from 'fs'
+import { writeFileSync, mkdirSync, rmSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { loadSettings, updateSettings } from './settings'
-import { loadTokens, isConnected, signIn, signOut, REDIRECT_URI } from './auth'
-import { createSpotify, slimTrack } from './spotify'
+import { REDIRECT_URI } from './oauth'
+import { createSpotify, createSpotifyAuth, slimTrack } from './spotify'
+import { createGoogleAuth, createYouTube } from './youtube'
+import { startYtHost, YT_HOST_ORIGIN } from './ytHost'
 import { fetchLyrics } from './lyricsSource'
 import { createDemo } from './demo'
 import { extractPalette } from '../shared/colour.mjs'
+import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
 
-const spotify = createSpotify(() => loadSettings().clientId)
+const spotifyAuth = createSpotifyAuth(() => loadSettings().clientId)
+const spotify = createSpotify(spotifyAuth)
+const googleAuth = createGoogleAuth(() => ({
+  clientId: loadSettings().googleClientId,
+  clientSecret: loadSettings().googleClientSecret
+}))
+const yt = createYouTube(googleAuth)
 const demo = createDemo()
 
 let player = null
@@ -32,8 +41,14 @@ let quitting = false
 
 // ---------- state ----------
 const state = {
-  connected: false,
-  demo: process.env.GLOWTIDE_DEMO === '1',
+  source: null, // 'spotify' | 'youtube' | 'demo' | null
+  demo: false, // derived: source === 'demo'
+  connected: false, // Spotify
+  spotifyPlan: null, // 'premium' | 'free' | null (unknown)
+  google: false,
+  ytReady: false,
+  ytHostOrigin: YT_HOST_ORIGIN,
+  ytQueue: null,
   track: null,
   palette: null,
   playback: null,
@@ -44,6 +59,10 @@ const state = {
   redirectUri: REDIRECT_URI
 }
 let lyricsLines = []
+const ytMeta = new Map() // videoId -> metadata from our own API calls (cleaner than player titles)
+let ytShuffle = false
+let ytRepeat = 'off'
+let ytErrorVideo = null
 
 function all() {
   return [player, lyricsWin, ...glowWins].filter((w) => w && !w.isDestroyed())
@@ -57,6 +76,9 @@ function sendLyrics() {
 function sendSettings() {
   for (const w of all()) w.webContents.send('settings', loadSettings())
 }
+function ytCommand(action, arg) {
+  if (player && !player.isDestroyed()) player.webContents.send('yt:command', { action, arg })
+}
 
 async function paletteFor(url) {
   try {
@@ -68,6 +90,17 @@ async function paletteFor(url) {
   } catch {
     return null
   }
+}
+
+function clearTrack() {
+  state.track = null
+  state.palette = null
+  state.playback = null
+  state.liked = null
+  state.lyricsStatus = 'none'
+  state.ytQueue = null
+  lyricsLines = []
+  sendLyrics()
 }
 
 async function onTrackChange(track) {
@@ -84,14 +117,15 @@ async function onTrackChange(track) {
       broadcast()
     }
   })
-  fetchLyrics(track).then((l) => {
+  // Music videos often run longer than the song (intros, outros): match more loosely.
+  fetchLyrics(track, { toleranceS: state.source === 'youtube' ? 20 : 4 }).then((l) => {
     if (state.track?.id !== id) return
     state.lyricsStatus = l.status
     lyricsLines = l.lines
     sendLyrics()
     broadcast()
   })
-  if (id && !id.startsWith('demo')) {
+  if (state.source === 'spotify') {
     spotify
       .isLiked(id)
       .then((r) => {
@@ -104,12 +138,21 @@ async function onTrackChange(track) {
   }
 }
 
+async function refreshSpotifyPlan() {
+  try {
+    const me = await spotify.me()
+    state.spotifyPlan = me?.product === 'premium' ? 'premium' : me?.product ? 'free' : null
+  } catch {
+    state.spotifyPlan = null
+  }
+}
+
 let pollTimer = null
 async function poll() {
   clearTimeout(pollTimer)
   let delay = 2500
   try {
-    if (state.demo) {
+    if (state.source === 'demo') {
       const s = demo.snapshot()
       if (s.track.id !== state.track?.id) {
         state.track = s.track
@@ -123,7 +166,8 @@ async function poll() {
       state.liked = null
       state.error = null
       delay = 1000
-    } else if (isConnected() && loadSettings().clientId) {
+    } else if (state.source === 'spotify' && spotifyAuth.isConnected() && loadSettings().clientId) {
+      if (state.spotifyPlan === null) await refreshSpotifyPlan()
       const p = await spotify.player()
       const track = slimTrack(p?.item)
       state.playback = p
@@ -149,19 +193,115 @@ async function poll() {
       if (state.error && !/Premium|device/i.test(state.error)) state.error = null
       delay = p?.is_playing ? 1000 : 2500
     }
+    // YouTube: no polling, the embedded player pushes its state (onYtMessage).
   } catch (e) {
     state.error = e.message
     delay = 4000
   }
-  state.connected = isConnected()
+  state.connected = spotifyAuth.isConnected()
+  state.google = googleAuth.isConnected()
   broadcast()
   pollTimer = setTimeout(poll, delay)
 }
 
+function onYtMessage(m) {
+  if (process.env.GLOWTIDE_DEBUG)
+    console.log('[yt]', m?.type, m?.state ?? '', m?.code ?? '', m?.videoId ?? '', m?.title ?? '')
+  if (state.source !== 'youtube' || !m) return
+  if (m.type === 'ready') {
+    state.ytReady = true
+    return broadcast()
+  }
+  if (m.type === 'error') {
+    state.error = YT_ERRORS[m.code] || `YouTube player error ${m.code}`
+    // The host page skips ahead only inside a playlist; say so only then.
+    if ((state.ytQueue?.items?.length || 0) > 1) state.error += ' Skipping to the next one.'
+    ytErrorVideo = m.videoId || null
+    return broadcast()
+  }
+  if (m.type !== 'state') return
+  const playing = m.state === 1 || m.state === 3
+  state.playback = m.videoId
+    ? {
+        isPlaying: playing,
+        progressMs: Math.round((m.time || 0) * 1000),
+        at: Date.now(),
+        shuffle: ytShuffle,
+        repeat: ytRepeat,
+        volume: null,
+        device: { name: 'Glowtide', type: 'Computer' }
+      }
+    : null
+  state.ytQueue = Array.isArray(m.playlist)
+    ? {
+        index: m.index,
+        items: m.playlist.map((id) => ({
+          videoId: id,
+          name: ytMeta.get(id)?.name || null,
+          artists: ytMeta.get(id)?.artists || null
+        }))
+      }
+    : null
+  if (m.videoId && m.duration > 0 && `yt:${m.videoId}` !== state.track?.id) {
+    // Metadata from our own API calls is cleaner; a pasted link has only an id, so parse the title.
+    const meta = ytMeta.get(m.videoId)
+    const parsed = meta?.name
+      ? { artist: meta.artist, title: meta.name }
+      : parseYouTubeTitle(m.title, m.author)
+    const track = {
+      id: `yt:${m.videoId}`,
+      videoId: m.videoId,
+      uri: `yt:${m.videoId}`,
+      name: parsed.title || m.title || 'Untitled',
+      artists: parsed.artist || m.author,
+      artist: parsed.artist || m.author,
+      album: '',
+      rawTitle: m.title,
+      cover: `https://i.ytimg.com/vi/${m.videoId}/mqdefault.jpg`,
+      thumb: `https://i.ytimg.com/vi/${m.videoId}/default.jpg`,
+      durationMs: Math.round(m.duration * 1000)
+    }
+    state.track = track
+    // An error for this very video (it often arrives just before its metadata) must survive.
+    if (ytErrorVideo !== m.videoId) state.error = null
+    onTrackChange(track)
+  }
+  broadcast()
+}
+
 async function control(action, arg) {
-  if (state.demo) {
+  if (state.source === 'demo') {
     demo.control(action, arg)
     return poll()
+  }
+  if (state.source === 'youtube') {
+    if (action === 'shuffle') ytShuffle = !!arg
+    if (action === 'repeat') ytRepeat = arg
+    if (action === 'playItems') {
+      for (const v of arg.items || []) ytMeta.set(v.videoId, v)
+      ytCommand('load', {
+        videoIds: arg.items?.map((v) => v.videoId),
+        playlistId: arg.playlistId,
+        index: arg.index || 0
+      })
+      return { ok: true }
+    }
+    if (['queue', 'transfer', 'like'].includes(action))
+      return { error: "That isn't available for YouTube yet." }
+    ytCommand(action, arg)
+    if (state.playback && (action === 'play' || action === 'pause')) {
+      state.playback = { ...state.playback, isPlaying: action === 'play', at: Date.now() }
+    }
+    if (state.playback && (action === 'shuffle' || action === 'repeat'))
+      state.playback = { ...state.playback, shuffle: ytShuffle, repeat: ytRepeat }
+    broadcast()
+    return { ok: true }
+  }
+  // Spotify
+  if (state.spotifyPlan === 'free' && action !== 'like') {
+    return {
+      error: 'Free Spotify accounts can only be followed, not controlled. Use Spotify to play.'
+    }
   }
   try {
     state.error = null
@@ -187,6 +327,7 @@ async function control(action, arg) {
       broadcast()
     }
   } catch (e) {
+    if (e.reason === 'PREMIUM_REQUIRED') state.spotifyPlan = 'free'
     state.error = e.message
     broadcast()
     return { error: e.message }
@@ -196,11 +337,18 @@ async function control(action, arg) {
 }
 
 async function query(kind, arg) {
-  if (state.demo) {
-    if (kind === 'demoTracks') return demo.tracks.map(({ palette, ...t }) => t) // eslint-disable-line no-unused-vars
-    return { demo: true }
-  }
+  if (kind === 'demoTracks') return demo.tracks.map(({ palette, ...t }) => t) // eslint-disable-line no-unused-vars
   try {
+    if (kind.startsWith('yt')) {
+      if (!googleAuth.isConnected())
+        return { error: 'Sign in with Google to load your YouTube library.', needsGoogle: true }
+      if (kind === 'ytPlaylists') return await yt.playlists()
+      if (kind === 'ytPlaylistItems') return await yt.playlistItems(arg)
+      if (kind === 'ytLiked') return await yt.likedMusic()
+      if (kind === 'ytSearch') return await yt.search(arg)
+      return null
+    }
+    if (state.source !== 'spotify') return { error: 'Connect Spotify first.' }
     const s = spotify
     if (kind === 'search') return await s.search(arg)
     if (kind === 'liked') return await s.likedTracks(arg || 0)
@@ -215,6 +363,18 @@ async function query(kind, arg) {
     return { error: e.message }
   }
   return null
+}
+
+function setSource(src) {
+  if (state.source === 'youtube' && src !== 'youtube') ytCommand('pause')
+  state.source = src
+  state.demo = src === 'demo'
+  state.error = null
+  if (src !== 'demo') updateSettings({ source: src })
+  clearTrack()
+  rebuildTray()
+  broadcast()
+  poll()
 }
 
 // ---------- windows ----------
@@ -241,7 +401,7 @@ function createPlayer() {
     backgroundColor: '#070608',
     title: 'Glowtide',
     icon,
-    webPreferences: prefs
+    webPreferences: { ...prefs, autoplayPolicy: 'no-user-gesture-required' }
   })
   player.on('ready-to-show', () => player.show())
   player.on('close', (e) => {
@@ -250,6 +410,10 @@ function createPlayer() {
       player.hide()
     }
   })
+  // YouTube's terms don't allow playing with the player hidden, so YouTube pauses with the window.
+  const pauseYt = () => state.source === 'youtube' && control('pause')
+  player.on('hide', pauseYt)
+  player.on('minimize', pauseYt)
   player.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url)
     return { action: 'deny' }
@@ -280,7 +444,6 @@ function overlayWindow(bounds, route) {
 
 function syncOverlays() {
   const s = loadSettings()
-  // edge glow: one window per display
   for (const w of glowWins) if (!w.isDestroyed()) w.destroy()
   glowWins = []
   if (s.glow.enabled) {
@@ -288,7 +451,6 @@ function syncOverlays() {
       s.glow.displays === 'primary' ? [screen.getPrimaryDisplay()] : screen.getAllDisplays()
     glowWins = displays.map((d, i) => overlayWindow(d.bounds, `glow?d=${i}`))
   }
-  // lyrics: primary display
   if (s.lyrics.overlay && !lyricsWin)
     lyricsWin = overlayWindow(screen.getPrimaryDisplay().bounds, 'lyrics')
   if (!s.lyrics.overlay && lyricsWin) {
@@ -301,9 +463,19 @@ function syncOverlays() {
 function rebuildTray() {
   if (!tray) return
   const s = loadSettings()
+  const src = (value, label) => ({
+    label,
+    type: 'radio',
+    checked: state.source === value,
+    click: () => setSource(value)
+  })
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Show player', click: () => (player.show(), player.focus()) },
+      { type: 'separator' },
+      src('spotify', 'Spotify'),
+      src('youtube', 'YouTube Music'),
+      src('demo', 'Demo'),
       { type: 'separator' },
       {
         label: 'Lyrics overlay',
@@ -316,12 +488,6 @@ function rebuildTray() {
         type: 'checkbox',
         checked: s.glow.enabled,
         click: () => setSettings({ glow: { enabled: !s.glow.enabled } })
-      },
-      {
-        label: 'Demo mode',
-        type: 'checkbox',
-        checked: state.demo,
-        click: () => setDemo(!state.demo)
       },
       { type: 'separator' },
       { label: 'Quit Glowtide', click: () => ((quitting = true), app.quit()) }
@@ -343,24 +509,16 @@ function setSettings(patch) {
   return next
 }
 
-function setDemo(on) {
-  state.demo = on
-  state.track = null
-  state.palette = null
-  state.playback = null
-  lyricsLines = []
-  sendLyrics()
-  rebuildTray()
-  poll()
-}
-
 // ---------- ipc ----------
 function registerIpc() {
   ipcMain.handle('init', () => ({ state, settings: loadSettings(), lyrics: lyricsLines }))
   ipcMain.handle('settings:set', (_, patch) => setSettings(patch))
   ipcMain.handle('control', (_, action, arg) => control(action, arg))
   ipcMain.handle('query', (_, kind, arg) => query(kind, arg))
-  ipcMain.handle('demo', (_, on) => setDemo(on))
+  ipcMain.handle('source', (_, src) => setSource(src))
+  ipcMain.on('yt:state', (e, m) => {
+    if (e.sender === player?.webContents) onYtMessage(m)
+  })
   ipcMain.handle('lyrics:nudge', (_, delta) => {
     state.lyricsOffsetMs =
       delta === 0 ? 0 : Math.max(-5000, Math.min(5000, state.lyricsOffsetMs + delta))
@@ -368,11 +526,10 @@ function registerIpc() {
   })
   ipcMain.handle('auth:connect', async () => {
     try {
-      await signIn(loadSettings().clientId)
+      await spotifyAuth.signIn()
       state.connected = true
-      state.error = null
-      if (state.demo) setDemo(false)
-      else poll()
+      state.spotifyPlan = null
+      setSource('spotify')
       player?.show()
       player?.focus()
       return { ok: true }
@@ -381,10 +538,28 @@ function registerIpc() {
     }
   })
   ipcMain.handle('auth:disconnect', () => {
-    signOut()
+    spotifyAuth.signOut()
     state.connected = false
-    state.track = null
-    state.playback = null
+    state.spotifyPlan = null
+    if (state.source === 'spotify') clearTrack()
+    broadcast()
+  })
+  ipcMain.handle('google:connect', async () => {
+    try {
+      await googleAuth.signIn()
+      state.google = true
+      if (state.source !== 'youtube') setSource('youtube')
+      else broadcast()
+      player?.show()
+      player?.focus()
+      return { ok: true }
+    } catch (e) {
+      return { error: e.message }
+    }
+  })
+  ipcMain.handle('google:disconnect', () => {
+    googleAuth.signOut()
+    state.google = false
     broadcast()
   })
   ipcMain.handle('window', (_, action) => {
@@ -392,7 +567,12 @@ function registerIpc() {
     if (action === 'close') player?.hide()
   })
   ipcMain.handle('open', (_, url) => {
-    if (/^https:\/\/(developer|open|accounts)\.spotify\.com\//.test(url)) shell.openExternal(url)
+    if (
+      /^https:\/\/((developer|open|accounts)\.spotify\.com|console\.cloud\.google\.com|music\.youtube\.com)\//.test(
+        url
+      )
+    )
+      shell.openExternal(url)
   })
 }
 
@@ -402,6 +582,12 @@ function scheduleSnapshot() {
   if (!dir) return
   const panel = process.env.GLOWTIDE_PANEL
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
+  const ytTest = process.env.GLOWTIDE_YT_TEST
+  if (ytTest)
+    setTimeout(() => {
+      setSource('youtube')
+      setTimeout(() => control('playItems', { items: [{ videoId: ytTest }] }), 1500)
+    }, 1500)
   setTimeout(
     async () => {
       mkdirSync(dir, { recursive: true })
@@ -420,6 +606,10 @@ function scheduleSnapshot() {
         const img = await w.webContents.capturePage()
         writeFileSync(join(dir, `${name}${panel ? '-' + panel : ''}.png`), img.toPNG())
       }
+      writeFileSync(
+        join(dir, 'state.json'),
+        JSON.stringify({ ...state, lyricsCount: lyricsLines.length }, null, 2)
+      )
       quitting = true
       app.quit()
     },
@@ -435,10 +625,21 @@ else {
     player?.focus()
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     app.setAppUserModelId('io.github.cynicalk.glowtide')
-    loadSettings()
-    state.connected = loadTokens()
+    if (process.env.GLOWTIDE_FRESH)
+      rmSync(join(app.getPath('userData'), 'settings.json'), { force: true })
+    const s = loadSettings()
+    state.connected = spotifyAuth.load()
+    state.google = googleAuth.load()
+    state.source = process.env.GLOWTIDE_DEMO === '1' ? 'demo' : s.source
+    state.demo = state.source === 'demo'
+
+    try {
+      await startYtHost()
+    } catch (e) {
+      state.error = `YouTube player couldn't start (${e.message}).`
+    }
 
     // Edge glow reacts to what the PC is playing: system audio loopback, never the microphone.
     session.defaultSession.setDisplayMediaRequestHandler((_req, cb) => {

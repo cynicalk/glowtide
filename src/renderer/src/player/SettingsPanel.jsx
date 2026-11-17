@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlignCenter, Sparkles, Sun, Waves as WavesIcon, Activity } from 'lucide-react'
 import { api } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
+import { THEMES, VIZ_STYLES, vizPalette } from '../../../shared/viz.mjs'
 
 // Fonts that ship with Windows 10/11, so every choice renders.
 const FONTS = [
@@ -441,6 +442,8 @@ export default function SettingsPanel({ state, settings, onClose }) {
         </p>
       </section>
 
+      <WidgetSettings settings={settings} set={set} />
+
       <section>
         <div className="sh">
           <h3>Music source</h3>
@@ -506,5 +509,221 @@ export default function SettingsPanel({ state, settings, onClose }) {
         )}
       </section>
     </div>
+  )
+}
+
+const PLACES = [
+  ['wallpaper', 'Wallpaper'],
+  ['top', 'On top'],
+  ['window', 'Window']
+]
+
+/** Desktop widgets (visualizer, clock) and the full-screen view. */
+function WidgetSettings({ settings, set }) {
+  const w = settings.widgets
+  const v = w.viz
+  const c = w.clock
+  const sv = (patch) => set({ widgets: { viz: patch } })
+  const sc = (patch) => set({ widgets: { clock: patch } })
+  const themes = ['album', ...Object.keys(THEMES), 'custom']
+  return (
+    <section>
+      <div className="sh">
+        <h3>Desktop visualizer</h3>
+        <Toggle label="Desktop visualizer" on={v.enabled} onChange={(x) => sv({ enabled: x })} />
+      </div>
+      <p className="fine">
+        A live visualizer on your wallpaper, behind every window, showing what’s playing. Ctrl+Alt+M
+        hides and shows the widgets.
+      </p>
+      <div className="srow">
+        <span>Lives</span>
+        <Seg value={v.placement} options={PLACES} onChange={(x) => sv({ placement: x })} />
+      </div>
+      <label className="srow">
+        <span>Style</span>
+        <select value={v.style} onChange={(e) => sv({ style: e.target.value })}>
+          {VIZ_STYLES.map((k) => (
+            <option key={k} value={k}>
+              {k[0].toUpperCase() + k.slice(1)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="sect">Colours</div>
+      <div className="theme-row">
+        {themes.map((k) => (
+          <button
+            key={k}
+            className={`theme-chip ${v.theme === k ? 'on' : ''}`}
+            onClick={() => sv({ theme: k })}
+          >
+            {k !== 'album' && k !== 'custom' && (
+              <i
+                style={{
+                  background: `linear-gradient(90deg, ${vizPalette(k).join(', ')})`
+                }}
+              />
+            )}
+            {k === 'album' ? 'Album' : k}
+          </button>
+        ))}
+      </div>
+      {v.theme === 'custom' && (
+        <label className="srow">
+          <span>Accent</span>
+          <input type="color" value={v.accent} onChange={(e) => sv({ accent: e.target.value })} />
+        </label>
+      )}
+      <Slider
+        label="Density"
+        min={16}
+        max={96}
+        step={4}
+        value={v.density}
+        onChange={(x) => sv({ density: x })}
+      />
+      <Slider
+        label="Sensitivity"
+        min={40}
+        max={200}
+        step={10}
+        value={v.sensitivity}
+        unit="%"
+        onChange={(x) => sv({ sensitivity: x })}
+      />
+      <Slider
+        label="Backdrop"
+        min={0}
+        max={90}
+        value={v.backdrop}
+        unit="%"
+        onChange={(x) => sv({ backdrop: x })}
+      />
+      <Slider
+        label="Opacity"
+        min={20}
+        max={100}
+        value={v.opacity}
+        unit="%"
+        onChange={(x) => sv({ opacity: x })}
+      />
+      <div className="srow">
+        <span>Glow</span>
+        <Toggle label="Glow" on={v.glow} onChange={(x) => sv({ glow: x })} />
+      </div>
+      <div className="srow">
+        <span>Now playing</span>
+        <Seg
+          value={v.card}
+          options={[
+            ['compact', 'Compact'],
+            ['centred', 'Centred'],
+            ['cover', 'Cover'],
+            ['text', 'Text'],
+            ['none', 'Off']
+          ]}
+          onChange={(x) => sv({ card: x })}
+        />
+      </div>
+      <div className="srow">
+        <span>Album art glow</span>
+        <Toggle label="Album art glow" on={v.artGlow} onChange={(x) => sv({ artGlow: x })} />
+      </div>
+
+      <div className="sh" style={{ marginTop: 14 }}>
+        <h3>Desktop clock</h3>
+        <Toggle label="Desktop clock" on={c.enabled} onChange={(x) => sc({ enabled: x })} />
+      </div>
+      {c.enabled && (
+        <>
+          <div className="srow">
+            <span>Lives</span>
+            <Seg value={c.placement} options={PLACES} onChange={(x) => sc({ placement: x })} />
+          </div>
+          <div className="srow">
+            <span>Face</span>
+            <Seg
+              value={c.style}
+              options={[
+                ['digital', 'Digital'],
+                ['stacked', 'Stacked'],
+                ['minimal', 'Minimal'],
+                ['analog', 'Analog'],
+                ['words', 'Words']
+              ]}
+              onChange={(x) => sc({ style: x })}
+            />
+          </div>
+          <div className="srow">
+            <span>Colour</span>
+            <Seg
+              value={c.colour}
+              options={[
+                ['theme', 'Theme'],
+                ['gradient', 'Gradient'],
+                ['solid', 'White']
+              ]}
+              onChange={(x) => sc({ colour: x })}
+            />
+          </div>
+          <div className="srow">
+            <span>Date</span>
+            <Seg
+              value={c.date}
+              options={[
+                ['long', 'Long'],
+                ['short', 'Short'],
+                ['none', 'Off']
+              ]}
+              onChange={(x) => sc({ date: x })}
+            />
+          </div>
+          <div className="srow">
+            <span>24-hour</span>
+            <Toggle label="24-hour" on={c.h24} onChange={(x) => sc({ h24: x })} />
+          </div>
+          <div className="srow">
+            <span>Seconds</span>
+            <Toggle label="Seconds" on={c.seconds} onChange={(x) => sc({ seconds: x })} />
+          </div>
+          <div className="srow">
+            <span>Glow</span>
+            <Toggle label="Clock glow" on={c.glow} onChange={(x) => sc({ glow: x })} />
+          </div>
+          <Slider
+            label="Opacity"
+            min={20}
+            max={100}
+            value={c.opacity}
+            unit="%"
+            onChange={(x) => sc({ opacity: x })}
+          />
+        </>
+      )}
+
+      <div className="sh" style={{ marginTop: 14 }}>
+        <h3>Full screen</h3>
+        <button className="pill" onClick={() => api.stage('open')}>
+          Open
+        </button>
+      </div>
+      <p className="fine">
+        Ctrl+Alt+F from anywhere. Space plays or pauses, the arrows skip, V changes the visualizer,
+        C the colours, Esc leaves.
+      </p>
+      <div className="srow">
+        <span>Frame rate</span>
+        <Seg
+          value={String(w.fps)}
+          options={[
+            ['30', '30 fps'],
+            ['60', '60 fps']
+          ]}
+          onChange={(x) => set({ widgets: { fps: Number(x) } })}
+        />
+      </div>
+      <p className="fine">Widgets drop to 20 fps on their own when nothing is playing.</p>
+    </section>
   )
 }

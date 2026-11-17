@@ -26,5 +26,7 @@ contextBridge.exposeInMainWorld('glowtide', {
   googleDisconnect: () => ipcRenderer.invoke('google:disconnect'),
   windowAction: (a) => ipcRenderer.invoke('window', a),
   displays: () => ipcRenderer.invoke('displays'),
+  stage: (action) => ipcRenderer.invoke('stage', action),
+  toggleWidgets: () => ipcRenderer.invoke('widgets:toggle'),
   open: (url) => ipcRenderer.invoke('open', url)
 })

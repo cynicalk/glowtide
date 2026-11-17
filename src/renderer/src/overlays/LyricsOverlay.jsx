@@ -186,43 +186,62 @@ function Constellation({ sky, mode, scale }) {
   // A line caption shrinks with its length so it stays on screen.
   const capSize =
     mode === 'lines' && f ? Math.min(96, Math.max(42, 1500 / Math.max(8, f.text.length))) : 104
+  // The view glides toward the star being sung, so the figure travels as it fills.
+  const cam = f
+    ? {
+        x: Math.max(-170, Math.min(170, (VIEW.w / 2 - f.x) * 0.32)),
+        y: Math.max(-90, Math.min(90, (430 - f.y) * 0.32))
+      }
+    : { x: 0, y: 0 }
   return (
     <>
-      <g key={sky.figure.n} className="figure">
-        {sky.edges.map((e, i) => {
-          const p = sky.stars[e.a]
-          const q = sky.stars[e.b]
-          return (
-            <line
-              key={i}
-              className={`sky-edge ${e.lit ? 'lit' : ''}`}
-              x1={p.x}
-              y1={p.y}
-              x2={q.x}
-              y2={q.y}
-            />
-          )
-        })}
-        {sky.stars.map((s, i) => {
-          const r = s.m === 1 ? 6.5 : s.m === 2 ? 5 : 3.8
-          return (
-            <g key={i} className={`star ${s.lit ? 'lit' : ''} ${s.current ? 'cur' : ''}`}>
-              {s.lit && <circle className="halo" cx={s.x} cy={s.y} r={r * 4.2} />}
-              <circle className="core" cx={s.x} cy={s.y} r={s.lit ? r : r * 0.55} />
-              {labels.has(i) && (
-                <text x={s.x + 12} y={s.y - 12} style={{ fontSize: labelPx }}>
-                  {s.word}
-                </text>
-              )}
-            </g>
-          )
-        })}
-        {f && (
-          <g key={sky.key} className="focus">
-            <circle className="ring" cx={f.x} cy={f.y} r={28} />
-            <path className="spark" d={SPARKLE} transform={`translate(${f.x} ${f.y}) scale(22)`} />
+      <g className="sky-cam" style={{ transform: `translate(${cam.x}px, ${cam.y}px)` }}>
+        <g className="sky-drift">
+          <g key={sky.figure.n} className="figure">
+            {sky.edges.map((e, i) => {
+              const p = sky.stars[e.a]
+              const q = sky.stars[e.b]
+              return (
+                <line
+                  key={i}
+                  className={`sky-edge ${e.lit ? 'lit' : ''}`}
+                  x1={p.x}
+                  y1={p.y}
+                  x2={q.x}
+                  y2={q.y}
+                />
+              )
+            })}
+            {sky.stars.map((s, i) => {
+              const r = s.m === 1 ? 6.5 : s.m === 2 ? 5 : 3.8
+              return (
+                <g
+                  key={i}
+                  className={`star ${s.lit ? 'lit' : ''} ${s.current ? 'cur' : ''}`}
+                  style={{ '--tw': `${-((i * 0.83) % 4).toFixed(2)}s` }}
+                >
+                  {s.lit && <circle className="halo" cx={s.x} cy={s.y} r={r * 4.2} />}
+                  <circle className="core" cx={s.x} cy={s.y} r={s.lit ? r : r * 0.55} />
+                  {labels.has(i) && (
+                    <text x={s.x + 12} y={s.y - 12} style={{ fontSize: labelPx }}>
+                      {s.word}
+                    </text>
+                  )}
+                </g>
+              )
+            })}
+            {f && (
+              <g key={sky.key} className="focus">
+                <circle className="ring" cx={f.x} cy={f.y} r={28} />
+                <path
+                  className="spark"
+                  d={SPARKLE}
+                  transform={`translate(${f.x} ${f.y}) scale(22)`}
+                />
+              </g>
+            )}
           </g>
-        )}
+        </g>
       </g>
       {leavingCap && (
         <text

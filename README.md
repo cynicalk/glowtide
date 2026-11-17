@@ -18,6 +18,20 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 
 ## Features
 
+- **Desktop visualizer widget**: lives on the wallpaper, behind the icons and every window.
+  It joins the window Explorer draws the wallpaper in, and re-joins if Explorer restarts.
+  It can also float on top or be an ordinary window. Six styles: Bars, Mirror, Blocks, Ring,
+  Waveform and Aurora. Colours come from the album, six presets, or a custom accent swept
+  into a three-stop gradient; a grey cover gets tinted whites instead of an invented colour.
+  It shows a now-playing card in four layouts, an album-art glow, feathered edges, and
+  backdrop, density, sensitivity and opacity options.
+- **Desktop clock widget**: Digital, Stacked, Minimal, Analog and Words, in the theme or
+  album colours, with 24-hour, seconds and date options.
+- **Full screen** (Ctrl+Alt+F): the cover blurred and drifting as the room light, a sharp
+  copy in the middle with the visualizer orbiting it, and a ripple on every bass hit.
+  Space, the arrows, V (visualizer), C (colours) and Esc work. Ctrl+Alt+M hides or shows
+  the widgets.
+- Widgets cap their frame rate (30/60) and drop to 20 fps when nothing is playing.
 - **Maximise**: the title-bar button or a double-click gives a roomy full-window player; F11 goes full screen.
 - **Player window**: small, dark and centred, showing the cover (or the video for YouTube).
   It has controls, seek, like (Spotify) and panels for search, library, queue and devices.

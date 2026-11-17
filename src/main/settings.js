@@ -41,7 +41,39 @@ export const DEFAULT_SETTINGS = {
     font: 'Segoe UI Variable Display',
     display: 'primary' // 'primary' | a display id
   },
-  awake: false // keep the screen awake while music plays
+  awake: false, // keep the screen awake while music plays
+  widgets: {
+    fps: 60,
+    viz: {
+      enabled: true,
+      placement: 'wallpaper', // 'wallpaper' | 'top' | 'window'
+      bounds: null,
+      style: 'bars', // bars | mirror | blocks | ring | waveform | aurora
+      theme: 'album', // 'album' | a preset | 'custom'
+      accent: '#7c5cff',
+      density: 48,
+      sensitivity: 100,
+      glow: true,
+      backdrop: 0,
+      card: 'compact', // compact | centred | cover | text | none
+      artGlow: true,
+      opacity: 100
+    },
+    clock: {
+      enabled: false,
+      placement: 'wallpaper',
+      bounds: null,
+      style: 'digital', // digital | stacked | minimal | analog | words
+      font: 'Segoe UI Variable Display',
+      h24: false,
+      seconds: false,
+      date: 'long', // long | short | none
+      colour: 'theme', // theme | solid | gradient
+      glow: true,
+      opacity: 100
+    },
+    stage: { style: 'ring', theme: 'album' }
+  }
 }
 
 const file = () => join(app.getPath('userData'), 'settings.json')

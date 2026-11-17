@@ -1,0 +1,565 @@
+/* Desktop widgets (visualizer, clock) and the full-screen view. */
+
+html[data-route='widget'],
+html[data-route='widget'] body,
+html[data-route='clock'],
+html[data-route='clock'] body {
+  background: transparent;
+}
+html[data-route='stage'] body {
+  background: #000;
+}
+.viz-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ---------- visualizer widget ---------- */
+.vw {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 22px;
+  color: #fff;
+}
+.vw.editable {
+  -webkit-app-region: drag;
+}
+.vw-backdrop {
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: rgba(8, 8, 12, var(--backdrop));
+}
+.vw-art-glow {
+  position: absolute;
+  inset: -20%;
+  width: 140%;
+  height: 140%;
+  object-fit: cover;
+  filter: blur(46px) saturate(1.4);
+  opacity: 0.38;
+  /* feathered: the glow dissolves into the wallpaper, no box edge */
+  -webkit-mask-image: radial-gradient(closest-side, #000 35%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 35%, transparent 100%);
+}
+.vw-viz {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* every style feathers its own edges into the wallpaper */
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 7%, #000 93%, transparent),
+    linear-gradient(to bottom, transparent, #000 10%, #000 92%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+.vw-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 22px 18px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.55);
+}
+.vw-card img {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+.vw-text {
+  min-width: 0;
+}
+.vw-title {
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vw-artist {
+  font-size: 12.5px;
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vw-card.centred {
+  flex-direction: column;
+  text-align: center;
+  gap: 8px;
+}
+.vw-card.centred img {
+  display: none;
+}
+.vw-card.cover img {
+  width: 76px;
+  height: 76px;
+  border-radius: 12px;
+}
+.vw-card.cover .vw-title {
+  font-size: 17px;
+}
+.vw-card.text {
+  justify-content: center;
+  text-align: center;
+}
+.vw-bar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: rgba(14, 12, 18, 0.75);
+  font-size: 11px;
+  color: #ddd;
+  opacity: 0;
+  transition: opacity 0.2s;
+  -webkit-app-region: no-drag;
+}
+.vw:hover .vw-bar {
+  opacity: 1;
+}
+.vw-bar button {
+  width: 24px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #ddd;
+}
+.vw-bar button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.vw-bar span {
+  min-width: 56px;
+  text-align: center;
+  text-transform: capitalize;
+}
+.vw-bar i {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  margin: 0 2px;
+}
+
+/* ---------- clock widget ---------- */
+.ck {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  user-select: none;
+}
+.ck.editable {
+  -webkit-app-region: drag;
+}
+.ck-ink {
+  color: #fff;
+}
+.ck.colour-theme .ck-ink {
+  background: linear-gradient(100deg, var(--p1), var(--p2) 55%, var(--p3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.ck.colour-gradient .ck-ink {
+  background: linear-gradient(100deg, #fff, var(--p2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.ck.glow {
+  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--p2) 55%, transparent))
+    drop-shadow(0 4px 14px rgba(0, 0, 0, 0.5));
+}
+.ck-time {
+  display: flex;
+  align-items: baseline;
+  gap: 1vh;
+  font-size: 52vh;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.ck-sm {
+  font-size: 0.4em;
+}
+.ck-ampm {
+  font-size: 0.22em;
+  font-weight: 600;
+  opacity: 0.8;
+}
+.ck-date {
+  margin-top: 2vh;
+  font-size: 9vh;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.ck-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 40vh;
+  font-weight: 800;
+  line-height: 0.86;
+}
+.ck-stacked .ck-date {
+  font-size: 7vh;
+}
+.ck-min {
+  font-size: 18vh;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+}
+.ck-min .ck-date {
+  font-size: 0.6em;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+.ck-words {
+  font-size: 17vh;
+  font-weight: 700;
+  line-height: 1.05;
+  text-align: center;
+  max-width: 92vw;
+  text-wrap: balance;
+  letter-spacing: -0.01em;
+}
+.ck-analog {
+  height: 92vh;
+}
+.ck-face {
+  fill: rgba(0, 0, 0, 0.18);
+  stroke: color-mix(in srgb, var(--p2) 60%, #fff);
+  stroke-width: 1;
+}
+.ck-tick {
+  stroke: #fff;
+  opacity: 0.8;
+}
+.ck-hand {
+  stroke: #fff;
+}
+.ck-sec {
+  stroke: var(--p2);
+}
+.ck-pin {
+  fill: var(--p2);
+}
+
+/* ---------- full screen ---------- */
+.stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  cursor: default;
+}
+.stage.idle {
+  cursor: none;
+}
+.stage-bg {
+  position: absolute;
+  inset: -12%;
+  width: 124%;
+  height: 124%;
+  object-fit: cover;
+  filter: blur(80px) saturate(1.5) brightness(0.6);
+  animation: stage-drift 40s ease-in-out infinite alternate;
+}
+@keyframes stage-drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(3%, -2%) scale(1.08);
+  }
+  100% {
+    transform: translate(-3%, 2%) scale(1.03);
+  }
+}
+.stage-shade {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.55));
+}
+.stage-viz {
+  position: absolute;
+  inset: 0;
+}
+.stage-viz.under {
+  top: auto;
+  height: 34vh;
+  bottom: 0;
+}
+.stage-centre {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+}
+.stage-centre > * {
+  grid-area: 1 / 1;
+}
+.stage-centre.under {
+  top: 40%;
+}
+.stage-cover {
+  position: relative;
+  width: 34vh;
+  height: 34vh;
+  border-radius: 2.2vh;
+  object-fit: cover;
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.stage-cover.empty {
+  background: rgba(255, 255, 255, 0.06);
+}
+.ripple {
+  width: 34vh;
+  height: 34vh;
+  border-radius: 2.6vh;
+  border: 2px solid var(--p2);
+  box-shadow: 0 0 40px var(--p2);
+  animation: ripple-out 1.4s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes ripple-out {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+.stage-title {
+  position: absolute;
+  top: 5vh;
+  left: 4vw;
+  max-width: 50vw;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+}
+.st-name {
+  font-size: clamp(22px, 3.6vh, 44px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.st-artist {
+  margin-top: 4px;
+  font-size: clamp(14px, 2.2vh, 24px);
+  opacity: 0.8;
+}
+.stage-hint {
+  position: absolute;
+  top: 5.6vh;
+  right: 4vw;
+  font-size: 12px;
+  opacity: 0.55;
+  text-transform: capitalize;
+  transition: opacity 0.6s;
+}
+.stage-controls {
+  position: absolute;
+  bottom: 6vh;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 10px 22px;
+  border-radius: 40px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(18px);
+  transition: opacity 0.6s;
+}
+.stage-controls button {
+  color: #fff;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.stage-controls button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.stage-controls button.big {
+  width: 60px;
+  height: 60px;
+  background: #fff;
+  color: #000;
+}
+.stage.idle .stage-controls,
+.stage.idle .stage-hint {
+  opacity: 0;
+}
+
+/* ---------- settings: widget section ---------- */
+.theme-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.theme-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: #0b0a0c;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+.theme-chip.on {
+  border-color: var(--glow);
+  color: var(--text);
+}
+.theme-chip i {
+  width: 26px;
+  height: 10px;
+  border-radius: 5px;
+}
+
+/* ---------- constellation motion ---------- */
+/* the camera glides toward the star being sung */
+.sky-cam {
+  transition: transform 1.8s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+/* the whole figure floats: a slow drift and a slight tilt */
+.sky-drift {
+  transform-box: view-box;
+  transform-origin: 50% 48%;
+  animation: sky-float 26s ease-in-out infinite alternate;
+}
+@keyframes sky-float {
+  0% {
+    transform: translate(-14px, 6px) rotate(-1.2deg) scale(1);
+  }
+  50% {
+    transform: translate(10px, -10px) rotate(0.6deg) scale(1.02);
+  }
+  100% {
+    transform: translate(16px, 8px) rotate(1.4deg) scale(1.01);
+  }
+}
+/* a new figure glides in */
+.figure {
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+  animation: fig-arrive 1.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes fig-arrive {
+  from {
+    opacity: 0;
+    transform: translate(60px, 10px) scale(0.93);
+  }
+}
+/* stars breathe: lit halos swell, unlit stars twinkle, each on its own beat */
+.star .halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: halo-breathe 3.6s ease-in-out infinite alternate;
+  animation-delay: var(--tw, 0s);
+}
+@keyframes halo-breathe {
+  from {
+    transform: scale(0.82);
+    opacity: 0.12;
+  }
+  to {
+    transform: scale(1.12);
+    opacity: 0.24;
+  }
+}
+.star:not(.lit) .core {
+  animation: twinkle-core 2.8s ease-in-out infinite alternate;
+  animation-delay: var(--tw, 0s);
+}
+@keyframes twinkle-core {
+  to {
+    opacity: 0.25;
+  }
+}
+/* the background stars drift slowly the other way, for depth */
+.starfield {
+  animation: field-drift 70s linear infinite alternate;
+}
+@keyframes field-drift {
+  to {
+    transform: translate(-60px, 18px);
+  }
+}
+
+/* ---------- lyric motion: flowing, but readable from the first frames ---------- */
+/* New lyrics rise and un-blur over ~0.45 s; they start at a readable 35% so they never
+   look late. Then they float gently, so a held line is never quite still. The individual
+   translate/scale properties are used so this composes with each style's own transform
+   (Beat's pulse scale, Waves' swell). */
+@keyframes lyric-in {
+  from {
+    opacity: 0.35;
+    translate: 0 0.28em;
+    scale: 0.97;
+    filter: blur(3px);
+  }
+}
+@keyframes lyric-float {
+  from {
+    translate: 0 -0.035em;
+  }
+  to {
+    translate: 0 0.035em;
+  }
+}
+.w.cur,
+.aura-text,
+.beat-text,
+.wave-line,
+.caption {
+  animation:
+    lyric-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+    lyric-float 4.5s ease-in-out 0.45s infinite alternate;
+}
+.w.cur.wipe {
+  animation:
+    lyric-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+    wipe var(--d) linear var(--delay) both;
+}
+/* the small lines around the current one move into place rather than appearing */
+.w.prev,
+.w.next,
+.aura-next,
+.wave-prev,
+.wave-next {
+  transition:
+    opacity 0.4s ease,
+    translate 0.4s ease;
+}
+.w.next,
+.aura-next,
+.wave-next {
+  animation: lyric-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.06s both;
+}

@@ -24,6 +24,7 @@ import { startYtHost, YT_HOST_ORIGIN } from './ytHost'
 import { fetchLyrics } from './lyricsSource'
 import { loadAmllIndex } from './amll'
 import { offsetFor, saveOffset } from './offsets'
+import { createWidgets } from './widgets'
 import { createDemo } from './demo'
 import { extractPalette } from '../shared/colour.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
@@ -44,6 +45,7 @@ let player = null
 let lyricsWin = null
 let glowWins = []
 let tray = null
+let widgets = null
 let quitting = false
 
 // ---------- state ----------
@@ -82,7 +84,9 @@ let ytRepeat = 'off'
 let ytErrorVideo = null
 
 function all() {
-  return [player, lyricsWin, ...glowWins].filter((w) => w && !w.isDestroyed())
+  return [player, lyricsWin, ...glowWins, ...(widgets ? widgets.windows() : [])].filter(
+    (w) => w && !w.isDestroyed()
+  )
 }
 function broadcast() {
   for (const w of all()) w.webContents.send('state', state)
@@ -702,7 +706,16 @@ function setSettings(patch) {
   const before = loadSettings()
   const prevGlow = JSON.stringify([before.glow.enabled, before.glow.displays])
   const prevLyr = JSON.stringify([before.lyrics.overlay, before.lyrics.display])
+  const placeKey = (x) =>
+    JSON.stringify([
+      x.widgets.viz.enabled,
+      x.widgets.viz.placement,
+      x.widgets.clock.enabled,
+      x.widgets.clock.placement
+    ])
+  const prevWidgets = placeKey(before)
   const next = updateSettings(patch)
+  if (placeKey(next) !== prevWidgets) widgets?.sync()
   if (
     JSON.stringify([next.glow.enabled, next.glow.displays]) !== prevGlow ||
     JSON.stringify([next.lyrics.overlay, next.lyrics.display]) !== prevLyr
@@ -773,6 +786,11 @@ function registerIpc() {
     state.google = false
     broadcast()
   })
+  ipcMain.handle('stage', (_, action) => {
+    if (action === 'close') widgets?.closeStage()
+    else widgets?.openStage(player && screen.getDisplayMatching(player.getBounds()))
+  })
+  ipcMain.handle('widgets:toggle', () => widgets?.toggleHidden())
   ipcMain.handle('displays', () => {
     const primary = screen.getPrimaryDisplay().id
     return screen.getAllDisplays().map((d, i) => ({
@@ -806,6 +824,20 @@ function scheduleSnapshot() {
   const panel = process.env.GLOWTIDE_PANEL
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
   if (process.env.GLOWTIDE_MAXIMIZE) setTimeout(() => player?.maximize(), 1200)
+  if (process.env.GLOWTIDE_STAGE) setTimeout(() => widgets?.openStage(), 2000)
+  // GLOWTIDE_SKY_PROBE=1: read the constellation's motion transforms twice, 2.5 s apart.
+  if (process.env.GLOWTIDE_SKY_PROBE)
+    setTimeout(
+      async () => {
+        const js = `(() => { const q = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).transform : null }; return { cam: q('.sky-cam'), drift: q('.sky-drift'), field: q('.starfield') } })()`
+        const a = await lyricsWin?.webContents.executeJavaScript(js)
+        await new Promise((r) => setTimeout(r, 2500))
+        const b = await lyricsWin?.webContents.executeJavaScript(js)
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(join(dir, 'sky.json'), JSON.stringify({ a, b }))
+      },
+      Number(process.env.GLOWTIDE_SNAPSHOT_MS || 6000) - 3500
+    )
   // GLOWTIDE_UNFOCUS=1: hand focus to a throwaway window so the overlay shows, as when using another app.
   if (process.env.GLOWTIDE_UNFOCUS)
     setTimeout(() => {
@@ -855,7 +887,8 @@ function scheduleSnapshot() {
       const wins = [
         ['player', player],
         ['lyrics', lyricsWin],
-        ...glowWins.map((w, i) => [`glow${i}`, w])
+        ...glowWins.map((w, i) => [`glow${i}`, w]),
+        ...(widgets ? widgets.windows() : []).map((w) => [w.widgetKind || 'stage', w])
       ]
       for (const [name, w] of wins) {
         if (!w || w.isDestroyed()) continue
@@ -954,6 +987,18 @@ else {
     registerIpc()
     createPlayer()
     syncOverlays()
+    widgets = createWidgets({
+      load,
+      prefs,
+      loadSettings,
+      updateSettings,
+      onWindowsChanged: () => {
+        sendSettings()
+        broadcast()
+        sendLyrics()
+      }
+    })
+    widgets.sync()
     tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
     tray.setToolTip('Glowtide')
     // Ctrl+Alt+L turns the lyrics overlay on and off from anywhere.
@@ -963,6 +1008,15 @@ else {
       )
     } catch {
       /* another app owns the shortcut: the tray and the Lyrics button still work */
+    }
+    // Ctrl+Alt+M hides and shows the desktop widgets; Ctrl+Alt+F is the full-screen view.
+    try {
+      globalShortcut.register('CommandOrControl+Alt+M', () => widgets?.toggleHidden())
+      globalShortcut.register('CommandOrControl+Alt+F', () =>
+        widgets?.toggleStage(player && screen.getDisplayMatching(player.getBounds()))
+      )
+    } catch {
+      /* taken by another app: the settings buttons still work */
     }
     tray.on('click', () => (player.isVisible() ? player.focus() : player.show()))
     rebuildTray()
@@ -976,6 +1030,7 @@ else {
     quitting = true
     globalShortcut.unregisterAll()
     smtc.stop()
+    widgets?.stop()
   })
   app.on('window-all-closed', () => {
     /* stay in the tray */

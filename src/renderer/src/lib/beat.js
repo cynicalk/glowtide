@@ -1,6 +1,13 @@
-// Beat detection on system audio (loopback). Bass energy against its own
-// running average: a beat is a jump well above the recent level.
-export function startBeatTracker(onLevel) {
+// System audio (loopback) analysis: spectrum, waveform, bass energy and beats.
+// Listens to what the PC plays, never the microphone, and nothing leaves the analyser.
+
+/**
+ * Starts listening. onFrame is called every animation frame with
+ *   { ok, freq: Uint8Array, wave: Uint8Array, sampleRate, energy 0..1, pulse 0..1, level 0..1 }
+ * or { ok: false } when there is no system audio (muted, another output, or unavailable).
+ * Returns a stop function.
+ */
+export function startAudio(onFrame) {
   let stopped = false
   let ctx, stream, raf
   ;(async () => {
@@ -13,9 +20,10 @@ export function startBeatTracker(onLevel) {
       const src = ctx.createMediaStreamSource(stream)
       const an = ctx.createAnalyser()
       an.fftSize = 2048
-      an.smoothingTimeConstant = 0.5
+      an.smoothingTimeConstant = 0.55
       src.connect(an)
-      const bins = new Uint8Array(an.frequencyBinCount)
+      const freq = new Uint8Array(an.frequencyBinCount)
+      const wave = new Uint8Array(an.fftSize)
       const hz = ctx.sampleRate / an.fftSize
       const lo = Math.max(1, Math.floor(35 / hz))
       const hi = Math.ceil(160 / hz)
@@ -25,14 +33,17 @@ export function startBeatTracker(onLevel) {
       let lastBeat = 0
       let lastSound = performance.now()
       const loop = (now) => {
-        an.getByteFrequencyData(bins)
+        an.getByteFrequencyData(freq)
+        an.getByteTimeDomainData(wave)
         let e = 0
-        for (let i = lo; i <= hi; i++) e += bins[i]
+        for (let i = lo; i <= hi; i++) e += freq[i]
         e = e / ((hi - lo + 1) * 255)
-        if (e > 0.02) lastSound = now
-        // Silence for 2s while "playing" (muted, another output device): no signal, not a quiet song.
+        let peak = 0
+        for (let i = 0; i < wave.length; i += 4) peak = Math.max(peak, Math.abs(wave[i] - 128))
+        if (e > 0.02 || peak > 3) lastSound = now
+        // Silence for 2 s while "playing" (muted, another output device): no signal, not a quiet song.
         if (now - lastSound > 2000) {
-          onLevel(null)
+          onFrame({ ok: false })
           raf = requestAnimationFrame(loop)
           return
         }
@@ -43,13 +54,21 @@ export function startBeatTracker(onLevel) {
         }
         pulse *= 0.9
         prev = e
-        onLevel(pulse, Math.min(1, e / Math.max(0.05, avg * 1.6)))
+        onFrame({
+          ok: true,
+          freq,
+          wave,
+          sampleRate: ctx.sampleRate,
+          energy: Math.min(1, e / Math.max(0.05, avg * 1.6)),
+          pulse,
+          level: Math.min(1, peak / 100)
+        })
         raf = requestAnimationFrame(loop)
       }
       raf = requestAnimationFrame(loop)
     } catch (err) {
-      console.warn('Glowtide: audio pulse unavailable, using a gentle breathe instead.', err)
-      onLevel(null)
+      console.warn('Glowtide: system audio unavailable.', err)
+      onFrame({ ok: false })
     }
   })()
   return () => {
@@ -58,4 +77,9 @@ export function startBeatTracker(onLevel) {
     stream?.getTracks().forEach((t) => t.stop())
     ctx?.close()
   }
+}
+
+/** Beats and bass energy only: onLevel(pulse, energy), or onLevel(null) with no audio. */
+export function startBeatTracker(onLevel) {
+  return startAudio((f) => (f.ok ? onLevel(f.pulse, f.energy) : onLevel(null)))
 }

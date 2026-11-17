@@ -65,7 +65,12 @@ export default function LyricsOverlay() {
 
   if (!state || !settings || !colours) return null
   const l = settings.lyrics
-  const active = state.lyricsStatus === 'synced' && lyrics.length > 0 && !!state.playback?.isPlaying
+  // Step aside while Glowtide's own window is in use, so the overlay never covers its controls.
+  const active =
+    state.lyricsStatus === 'synced' &&
+    lyrics.length > 0 &&
+    !!state.playback?.isPlaying &&
+    !state.playerFocused
   const scale = l.size / 100
   // The fill sweeps across the word in its measured duration. Estimated timing gets no
   // fill: a sweep would claim a precision the estimate doesn't have.

@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  globalShortcut,
   Menu,
   Tray,
   desktopCapturer,
@@ -66,7 +67,10 @@ const state = {
   lyricsSource: null,
   lyricsOffsetMs: 0,
   error: null,
-  redirectUri: REDIRECT_URI
+  redirectUri: REDIRECT_URI,
+  // True while Glowtide's own window is the one in use: the lyrics overlay steps aside so it
+  // never covers Glowtide's settings or controls.
+  playerFocused: false
 }
 let lyricsLines = []
 const ytMeta = new Map() // videoId -> metadata from our own API calls (cleaner than player titles)
@@ -535,6 +539,13 @@ function createPlayer() {
   const pauseYt = () => state.source === 'youtube' && control('pause')
   player.on('hide', pauseYt)
   player.on('minimize', pauseYt)
+  const setFocused = (on) => {
+    if (state.playerFocused === on) return
+    state.playerFocused = on
+    broadcast()
+  }
+  player.on('focus', () => setFocused(true))
+  for (const ev of ['blur', 'hide', 'minimize']) player.on(ev, () => setFocused(false))
   player.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url)
     return { action: 'deny' }
@@ -710,6 +721,27 @@ function scheduleSnapshot() {
   if (!dir) return
   const panel = process.env.GLOWTIDE_PANEL
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
+  // GLOWTIDE_FOCUS_TEST=1: record the overlay's visibility with Glowtide's window unfocused, then focused.
+  if (process.env.GLOWTIDE_FOCUS_TEST) {
+    const stage = () =>
+      lyricsWin?.webContents.executeJavaScript(
+        "getComputedStyle(document.querySelector('.lyr-stage')).opacity"
+      )
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+    setTimeout(async () => {
+      // Clicking into another app: a throwaway window takes focus.
+      const other = new BrowserWindow({ width: 300, height: 200, x: 0, y: 0 })
+      other.focus()
+      await wait(1200)
+      const blurred = { focused: state.playerFocused, opacity: await stage() }
+      player.focus()
+      await wait(1200)
+      const focused = { focused: state.playerFocused, opacity: await stage() }
+      other.destroy()
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'focus.json'), JSON.stringify({ blurred, focused }))
+    }, 4000)
+  }
   // GLOWTIDE_SYS_TEST=<app id>: follow that app; GLOWTIDE_SYS_TEST_CMD=<command>: send it after 6 s.
   const sysTest = process.env.GLOWTIDE_SYS_TEST
   if (sysTest)
@@ -817,6 +849,14 @@ else {
     syncOverlays()
     tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
     tray.setToolTip('Glowtide')
+    // Ctrl+Alt+L turns the lyrics overlay on and off from anywhere.
+    try {
+      globalShortcut.register('CommandOrControl+Alt+L', () =>
+        setSettings({ lyrics: { overlay: !loadSettings().lyrics.overlay } })
+      )
+    } catch {
+      /* another app owns the shortcut: the tray and the Lyrics button still work */
+    }
     tray.on('click', () => (player.isVisible() ? player.focus() : player.show()))
     rebuildTray()
     for (const ev of ['display-added', 'display-removed', 'display-metrics-changed'])
@@ -827,6 +867,7 @@ else {
 
   app.on('before-quit', () => {
     quitting = true
+    globalShortcut.unregisterAll()
     smtc.stop()
   })
   app.on('window-all-closed', () => {

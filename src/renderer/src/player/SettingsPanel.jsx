@@ -309,7 +309,8 @@ export default function SettingsPanel({ state, settings }) {
           </select>
         </label>
         <p className="fine">
-          Lyrics come from LRCLIB with line timing. Word timing within a line is estimated.
+          The overlay steps aside while you’re using this window and comes back when you click into
+          another app. Ctrl+Alt+L turns it on or off from anywhere.
         </p>
       </section>
 

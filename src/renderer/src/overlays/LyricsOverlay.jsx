@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { positionOf, useColours, useGlowtide } from '../lib/store'
-import { wordWindowAt, lineWindowAt } from '../../../shared/lyrics.mjs'
+import { wordWindowAt, lineWindowAt, lineWordsAt } from '../../../shared/lyrics.mjs'
+import { Aura, Waves, Beat } from './LyricStyles'
 import {
   buildFigures,
   constellationAt,
@@ -58,6 +59,10 @@ function stackView(lines, pos, { mode }) {
 
 // Splitting the song into figures is done once per song, not every frame.
 let figCache = { lines: null, seed: null, figures: [] }
+function wavesView(lines, pos, { mode }) {
+  return lineWordsAt(lines, pos, mode)
+}
+
 function skyView(lines, pos, opts) {
   if (figCache.lines !== lines || figCache.seed !== opts.seed)
     figCache = { lines, seed: opts.seed, figures: buildFigures(lines, opts.seed) }
@@ -235,14 +240,15 @@ export default function LyricsOverlay() {
   const { state, settings, lyrics } = useGlowtide()
   const colours = useColours(state, settings)
   const l = settings?.lyrics
-  const style = l?.style === 'constellation' ? 'constellation' : 'stack'
+  const STYLES = ['stack', 'constellation', 'aura', 'waves', 'beat']
+  const style = STYLES.includes(l?.style) ? l.style : 'stack'
   // Word-timed lyrics go word by word. Line-timed lyrics show whole lines unless the
   // listener asked for estimated words.
   const mode = state?.lyricsTiming === 'word' || l?.estimated === 'words' ? 'words' : 'lines'
   const seed = seedOf(state?.track?.id)
   const opts = useMemo(() => ({ mode, seed }), [mode, seed])
   const win = useLyricView(
-    style === 'stack' ? stackView : skyView,
+    style === 'constellation' ? skyView : style === 'waves' ? wavesView : stackView,
     lyrics,
     state?.playback,
     state?.track?.durationMs,
@@ -263,7 +269,7 @@ export default function LyricsOverlay() {
 
   return (
     <div
-      className={`lyr ${style} ${settings.colour.fade ? 'fade' : ''}`}
+      className={`lyr s-${style} ${settings.colour.fade ? 'fade' : ''}`}
       style={{
         '--lyr': colours.lyrics,
         '--hi': colours.highlight,
@@ -282,14 +288,25 @@ export default function LyricsOverlay() {
       <div className={`lyr-stage ${active ? 'show' : ''}`}>
         {l.showClock && <Clock now={now} serif={l.clockFont === 'serif'} />}
         {style === 'constellation' && <NameCard figure={win?.figure} />}
-        {style === 'stack' ? (
+        {style === 'stack' && (
           <Stack
             win={win && 'cur' in win ? win : null}
             mode={mode}
             measured={measured}
             playing={!!state.playback?.isPlaying}
           />
-        ) : (
+        )}
+        {style === 'aura' && <Aura win={win && 'cur' in win ? win : null} mode={mode} />}
+        {style === 'waves' && <Waves view={win && 'words' in win ? win : null} />}
+        {style === 'beat' && (
+          <Beat
+            win={win && 'cur' in win ? win : null}
+            mode={mode}
+            playing={active}
+            listen={settings.glow.reactToAudio}
+          />
+        )}
+        {style === 'constellation' && (
           <svg
             className="sky"
             viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}

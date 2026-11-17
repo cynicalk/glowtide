@@ -106,3 +106,24 @@ test('line index', () => {
   assert.equal(lineIndexAt(lines, 3000), 0)
   assert.equal(lineIndexAt(lines, 9000), 1)
 })
+
+test('lineWordsAt: whole line, words lit as they are reached', async () => {
+  const { lineWordsAt } = await import('../src/shared/lyrics.mjs')
+  const lines = estimateWordTiming(
+    parseLrc('[00:10.00] one two three\n[00:14.00] four five'),
+    60000
+  )
+  const early = lineWordsAt(lines, lines[0].words[1].t + 5, 'words')
+  assert.deepEqual(
+    early.words.map((w) => [w.w, w.lit, w.current]),
+    [
+      ['one', true, false],
+      ['two', true, true],
+      ['three', false, false]
+    ]
+  )
+  assert.equal(early.next, 'four five')
+  const whole = lineWordsAt(lines, 10100, 'lines')
+  assert.ok(whole.words.every((w) => w.lit))
+  assert.equal(lineWordsAt(lines, 5000, 'lines').words, null)
+})

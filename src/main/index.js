@@ -71,7 +71,8 @@ const state = {
   redirectUri: REDIRECT_URI,
   // True while Glowtide's own window is the one in use: the lyrics overlay steps aside so it
   // never covers Glowtide's settings or controls.
-  playerFocused: false
+  playerFocused: false,
+  playerMaximized: false
 }
 let lyricsLines = []
 const ytMeta = new Map() // videoId -> metadata from our own API calls (cleaner than player titles)
@@ -241,7 +242,18 @@ async function poll() {
           sendLyrics()
         }
       }
-      if (state.error && !/Premium|device/i.test(state.error)) state.error = null
+      // Errors clear once their cause is gone: "no active device" as soon as Spotify reports
+      // one (it was opened or picked), anything else except Premium on the next good poll.
+      if (state.error) {
+        const deviceErr = /device/i.test(state.error)
+        if (deviceErr ? !!p?.device : !/Premium/i.test(state.error)) state.error = null
+        // Spotify only reports an *active* device once something plays; opening the app
+        // is enough to make it a device, so clear the message as soon as one shows up.
+        if (state.error && deviceErr && !p) {
+          const d = await spotify.devices().catch(() => null)
+          if (d?.devices?.length) state.error = null
+        }
+      }
       delay = p?.is_playing ? 1000 : 2500
     }
     // YouTube: no polling, the embedded player pushes its state (onYtMessage).
@@ -388,6 +400,22 @@ function onSystemMessage(m) {
   broadcast()
 }
 
+/**
+ * Run a play request; if Spotify says no device is active, send it to an open Spotify
+ * (this PC's first) and try once more, so pressing Play right after opening Spotify works.
+ */
+async function withDevice(run) {
+  try {
+    return await run(undefined)
+  } catch (e) {
+    if (e.reason !== 'NO_ACTIVE_DEVICE' && !/no active device/i.test(e.message)) throw e
+    const list = (await spotify.devices().catch(() => null))?.devices || []
+    const pick = list.find((d) => d.is_active) || list.find((d) => d.type === 'Computer') || list[0]
+    if (!pick) throw e
+    return run(pick.id)
+  }
+}
+
 async function control(action, arg) {
   if (state.source === 'system') {
     const c = state.caps || {}
@@ -447,7 +475,7 @@ async function control(action, arg) {
   try {
     state.error = null
     const s = spotify
-    if (action === 'play') await s.play()
+    if (action === 'play') await withDevice((id) => s.play(undefined, id))
     else if (action === 'pause') await s.pause()
     else if (action === 'next') await s.next()
     else if (action === 'previous') await s.previous()
@@ -457,7 +485,7 @@ async function control(action, arg) {
     else if (action === 'volume') await s.volume(arg)
     else if (action === 'transfer') await s.transfer(arg)
     else if (action === 'queue') await s.addToQueue(arg)
-    else if (action === 'playItems') await s.play(arg)
+    else if (action === 'playItems') await withDevice((id) => s.play(arg, id))
     else if (action === 'like' && state.track) {
       await s.setLiked(state.track.id, arg)
       state.liked = arg
@@ -568,6 +596,19 @@ function createPlayer() {
     broadcast()
   }
   player.on('focus', () => setFocused(true))
+  const setMax = () => {
+    state.playerMaximized = player.isMaximized() || player.isFullScreen()
+    broadcast()
+  }
+  for (const ev of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'])
+    player.on(ev, setMax)
+  // F11: full screen, as in a browser.
+  player.webContents.on('before-input-event', (e, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11') {
+      player.setFullScreen(!player.isFullScreen())
+      e.preventDefault()
+    }
+  })
   for (const ev of ['blur', 'hide', 'minimize']) player.on(ev, () => setFocused(false))
   player.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//.test(url)) shell.openExternal(url)
@@ -738,6 +779,11 @@ function registerIpc() {
   })
   ipcMain.handle('window', (_, action) => {
     if (action === 'minimize') player?.minimize()
+    if (action === 'maximize') {
+      if (player?.isFullScreen()) player.setFullScreen(false)
+      else if (player?.isMaximized()) player.unmaximize()
+      else player?.maximize()
+    }
     if (action === 'close') player?.hide()
   })
   ipcMain.handle('open', (_, url) => {
@@ -756,6 +802,7 @@ function scheduleSnapshot() {
   if (!dir) return
   const panel = process.env.GLOWTIDE_PANEL
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
+  if (process.env.GLOWTIDE_MAXIMIZE) setTimeout(() => player?.maximize(), 1200)
   // GLOWTIDE_UNFOCUS=1: hand focus to a throwaway window so the overlay shows, as when using another app.
   if (process.env.GLOWTIDE_UNFOCUS)
     setTimeout(() => {

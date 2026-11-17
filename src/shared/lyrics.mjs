@@ -184,3 +184,29 @@ export function lineIndexAt(lines, posMs) {
   }
   return idx
 }
+
+/**
+ * The current line with each word marked, for styles that show a whole line at once.
+ * words mode: a word is lit once its (measured or estimated) time is reached.
+ * lines mode: the whole line is lit; the file only says when the line starts.
+ */
+export function lineWordsAt(lines, posMs, mode = 'lines') {
+  const w = lineWindowAt(lines, posMs)
+  if (!w.cur) {
+    return { words: null, prev: null, next: w.next?.text ?? null, key: `none|${w.next?.t}` }
+  }
+  let lit = 0
+  const words = w.cur.words.map((x) => {
+    const on = mode === 'lines' || x.t <= posMs
+    if (on) lit++
+    return { w: x.w, lit: on, current: false }
+  })
+  if (mode === 'words' && lit > 0) words[lit - 1].current = true
+  return {
+    words,
+    prev: w.prev?.text ?? null,
+    next: w.next?.text ?? null,
+    t: w.cur.t,
+    key: `${w.index}|${lit}`
+  }
+}

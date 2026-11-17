@@ -15,6 +15,8 @@ import {
   Repeat1,
   MicVocal,
   Minus,
+  Maximize2,
+  Minimize2,
   X,
   SunMedium
 } from 'lucide-react'
@@ -56,7 +58,7 @@ export default function Player() {
 
   return (
     <div
-      className={`player ${fade}`}
+      className={`player ${fade} ${state.playerMaximized ? 'max' : ''}`}
       style={{
         '--glow': colours.glow,
         '--lyr': colours.lyrics,
@@ -64,7 +66,7 @@ export default function Player() {
         '--hi-text': colours.highlightText
       }}
     >
-      <TitleBar tag={screen === 'player' ? tag : null} />
+      <TitleBar tag={screen === 'player' ? tag : null} maximized={state.playerMaximized} />
       {screen === 'welcome' && <Welcome state={state} setPanel={setPanel} />}
       {screen === 'spotify-setup' && (
         <Connect state={state} settings={settings} onBack={() => api.setSource(null)} />
@@ -119,13 +121,20 @@ const PANEL_TITLES = {
   settings: 'Settings'
 }
 
-function TitleBar({ tag }) {
+function TitleBar({ tag, maximized }) {
   return (
     <div className="titlebar">
       <span className="brand">Glowtide{tag && <span className="tag">{tag}</span>}</span>
       <div className="winbtns">
         <button aria-label="Minimise" onClick={() => api.windowAction('minimize')}>
           <Minus size={14} />
+        </button>
+        <button
+          aria-label={maximized ? 'Restore' : 'Maximise'}
+          title={maximized ? 'Restore (F11 for full screen)' : 'Maximise (F11 for full screen)'}
+          onClick={() => api.windowAction('maximize')}
+        >
+          {maximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
         </button>
         <button aria-label="Hide to tray" onClick={() => api.windowAction('close')}>
           <X size={14} />

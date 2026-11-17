@@ -18,6 +18,7 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 
 ## Features
 
+- **Maximise**: the title-bar button or a double-click gives a roomy full-window player; F11 goes full screen.
 - **Player window**: small, dark and centred, showing the cover (or the video for YouTube).
   It has controls, seek, like (Spotify) and panels for search, library, queue and devices.
 - **Edge glow**: one transparent, click-through window per display. Its colour comes from
@@ -37,6 +38,10 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   estimated"), and only measured timing gets the karaoke fill.
 - **Lyric styles**:
   - **Stack**: the word or line big in the middle.
+  - **Aura**: the lyric over a soft, drifting cloud of the cover's colours.
+  - **Waves**: the whole line rides a ripple, sung words light up, flowing lines behind.
+  - **Beat**: the word pulses and a ring ripples out on every beat (system audio,
+    never the microphone; a slow breathe when there is no sound).
   - **Constellation**: each verse fills a real constellation, one star per word. All 88
     are included, drawn from real sky coordinates. The figure's outline shows faintly
     and lights up as the words are sung, with its name, meaning and a short note in the

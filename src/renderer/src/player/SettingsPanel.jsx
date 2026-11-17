@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AlignCenter, Sparkles, Sun, Waves as WavesIcon, Activity } from 'lucide-react'
 import { api } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
 
@@ -16,6 +17,14 @@ const FONTS = [
   'Consolas',
   'Impact',
   'Ink Free'
+]
+
+const STYLES = [
+  ['stack', 'Stack', AlignCenter, 'Big word or line in the middle'],
+  ['constellation', 'Stars', Sparkles, 'Each verse fills a real constellation'],
+  ['aura', 'Aura', Sun, 'Lyrics over a glowing cloud of the cover’s colours'],
+  ['waves', 'Waves', WavesIcon, 'The whole line rides a ripple'],
+  ['beat', 'Beat', Activity, 'Pulses with the music']
 ]
 
 function Seg({ value, options, onChange }) {
@@ -293,16 +302,18 @@ export default function SettingsPanel({ state, settings, onClose }) {
             onChange={(v) => set({ lyrics: { overlay: v } })}
           />
         </div>
-        <div className="srow">
-          <span>Style</span>
-          <Seg
-            value={l.style || 'stack'}
-            options={[
-              ['stack', 'Stack'],
-              ['constellation', 'Constellation']
-            ]}
-            onChange={(v) => set({ lyrics: { style: v } })}
-          />
+        <div className="styles">
+          {STYLES.map(([k, label, Icon, hint]) => (
+            <button
+              key={k}
+              className={`style-tile ${(l.style || 'stack') === k ? 'on' : ''}`}
+              title={hint}
+              onClick={() => set({ lyrics: { style: k } })}
+            >
+              <Icon size={18} />
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
         <Slider
           label="Size"

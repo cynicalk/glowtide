@@ -748,7 +748,7 @@ function scheduleSnapshot() {
       let overlay = null
       if (lyricsWin && !lyricsWin.isDestroyed()) {
         const probe = `(() => { const el = document.querySelector('.w.cur'); if (!el) return null;
-          const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length,
+          const cs = getComputedStyle(el); return { cls: el.className, word: el.textContent.length, text: el.textContent, at: Date.now(),
           bg: cs.backgroundPosition, anim: cs.animationName, dur: cs.animationDuration } })()`
         overlay = []
         for (let i = 0; i < 25; i++) {
@@ -758,7 +758,16 @@ function scheduleSnapshot() {
       }
       writeFileSync(
         join(dir, 'state.json'),
-        JSON.stringify({ ...state, lyricsCount: lyricsLines.length, overlay }, null, 2)
+        JSON.stringify(
+          {
+            ...state,
+            lyricsCount: lyricsLines.length,
+            overlay,
+            lines: process.env.GLOWTIDE_DUMP_LINES ? lyricsLines : undefined
+          },
+          null,
+          2
+        )
       )
       quitting = true
       app.quit()

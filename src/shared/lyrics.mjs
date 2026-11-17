@@ -78,14 +78,14 @@ export function enhancedLrcLines(lrc, durationMs) {
   })
 }
 
-const PER_WORD_MS = 420
-const LINE_TAIL_MS = 450
+const RELAXED_WORD_MS = 700
+const RELAXED_LINE_MS = 1200
 const MIN_WORD_MS = 120
 
 /**
- * Give each line a words[] array with estimated { w, t, end } in ms.
- * A line is sung for at most ~PER_WORD_MS per word, so a long instrumental
- * gap after a line is not stretched across its last word.
+ * Give each line a words[] array with ESTIMATED { w, t, end } in ms.
+ * The line fills most of the time until the next one; a much longer gap is treated as an
+ * instrumental break and not stretched across the last word.
  */
 export function estimateWordTiming(lines, durationMs) {
   return lines.map((line, i) => {
@@ -94,9 +94,13 @@ export function estimateWordTiming(lines, durationMs) {
     const nextT = i + 1 < lines.length ? lines[i + 1].t : durationMs || line.t + 5000
     const available = Math.max(0, nextT - line.t)
     if (!words.length) return { ...line, end: line.t, words: [] }
-    const sung = Math.min(
-      Math.max(available - 80, MIN_WORD_MS),
-      words.length * PER_WORD_MS + LINE_TAIL_MS
+    // A sung line normally fills most of the time until the next one: singers stretch and
+    // rush, and a fixed per-word pace raced through slow songs and then sat blank. Only a
+    // gap far longer than the words could need is taken as an instrumental break after it.
+    const relaxed = words.length * RELAXED_WORD_MS + RELAXED_LINE_MS
+    const sung = Math.max(
+      MIN_WORD_MS,
+      available <= relaxed * 2.2 ? available - Math.min(600, available * 0.12) : relaxed
     )
     const weights = words.map((w) => w.replace(/[^\p{L}\p{N}]/gu, '').length + 2)
     const total = weights.reduce((a, b) => a + b, 0)
@@ -137,6 +141,38 @@ export function wordWindowAt(lines, posMs) {
   if (posMs > lineEnd + 900)
     return { prev: null, cur: null, next: flat[idx + 1] ?? null, index: -1 }
   return { prev: flat[idx - 1] ?? null, cur: w, next: flat[idx + 1] ?? null, index: idx }
+}
+
+const LINE_HOLD_MS = 2500
+const LINE_MIN_SHOW_MS = 9000
+
+/**
+ * The line window for line-timed lyrics: prev / cur / next LINES at posMs.
+ * Uses only what the file states (when each line starts), so it is exact at its own grain.
+ * The current line stays up until the next one starts, unless the gap is an instrumental
+ * break, when it clears a little after the line's own (estimated) end.
+ */
+export function lineWindowAt(lines, posMs) {
+  const sung = lines.filter((l) => l.text && l.text.trim())
+  if (!sung.length) return { prev: null, cur: null, next: null, index: -1 }
+  let idx = -1
+  for (let i = 0; i < sung.length; i++) {
+    if (sung[i].t <= posMs) idx = i
+    else break
+  }
+  if (idx === -1) return { prev: null, cur: null, next: sung[0], index: -1 }
+  const cur = sung[idx]
+  // A gap marker (an empty LRC line) also ends the current line.
+  const all = lines.indexOf(cur)
+  const nextAny = lines[all + 1]
+  // Keep a line up for a while even if its words are short; only a real break clears it.
+  const stop = Math.min(
+    nextAny ? nextAny.t : Infinity,
+    Math.max((cur.end ?? cur.t) + LINE_HOLD_MS, cur.t + LINE_MIN_SHOW_MS)
+  )
+  const next = sung[idx + 1] ?? null
+  if (posMs >= stop) return { prev: null, cur: null, next, index: -1 }
+  return { prev: sung[idx - 1] ?? null, cur, next, index: idx }
 }
 
 /** Current line index for the in-window lyric list. -1 before the first line. */

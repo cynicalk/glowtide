@@ -270,6 +270,27 @@ export default function SettingsPanel({ state, settings }) {
           onChange={(v) => set({ lyrics: { dim: v } })}
         />
         <div className="srow">
+          <span>Line-timed songs</span>
+          <div className="seg small">
+            <button
+              className={l.estimated !== 'words' ? 'on' : ''}
+              onClick={() => set({ lyrics: { estimated: 'lines' } })}
+            >
+              Whole lines
+            </button>
+            <button
+              className={l.estimated === 'words' ? 'on' : ''}
+              onClick={() => set({ lyrics: { estimated: 'words' } })}
+            >
+              Guess words
+            </button>
+          </div>
+        </div>
+        <p className="fine">
+          Most songs only have each line’s start time. Whole lines are always in sync; guessed words
+          can drift within a line. Word-timed songs always go word by word.
+        </p>
+        <div className="srow">
           <span>Show clock</span>
           <Toggle
             label="Show clock"

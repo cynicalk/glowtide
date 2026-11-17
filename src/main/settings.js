@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS = {
     size: 100,
     dim: 35,
     showClock: true,
+    estimated: 'lines', // line-timed songs: 'lines' (exact) | 'words' (guessed within lines)
     font: 'Segoe UI Variable Display'
   }
 }

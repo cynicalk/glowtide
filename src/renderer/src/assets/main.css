@@ -1042,3 +1042,30 @@ input[type='range']:hover::-webkit-slider-thumb,
     background-position: 0 0;
   }
 }
+
+/* ---------- line view (line-timed lyrics) ---------- */
+.words.lines .w {
+  white-space: normal;
+  text-align: center;
+  text-wrap: balance;
+  max-width: min(78vw, 1400px);
+}
+.words.lines .w.cur {
+  font-size: var(--line);
+  line-height: 1.02;
+}
+.words.lines .w.prev,
+.words.lines .w.next {
+  font-size: calc(var(--big) * 0.26);
+  max-width: min(60vw, 1000px);
+}
+.words.lines .w.prev {
+  opacity: 0.55;
+  margin-bottom: calc(var(--big) * 0.1);
+}
+.words.lines .w.next {
+  margin-top: calc(var(--big) * 0.14);
+}
+.words.lines .w.next .hl {
+  padding: 0.05em 0.3em;
+}

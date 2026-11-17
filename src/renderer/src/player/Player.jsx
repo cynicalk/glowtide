@@ -154,6 +154,8 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
   let lyricNote = LYRIC_STATUS[state.lyricsStatus] || ''
   if (state.lyricsStatus === 'synced' && state.lyricsTiming === 'word')
     lyricNote = `Word-timed lyrics · ${state.lyricsSource}`
+  else if (state.lyricsStatus === 'synced' && settings.lyrics.estimated !== 'words')
+    lyricNote = `Synced lyrics · line by line${state.lyricsSource ? ` · ${state.lyricsSource}` : ''}`
   if (yt && state.lyricsStatus === 'synced')
     lyricNote += ' · matched by title, nudge if the video runs early or late'
 

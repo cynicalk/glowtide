@@ -1,6 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseLrc, estimateWordTiming, wordWindowAt, lineIndexAt } from '../src/shared/lyrics.mjs'
+import {
+  parseLrc,
+  estimateWordTiming,
+  wordWindowAt,
+  lineIndexAt,
+  lineWindowAt
+} from '../src/shared/lyrics.mjs'
 
 test('parses timestamps with 2- and 3-digit fractions, sorted', () => {
   const l = parseLrc('[00:12.50] second\n[00:01.123] first\nno tag line\n[01:02] third')
@@ -45,7 +51,36 @@ test('a long instrumental gap is not stretched across the last word', () => {
     parseLrc('[00:00.00] short line\n[00:40.00] after the break'),
     90000
   )
-  assert.ok(line.end - line.t < 2000, `sung ${line.end - line.t}ms`)
+  assert.ok(line.end - line.t < 3000, `sung ${line.end - line.t}ms`)
+})
+
+test('a slowly sung line fills its time instead of racing ahead and going blank', () => {
+  // Regression: a 6-word line with 7.3 s until the next one was shown in 3 s, then blank.
+  const [line] = estimateWordTiming(
+    parseLrc('[00:27.30] one two three four five six\n[00:34.60] next line'),
+    250000
+  )
+  assert.ok(line.end - line.t >= 6500, `sung ${line.end - line.t}ms`)
+  assert.ok(line.end <= 34600)
+})
+
+test('line window: held until the next line, cleared in long breaks and at gap markers', () => {
+  const lines = estimateWordTiming(
+    parseLrc(
+      '[00:10.00] first line here\n[00:16.00] second line\n[00:20.00]\n[00:30.00] after the gap\n[01:30.00] much later'
+    ),
+    120000
+  )
+  assert.equal(lineWindowAt(lines, 5000).cur, null)
+  assert.equal(lineWindowAt(lines, 5000).next.text, 'first line here')
+  const w = lineWindowAt(lines, 15900)
+  assert.equal(w.cur.text, 'first line here', 'held right up to the next line')
+  assert.equal(w.next.text, 'second line')
+  assert.equal(lineWindowAt(lines, 16100).prev.text, 'first line here')
+  assert.equal(lineWindowAt(lines, 21000).cur, null, 'an empty LRC line ends the line before it')
+  assert.equal(lineWindowAt(lines, 31000).cur.text, 'after the gap')
+  assert.equal(lineWindowAt(lines, 60000).cur, null, 'a long instrumental break clears')
+  assert.equal(lineWindowAt(lines, 91000).cur.text, 'much later')
 })
 
 test('empty lyric lines (gap markers) have no words', () => {

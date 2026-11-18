@@ -444,14 +444,14 @@ html[data-route='stage'] body {
 }
 
 /* ---------- constellation motion ---------- */
-/* the camera glides toward the star being sung */
-.sky-cam {
-  transition: transform 1.8s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-/* the whole figure floats: a slow drift and a slight tilt */
+/* Every continuous motion here moves a whole layer (transform or opacity), which the
+   compositor does without repainting a single star. */
+/* the whole sky floats: a slow drift and a slight tilt */
 .sky-drift {
-  transform-box: view-box;
+  position: absolute;
+  inset: 0;
   transform-origin: 50% 48%;
+  will-change: transform;
   animation: sky-float 26s ease-in-out infinite alternate;
 }
 @keyframes sky-float {
@@ -465,8 +465,12 @@ html[data-route='stage'] body {
     transform: translate(16px, 8px) rotate(1.4deg) scale(1.01);
   }
 }
-/* a new figure fades in as its first star appears; a finished one fades as the next begins */
-.figure {
+/* one figure; the camera glides toward the star being sung (its transform) */
+.fig {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+  transition: transform 1.8s cubic-bezier(0.25, 0.8, 0.25, 1);
   animation: fig-arrive 0.9s ease-out;
 }
 @keyframes fig-arrive {
@@ -474,21 +478,19 @@ html[data-route='stage'] body {
     opacity: 0;
   }
 }
-.figure.gone {
+/* a finished figure fades as the next begins */
+.fig.gone {
   pointer-events: none;
-  transform-box: view-box;
-  transform-origin: 50% 50%;
   animation: fig-gone 1.6s ease-in-out forwards;
 }
 @keyframes fig-gone {
   to {
     opacity: 0;
-    transform: scale(1.06);
-    filter: blur(3px);
+    scale: 1.06;
   }
 }
 /* a completed figure glows a little brighter for a moment */
-.figure.complete .sky-edge {
+.fig.complete .sky-edge:not(.glow) {
   animation:
     edge-draw 0.9s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0s) forwards,
     edge-glow 2.4s ease-in-out 0.6s;
@@ -496,24 +498,6 @@ html[data-route='stage'] body {
 @keyframes edge-glow {
   40% {
     opacity: 1;
-    stroke-width: 2.2;
-  }
-}
-/* stars breathe, each on its own beat */
-.star .halo {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: halo-breathe 3.6s ease-in-out infinite alternate;
-  animation-delay: var(--tw, 0s);
-}
-@keyframes halo-breathe {
-  from {
-    transform: scale(0.8);
-    opacity: 0.1;
-  }
-  to {
-    transform: scale(1.15);
-    opacity: 0.22;
   }
 }
 /* the background stars drift slowly the other way, for depth */
@@ -546,6 +530,14 @@ html[data-route='stage'] body {
   to {
     translate: 0 0.035em;
   }
+}
+.w.cur,
+.aura-text,
+.beat-text,
+.wave-line,
+.sky-caption .cap,
+.k-line {
+  will-change: transform;
 }
 .w.cur,
 .aura-text,

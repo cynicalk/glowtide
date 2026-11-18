@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { startAudio } from '../lib/beat'
 import { logBands, shape, smoothInto } from '../../../shared/viz.mjs'
-import { drawViz } from './draw'
+import { drawViz, glowFilter } from './draw'
 
 /**
  * A live visualizer on a canvas, drawn from the PC's sound output.
@@ -55,7 +55,7 @@ export default function Visualizer({
     fit()
 
     let frame = { ok: false }
-    const stop = startAudio((f) => (frame = f))
+    const stop = startAudio((f) => (frame = f), { fps: live.current.fps })
     const state = {
       bands: new Float32Array(live.current.density),
       wave: new Uint8Array(512).fill(128),
@@ -95,7 +95,6 @@ export default function Visualizer({
       if (o.palette)
         drawViz(ctx, o.style, state, w, h, o.palette, {
           dpr,
-          glow: o.glow,
           sensitivity: o.sensitivity,
           ringInner: o.ringInner
         })
@@ -108,5 +107,11 @@ export default function Visualizer({
     }
   }, [])
 
-  return <canvas ref={canvas} className={`viz-canvas ${className}`} />
+  return (
+    <canvas
+      ref={canvas}
+      className={`viz-canvas ${className}`}
+      style={{ filter: glow ? glowFilter(palette) : 'none' }}
+    />
+  )
 }

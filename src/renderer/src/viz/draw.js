@@ -194,16 +194,19 @@ function aurora(ctx, s, w, h, stops) {
 const RENDER = { bars, mirror, blocks, ring, waveform, aurora }
 
 /**
- * Draw one frame. palette: three hex colours. opts: { dpr, glow, sensitivity, ringInner }.
+ * Draw one frame. palette: three hex colours. opts: { dpr, sensitivity, ringInner }.
+ * The glow is not drawn here: a canvas shadow is a blur per shape (48 bars, 48 blurs a
+ * frame), so the visualizer puts one drop-shadow on the whole canvas instead (glowFilter).
  */
 export function drawViz(ctx, style, state, w, h, palette, opts = {}) {
   ctx.clearRect(0, 0, w, h)
   const stops = palette.map(rgb)
   ctx.save()
-  if (opts.glow) {
-    ctx.shadowColor = css(stops[1], 0.8)
-    ctx.shadowBlur = 14 * (opts.dpr || 1)
-  }
   ;(RENDER[style] || bars)(ctx, state, w, h, stops, { dpr: 1, ...opts })
   ctx.restore()
+}
+
+/** The CSS filter that gives the whole canvas the glow a per-shape shadow used to. */
+export function glowFilter(palette) {
+  return palette ? `drop-shadow(0 0 7px ${css(rgb(palette[1]), 0.8)})` : 'none'
 }

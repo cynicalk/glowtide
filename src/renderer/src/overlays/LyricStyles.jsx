@@ -72,13 +72,22 @@ export function Waves({ view, beatRef }) {
   )
   return (
     <div className="waves" ref={beatRef}>
-      <svg className="wave-lines" viewBox="0 0 1600 300" preserveAspectRatio="none">
-        <g className="wave-swell">
+      {/* each line is its own layer sliding sideways, and the swell scales them together:
+          all moved by the compositor, none repainted */}
+      <div className="wave-lines">
+        <div className="wave-swell">
           {paths.map((d, i) => (
-            <path key={i} d={d} className={`wl wl${i}`} />
+            <svg
+              key={i}
+              className={`wl-layer wl${i}`}
+              viewBox="0 0 3200 300"
+              preserveAspectRatio="none"
+            >
+              <path d={d} className="wl" />
+            </svg>
           ))}
-        </g>
-      </svg>
+        </div>
+      </div>
       <div className="wave-prev">{words && view.prev ? view.prev : NBSP}</div>
       <div className="slot">
         {prev && renderLine(prev.value, 'leave', `l${prev.key}`)}
@@ -102,6 +111,7 @@ export function Beat({ win, mode, beatRef }) {
   const k = (t) => (mode === 'lines' ? fitLine(t.length) : 1)
   return (
     <div className="beat" ref={beatRef}>
+      <div className="beat-flash" />
       <div className="beat-rings">
         <i />
         <i />
@@ -129,13 +139,17 @@ export function Beat({ win, mode, beatRef }) {
  * Karaoke: the line low on the screen, each word sweeping into colour as it is sung; a
  * 3-2-1 count-in after long breaks. The sweep is set every frame from the song position.
  */
-export function Karaoke({ view, playback, durationMs, offsetMs, showNext, colour }) {
+export function Karaoke({ view, playback, durationMs, offsetMs, showNext, colour, fps = 30 }) {
   const refs = useRef([])
   const words = view?.line?.words || null
   useEffect(() => {
     if (!words) return
     let raf
-    const loop = () => {
+    let last = 0
+    const loop = (t) => {
+      raf = requestAnimationFrame(loop)
+      if (t - last < 1000 / fps - 2) return // the sweep follows the frame-rate setting too
+      last = t
       const pos = positionOf(playback, durationMs) + (offsetMs || 0)
       words.forEach((w, i) => {
         const el = refs.current[i]
@@ -143,11 +157,10 @@ export function Karaoke({ view, playback, durationMs, offsetMs, showNext, colour
         const f = Math.min(1, Math.max(0, (pos - w.t) / Math.max(60, w.end - w.t)))
         el.style.setProperty('--f', f.toFixed(3))
       })
-      raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [words, playback, durationMs, offsetMs])
+  }, [words, playback, durationMs, offsetMs, fps])
   const len = words ? words.map((w) => w.w).join(' ').length : 0
   return (
     <div className="karaoke" style={{ '--kf': colour }}>

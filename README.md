@@ -45,6 +45,7 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   Space, the arrows, V (visualizer), C (colours) and Esc work. Ctrl+Alt+M hides or shows
   the widgets.
 - Widgets cap their frame rate (30/60) and drop to 20 fps when nothing is playing.
+- **Light on the computer**: the edge glow and the lyrics draw at 30 fps by default (60 is an option in Settings → Lyrics overlay). Everything that moves continuously is moved by the GPU compositor rather than repainted, and the overlay stops all work while it is hidden. Paused, Glowtide uses almost nothing.
 - **Maximise**: the title-bar button or a double-click gives a roomy full-window player; F11 goes full screen.
 - **Player window**: small, dark and centred, showing the cover (or the video for YouTube).
   It has controls, seek, like (Spotify) and panels for search, library, queue and devices.

@@ -480,6 +480,21 @@ export default function SettingsPanel({ state, settings, onClose }) {
           window and comes back when you click into another app. Ctrl+Alt+L turns it on or off from
           anywhere.
         </p>
+        <div className="srow">
+          <span>Frame rate</span>
+          <Seg
+            value={String(settings.fps === 60 ? 60 : 30)}
+            options={[
+              ['30', '30 fps'],
+              ['60', '60 fps']
+            ]}
+            onChange={(x) => set({ fps: Number(x) })}
+          />
+        </div>
+        <p className="fine">
+          For the edge glow and the lyrics. 60 is smoother; 30 uses about a third less of your
+          computer while music plays, and is the default.
+        </p>
       </Fold>
 
       <WidgetSettings settings={settings} set={set} />

@@ -1,62 +1,89 @@
 import { useEffect, useRef } from 'react'
 import { useColours, useGlowtide } from '../lib/store'
 import { startBeatTracker } from '../lib/beat'
+import { useFrameRateCap } from '../lib/frameRate'
 
+const BASE_SPEED = 22 // degrees a second for the travelling light when the music is quiet
+
+/**
+ * The edge glow. Nothing on it is ever repainted while music plays; per frame it only
+ * changes things the compositor applies on its own:
+ * - the frame is painted once; the music changes its opacity and that of a softer outer
+ *   halo laid over it (the "swell"),
+ * - the travelling light is a gradient that is turned (a transform), faster with the music.
+ * One loop drives both at the chosen frame rate (30 or 60), and only while something plays. Paused, it all holds
+ * still and nothing runs.
+ */
 export default function Glow() {
   const { state, settings } = useGlowtide()
   const colours = useColours(state, settings)
-  const el = useRef(null)
-  const flow = useRef(null)
+  const edge = useRef(null)
+  const halo = useRef(null)
+  const spinners = useRef([])
+  const angle = useRef(0)
   const level = useRef({ pulse: 0, energy: 0, ok: true })
   const playing = !!state?.playback?.isPlaying
-  const react = !!settings?.glow.reactToAudio
+  const hasTrack = !!state?.track
+  const g = settings?.glow
+  const react = !!g?.reactToAudio
+  const moving = !!g && g.motion !== 'still'
+  const shown = hasTrack && (playing || g?.idle !== 'off')
+  const fps = settings?.fps === 60 ? 60 : 30
+  useFrameRateCap(fps)
 
   useEffect(() => {
     if (!playing || !react) return
     level.current.ok = true
-    return startBeatTracker((pulse, energy) => {
-      if (pulse === null) level.current = { pulse: 0, energy: 0, ok: false }
-      else level.current = { pulse, energy, ok: true }
-    })
-  }, [playing, react])
+    return startBeatTracker(
+      (pulse, energy) => {
+        if (pulse === null) level.current = { pulse: 0, energy: 0, ok: false }
+        else level.current = { pulse, energy, ok: true }
+      },
+      { fps }
+    )
+  }, [playing, react, fps])
 
   useEffect(() => {
-    if (!settings || !colours) return
+    if (!g) return
+    const intensity = g.intensity / 100
+    const turn = (deg) => {
+      angle.current = (angle.current + deg) % 360
+      const tf = `translate(-50%, -50%) rotate(${angle.current.toFixed(2)}deg)`
+      for (const el of spinners.current) if (el) el.style.transform = tf
+    }
+    const apply = (strength) => {
+      const k = Math.min(1.3, strength) * intensity * 1.35
+      if (edge.current) edge.current.style.opacity = Math.min(1, k).toFixed(3)
+      // the halo carries what used to be a wider shadow on loud passages
+      if (halo.current)
+        halo.current.style.opacity = (
+          Math.max(0, Math.min(1, (strength - 0.7) * 2)) * intensity
+        ).toFixed(3)
+    }
+    turn(0)
+    if (!shown || !playing) {
+      apply(shown ? 0.6 : 0) // paused: a steady glow, and nothing runs
+      return
+    }
     let raf
-    const g = settings.glow
-    let angle = 0
-    let last = performance.now()
+    let last = 0
     const loop = (t) => {
-      // The travelling light: a slow lap when quiet, faster with the music.
-      const dt = Math.min(0.1, (t - last) / 1000)
-      last = t
-      const live = playing && react && level.current.ok
-      const speed = 22 + (live ? level.current.energy * 70 + level.current.pulse * 110 : 0)
-      angle = (angle + dt * speed) % 360
-      if (flow.current) {
-        flow.current.style.setProperty('--flow-a', `${angle.toFixed(1)}deg`)
-        flow.current.style.opacity = !state?.track || (!playing && g.idle === 'off') ? '0' : ''
-      }
-      const node = el.current
-      if (node) {
-        let strength
-        if (!state?.track || (!playing && g.idle === 'off')) strength = 0
-        else if (!playing) strength = 0.6
-        else if (react && level.current.ok)
-          strength = 0.8 + 0.15 * level.current.energy + 0.35 * level.current.pulse
-        else strength = 0.85 + 0.15 * Math.sin(t / 900) // no audio signal: a slow breathe, not a fake beat
-        const k = Math.min(1.3, strength) * (g.intensity / 100) * 1.35
-        node.style.opacity = String(Math.min(1, k))
-        node.style.setProperty('--sp', `${g.spread * (0.8 + 0.4 * Math.min(1, strength))}px`)
-      }
       raf = requestAnimationFrame(loop)
+      // every frame of this window is copied out for Windows, so fewer frames are cheaper
+      if (t - last < 1000 / fps - 2) return
+      const dt = Math.min(0.1, (t - (last || t - 1000 / fps)) / 1000)
+      last = t
+      const live = react && level.current.ok
+      const { energy, pulse } = level.current
+      const strength = live ? 0.8 + 0.15 * energy + 0.35 * pulse : 0.85 + 0.15 * Math.sin(t / 900) // no audio signal: a slow breathe, not a fake beat
+      apply(strength)
+      if (moving) turn(dt * (BASE_SPEED + (live ? energy * 70 + pulse * 110 : 0)))
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [settings, colours, playing, react, state?.track])
+  }, [g, shown, playing, react, moving, fps])
 
   if (!settings || !colours) return null
-  const moving = settings.glow.motion !== 'still'
   const vars = {
     '--c': colours.glow,
     '--c2': colours.highlight,
@@ -64,21 +91,22 @@ export default function Glow() {
     '--th': `${settings.glow.thickness}px`,
     '--sp': `${settings.glow.spread}px`
   }
+  const fade = settings.colour.fade ? 'fade' : ''
+  const layer = (cls, i) => (
+    <div className={cls}>
+      <div className="flow-frame">
+        <i ref={(el) => (spinners.current[i] = el)} />
+      </div>
+    </div>
+  )
   return (
     <>
-      <div
-        ref={el}
-        className={`edge ${settings.colour.fade ? 'fade' : ''}`}
-        style={{ ...vars, opacity: 0 }}
-      />
+      <div ref={edge} className={`edge ${fade}`} style={{ ...vars, opacity: 0 }} />
+      <div ref={halo} className={`edge-halo ${fade}`} style={{ ...vars, opacity: 0 }} />
       {moving && (
-        <div ref={flow} className={`edge-flow ${settings.colour.fade ? 'fade' : ''}`} style={vars}>
-          <div className="flow-soft">
-            <i />
-          </div>
-          <div className="flow-sharp">
-            <i />
-          </div>
+        <div className={`edge-flow ${fade}`} style={{ ...vars, opacity: shown ? undefined : 0 }}>
+          {layer('flow-soft', 0)}
+          {layer('flow-sharp', 1)}
         </div>
       )}
     </>

@@ -43,6 +43,7 @@ export const DEFAULT_SETTINGS = {
     display: 'primary' // 'primary' | a display id
   },
   awake: false, // keep the screen awake while music plays
+  fps: 30, // the glow and lyrics overlay: 30 (lighter) or 60 (smoother)
   widgets: {
     fps: 60,
     viz: {

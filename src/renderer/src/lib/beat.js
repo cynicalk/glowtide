@@ -5,9 +5,11 @@
  * Starts listening. onFrame is called every animation frame with
  *   { ok, freq: Uint8Array, wave: Uint8Array, sampleRate, energy 0..1, pulse 0..1, level 0..1 }
  * or { ok: false } when there is no system audio (muted, another output, or unavailable).
+ * fps caps how often it analyses (the glow and the lyric styles need 30; a visualizer 60).
+ * Smoothing and beat decay are per second, not per frame, so they feel the same at any rate.
  * Returns a stop function.
  */
-export function startAudio(onFrame) {
+export function startAudio(onFrame, { fps = 60 } = {}) {
   let stopped = false
   let ctx, stream, raf
   ;(async () => {
@@ -32,7 +34,15 @@ export function startAudio(onFrame) {
       let pulse = 0
       let lastBeat = 0
       let lastSound = performance.now()
+      let lastFrame = 0
+      const gap = 1000 / fps - 2
       const loop = (now) => {
+        if (now - lastFrame < gap) {
+          raf = requestAnimationFrame(loop)
+          return
+        }
+        const k = Math.min(4, (now - (lastFrame || now - 16.7)) / 16.7) // frames' worth of time
+        lastFrame = now
         an.getByteFrequencyData(freq)
         an.getByteTimeDomainData(wave)
         let e = 0
@@ -47,12 +57,13 @@ export function startAudio(onFrame) {
           raf = requestAnimationFrame(loop)
           return
         }
-        avg = avg * 0.985 + e * 0.015
+        const keep = Math.pow(0.985, k)
+        avg = avg * keep + e * (1 - keep)
         if (e > avg * 1.22 && e - prev > 0.015 && e > 0.08 && now - lastBeat > 200) {
           pulse = 1
           lastBeat = now
         }
-        pulse *= 0.9
+        pulse *= Math.pow(0.9, k)
         prev = e
         onFrame({
           ok: true,
@@ -80,6 +91,6 @@ export function startAudio(onFrame) {
 }
 
 /** Beats and bass energy only: onLevel(pulse, energy), or onLevel(null) with no audio. */
-export function startBeatTracker(onLevel) {
-  return startAudio((f) => (f.ok ? onLevel(f.pulse, f.energy) : onLevel(null)))
+export function startBeatTracker(onLevel, { fps = 30 } = {}) {
+  return startAudio((f) => (f.ok ? onLevel(f.pulse, f.energy) : onLevel(null)), { fps })
 }

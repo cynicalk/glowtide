@@ -28,21 +28,45 @@ export function useHandoff(group, value) {
 }
 
 /**
- * Feeds --pulse (1 on a beat, decaying) and --energy (bass level) into an element's style
- * from the PC's sound output. With no sound, a slow breathe stands in.
+ * True while on, and for ms after it turns off, so something can finish fading out before
+ * it is taken away (and stops costing anything).
  */
-export function useBeatVars(ref, { playing, listen }) {
+export function useLinger(on, ms) {
+  const [held, setHeld] = useState(on)
+  if (on && !held) setHeld(true)
   useEffect(() => {
+    if (on) return
+    const id = setTimeout(() => setHeld(false), ms)
+    return () => clearTimeout(id)
+  }, [on, ms])
+  return on || held
+}
+
+/**
+ * Feeds --pulse (1 on a beat, decaying) and --energy (bass level) into an element's style
+ * from the PC's sound output, fps times a second. With no sound, a slow breathe stands in.
+ * Nothing runs unless playing is true.
+ */
+export function useBeatVars(ref, { playing, listen, fps = 30 }) {
+  useEffect(() => {
+    if (!playing) return
     const level = { pulse: 0, energy: 0, ok: true }
     const stop =
       playing && listen
-        ? startBeatTracker((pulse, energy) => {
-            if (pulse === null) level.ok = false
-            else Object.assign(level, { pulse, energy, ok: true })
-          })
+        ? startBeatTracker(
+            (pulse, energy) => {
+              if (pulse === null) level.ok = false
+              else Object.assign(level, { pulse, energy, ok: true })
+            },
+            { fps }
+          )
         : null
     let raf
+    let last = 0
     const loop = (t) => {
+      raf = requestAnimationFrame(loop)
+      if (t - last < 1000 / fps - 2) return // each update restyles the lyric: no faster than the cap
+      last = t
       const node = ref.current
       if (node) {
         const live = playing && listen && level.ok
@@ -51,12 +75,11 @@ export function useBeatVars(ref, { playing, listen }) {
         node.style.setProperty('--pulse', p.toFixed(3))
         node.style.setProperty('--energy', e.toFixed(3))
       }
-      raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
     return () => {
       cancelAnimationFrame(raf)
       stop?.()
     }
-  }, [ref, playing, listen])
+  }, [ref, playing, listen, fps])
 }

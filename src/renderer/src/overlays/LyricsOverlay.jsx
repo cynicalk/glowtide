@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { positionOf, useColours, useGlowtide } from '../lib/store'
 import { wordWindowAt, lineWindowAt, lineWordsAt, karaokeAt } from '../../../shared/lyrics.mjs'
 import { Aura, Waves, Beat, Karaoke } from './LyricStyles'
-import { useSwap, useBeatVars, useHandoff } from '../lib/motion'
+import { useSwap, useBeatVars, useHandoff, useLinger } from '../lib/motion'
+import { useFrameRateCap } from '../lib/frameRate'
 import {
   buildFigures,
   placeLabels,
@@ -25,19 +26,25 @@ function useClock() {
 const asItem = (x) => (x ? { w: x.w ?? x.text, t: x.t, end: x.end } : null)
 
 /**
- * Polls the playback position at frame rate and re-renders only when what is shown changes.
+ * Polls the playback position about 30 times a second and re-renders only when what is
+ * shown changes. Stops entirely while the overlay is hidden (enabled false).
  * compute(lines, pos, opts) -> { key, ...view }
  */
-function useLyricView(compute, lines, playback, durationMs, offsetMs, opts) {
+function useLyricView(compute, lines, playback, durationMs, offsetMs, opts, enabled) {
   const [view, setView] = useState(null)
   const ref = useRef({ lines, playback, durationMs, offsetMs, opts })
   useEffect(() => {
     ref.current = { lines, playback, durationMs, offsetMs, opts }
   }, [lines, playback, durationMs, offsetMs, opts])
   useEffect(() => {
+    if (!enabled) return
     let raf
     let last = null
-    const loop = () => {
+    let lastT = 0
+    const loop = (t) => {
+      raf = requestAnimationFrame(loop)
+      if (t - lastT < 30) return
+      lastT = t
       const r = ref.current
       const pos = positionOf(r.playback, r.durationMs) + (r.offsetMs || 0)
       const v = compute(r.lines, pos, r.opts)
@@ -45,11 +52,10 @@ function useLyricView(compute, lines, playback, durationMs, offsetMs, opts) {
         last = v.key
         setView({ ...v, pos })
       }
-      raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [compute])
+  }, [compute, enabled])
   return view
 }
 
@@ -160,31 +166,44 @@ function Stack({ win, mode, measured, playing }) {
 const SPARKLE =
   'M0,-1 C0.1,-0.1 0.1,-0.1 1,0 C0.1,0.1 0.1,0.1 0,1 C-0.1,0.1 -0.1,0.1 -1,0 C-0.1,-0.1 -0.1,-0.1 0,-1 Z'
 
-/** Faint background stars, fixed per song, twinkling at their own pace. */
+// A point of the 1600x900 sky, as a CSS offset from the centre of the screen. --u is one
+// sky unit in pixels (set in CSS to match the SVG's "meet" fit), so HTML layers line up
+// with the stars exactly.
+const skyOffset = (x, y) =>
+  `translate(calc(${(x - VIEW.w / 2).toFixed(1)} * var(--u)), calc(${(y - VIEW.h / 2).toFixed(1)} * var(--u)))`
+
+/**
+ * Faint background stars, fixed per song. They are drawn once into three layers that each
+ * fade in and out at their own pace, so the field twinkles without a single star being
+ * repainted; the whole field drifts as one layer.
+ */
 function Starfield({ seed }) {
-  const dots = useMemo(
-    () =>
-      Array.from({ length: 140 }, (_, i) => ({
+  const groups = useMemo(() => {
+    const g = [[], [], []]
+    for (let i = 0; i < 140; i++)
+      g[i % 3].push({
         x: rand(seed + i * 3) * VIEW.w,
         y: rand(seed + i * 5 + 1) * VIEW.h,
         r: 0.6 + rand(seed + i * 11 + 2) * 1.5,
-        d: 2 + rand(seed + i * 17 + 3) * 5,
-        o: 0.15 + rand(seed + i * 19 + 4) * 0.45
-      })),
-    [seed]
-  )
+        o: 0.2 + rand(seed + i * 19 + 4) * 0.55
+      })
+    return g
+  }, [seed])
   return (
-    <g className="starfield">
-      {dots.map((p, i) => (
-        <circle
-          key={i}
-          cx={p.x}
-          cy={p.y}
-          r={p.r}
-          style={{ '--o': p.o, animationDuration: `${p.d}s`, animationDelay: `-${p.d * p.o}s` }}
-        />
+    <div className="starfield">
+      {groups.map((dots, k) => (
+        <svg
+          key={k}
+          className={`sky sky-field tw${k}`}
+          viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+          preserveAspectRatio="xMidYMid slice"
+        >
+          {dots.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r={p.r} opacity={p.o} />
+          ))}
+        </svg>
       ))}
-    </g>
+    </div>
   )
 }
 
@@ -195,6 +214,10 @@ const r3 = (m) => (m === 1 ? 6 : m === 2 ? 4.8 : 3.8)
  * appears with its word, and the line to it draws itself out from the star before. When the
  * verse's last word lands, any stars the verse had no words for light in a short cascade so
  * the figure is whole. Words sit outside the shape (placeLabels) and never move once placed.
+ *
+ * The figure is an SVG that only redraws when a word arrives. Everything that moves all the
+ * time (the camera leaning toward the newest stars, the sparkle gliding between them) is an
+ * HTML layer over it that the compositor moves, so the stars are never repainted for it.
  */
 function FigureView({ sky, labelPx, gone }) {
   const placed = useMemo(() => placeLabels(sky.stars, { fontPx: labelPx }), [sky, labelPx])
@@ -218,24 +241,40 @@ function FigureView({ sky, labelPx, gone }) {
     x: Math.max(-110, Math.min(110, (VIEW.w / 2 - lx) * 0.3)),
     y: Math.max(-40, Math.min(40, (450 - ly) * 0.25))
   }
+  const edges = sky.edges
+    .map((e, i) => {
+      const [a, b] = e.a < e.b ? [e.a, e.b] : [e.b, e.a] // draw from the earlier star
+      if (!shown(sky.stars[a]) || !shown(sky.stars[b])) return null
+      const p = sky.stars[a]
+      const q = sky.stars[b]
+      return { a, b, i, d: `M${p.x} ${p.y}L${q.x} ${q.y}` }
+    })
+    .filter(Boolean)
   return (
-    <g className={`figure ${gone ? 'gone' : ''} ${complete ? 'complete' : ''}`}>
-      <g className="sky-cam" style={{ transform: `translate(${cam.x}px, ${cam.y}px)` }}>
-        {sky.edges.map((e, i) => {
-          const [a, b] = e.a < e.b ? [e.a, e.b] : [e.b, e.a] // draw from the earlier star
-          if (!shown(sky.stars[a]) || !shown(sky.stars[b])) return null
-          const p = sky.stars[a]
-          const q = sky.stars[b]
-          return (
-            <path
-              key={`e${a}-${b}-${i}`}
-              className="sky-edge"
-              d={`M${p.x} ${p.y}L${q.x} ${q.y}`}
-              pathLength="1"
-              style={{ '--d': `${delay(b) + 0.08}s` }}
-            />
-          )
-        })}
+    <div
+      className={`fig ${gone ? 'gone' : ''} ${complete ? 'complete' : ''}`}
+      style={{ transform: skyOffset(VIEW.w / 2 + cam.x, VIEW.h / 2 + cam.y) }}
+    >
+      <svg className="sky" viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMid meet">
+        {/* a soft wide stroke under each line stands in for a blur filter */}
+        {edges.map((e) => (
+          <path
+            key={`g${e.a}-${e.b}-${e.i}`}
+            className="sky-edge glow"
+            d={e.d}
+            pathLength="1"
+            style={{ '--d': `${delay(e.b) + 0.08}s` }}
+          />
+        ))}
+        {edges.map((e) => (
+          <path
+            key={`e${e.a}-${e.b}-${e.i}`}
+            className="sky-edge"
+            d={e.d}
+            pathLength="1"
+            style={{ '--d': `${delay(e.b) + 0.08}s` }}
+          />
+        ))}
         {sky.stars.map((s, i) => {
           if (!shown(s)) return null
           const r = r3(s.m)
@@ -243,7 +282,7 @@ function FigureView({ sky, labelPx, gone }) {
             <g
               key={`s${i}`}
               className={`star lit ${s.current ? 'cur' : ''}`}
-              style={{ '--tw': `${-((i * 0.83) % 4).toFixed(2)}s`, '--d': `${delay(i)}s` }}
+              style={{ '--d': `${delay(i)}s` }}
             >
               <circle className="halo" cx={s.x} cy={s.y} r={r * 2.8} />
               <circle className="core" cx={s.x} cy={s.y} r={r} />
@@ -267,17 +306,16 @@ function FigureView({ sky, labelPx, gone }) {
             </text>
           )
         })}
-        {f && !gone && (
-          <g
-            className={`focus ${f.idle ? 'idle' : ''}`}
-            style={{ transform: `translate(${f.x}px, ${f.y}px)` }}
-          >
+      </svg>
+      {f && !gone && (
+        <div className={`focus ${f.idle ? 'idle' : ''}`} style={{ transform: skyOffset(f.x, f.y) }}>
+          <svg viewBox="-40 -40 80 80">
             <circle key={last} className="ring" r={26} />
             <path className="spark" d={SPARKLE} transform="scale(19)" />
-          </g>
-        )}
-      </g>
-    </g>
+          </svg>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -299,13 +337,11 @@ function Constellation({ sky, scale }) {
   const figures = [leaving, fig].filter((s, i, a) => s && a.indexOf(s) === i)
   return (
     <>
-      <svg className="sky" viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMid meet">
-        <g className="sky-drift">
-          {figures.map((s) => (
-            <FigureView key={s.figure.n} sky={s} labelPx={labelPx} gone={s === leaving} />
-          ))}
-        </g>
-      </svg>
+      <div className="sky-drift">
+        {figures.map((s) => (
+          <FigureView key={s.figure.n} sky={s} labelPx={labelPx} gone={s === leaving} />
+        ))}
+      </div>
       <div
         className="sky-caption"
         style={{ '--cap': `calc(min(4.6vw, 8.5vh) * ${scale * capEm})` }}
@@ -354,6 +390,17 @@ export default function LyricsOverlay() {
       style === 'constellation' ? { mode: 'words', seed, captionLine: true } : { mode, seed },
     [mode, seed, style]
   )
+  // Step aside while Glowtide's own window is in use, so the overlay never covers its controls.
+  const active =
+    state?.lyricsStatus === 'synced' &&
+    lyrics.length > 0 &&
+    !!state?.playback?.isPlaying &&
+    !state?.playerFocused
+  // Hidden (paused, Glowtide in front, no lyrics): once it has faded out, nothing in the overlay
+  // runs at all, so an idle overlay costs nothing.
+  const live = useLinger(!!active, 1200)
+  const fps = settings?.fps === 60 ? 60 : 30
+  useFrameRateCap(fps)
   const win = useLyricView(
     style === 'constellation'
       ? skyView
@@ -366,26 +413,19 @@ export default function LyricsOverlay() {
     state?.playback,
     state?.track?.durationMs,
     state?.lyricsOffsetMs,
-    opts
+    opts,
+    live
   )
   const now = useClock()
   const beatRef = useRef(null)
   // Music energy for Aura, Waves and Beat (and nothing is listened to otherwise).
   useBeatVars(beatRef, {
-    playing:
-      ['aura', 'waves', 'beat'].includes(style) &&
-      !!state?.playback?.isPlaying &&
-      !state?.playerFocused,
+    playing: ['aura', 'waves', 'beat'].includes(style) && !!active,
+    fps,
     listen: !!settings?.glow.reactToAudio
   })
 
   if (!state || !settings || !colours) return null
-  // Step aside while Glowtide's own window is in use, so the overlay never covers its controls.
-  const active =
-    state.lyricsStatus === 'synced' &&
-    lyrics.length > 0 &&
-    !!state.playback?.isPlaying &&
-    !state.playerFocused
   const scale = l.size / 100
   const measured = state.lyricsTiming === 'word' && mode === 'words'
 
@@ -408,43 +448,44 @@ export default function LyricsOverlay() {
         on={active}
       />
       <div className={`lyr-stage ${active ? 'show' : ''}`}>
-        {l.showClock && <Clock now={now} serif={l.clockFont === 'serif'} />}
-        {style === 'constellation' && <NameCard figure={win?.figure} />}
-        {style === 'stack' && (
-          <Stack
-            win={win && 'cur' in win ? win : null}
-            mode={mode}
-            measured={measured}
-            playing={!!state.playback?.isPlaying}
-          />
-        )}
-        {style === 'karaoke' && (
-          <Karaoke
-            view={win && 'countdown' in win ? win : null}
-            playback={state.playback}
-            durationMs={state.track?.durationMs}
-            offsetMs={state.lyricsOffsetMs}
-            showNext={!!l.context}
-            colour={karaokeColour(colours.highlight)}
-          />
-        )}
-        {style === 'aura' && (
-          <Aura win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
-        )}
-        {style === 'waves' && <Waves view={win && 'words' in win ? win : null} beatRef={beatRef} />}
-        {style === 'beat' && (
-          <Beat win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
-        )}
-        {style === 'constellation' && (
+        {live && (
           <>
-            <svg
-              className="sky"
-              viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
-              preserveAspectRatio="xMidYMid slice"
-            >
-              <Starfield seed={seed} />
-            </svg>
-            <Constellation sky={win?.stars ? win : null} scale={scale} />
+            {l.showClock && <Clock now={now} serif={l.clockFont === 'serif'} />}
+            {style === 'constellation' && <NameCard figure={win?.figure} />}
+            {style === 'stack' && (
+              <Stack
+                win={win && 'cur' in win ? win : null}
+                mode={mode}
+                measured={measured}
+                playing={!!state.playback?.isPlaying}
+              />
+            )}
+            {style === 'karaoke' && (
+              <Karaoke
+                view={win && 'countdown' in win ? win : null}
+                playback={state.playback}
+                durationMs={state.track?.durationMs}
+                offsetMs={state.lyricsOffsetMs}
+                showNext={!!l.context}
+                colour={karaokeColour(colours.highlight)}
+                fps={fps}
+              />
+            )}
+            {style === 'aura' && (
+              <Aura win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
+            )}
+            {style === 'waves' && (
+              <Waves view={win && 'words' in win ? win : null} beatRef={beatRef} />
+            )}
+            {style === 'beat' && (
+              <Beat win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
+            )}
+            {style === 'constellation' && (
+              <>
+                <Starfield seed={seed} />
+                <Constellation sky={win?.stars ? win : null} scale={scale} />
+              </>
+            )}
           </>
         )}
       </div>

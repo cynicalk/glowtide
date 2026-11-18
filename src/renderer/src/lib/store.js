@@ -3,6 +3,25 @@ import { resolveColours } from '../../../shared/colour.mjs'
 
 const api = window.glowtide
 
+/**
+ * The new state, reusing every part of the previous one that hasn't changed. State arrives
+ * every second while music plays; without this, the track, palette and colours would be
+ * new objects each time and every effect keyed on them would restart once a second.
+ */
+export function keepSame(prev, next) {
+  if (!prev || !next || typeof next !== 'object') return next
+  const out = { ...next }
+  let same = Object.keys(prev).length === Object.keys(next).length
+  for (const k of Object.keys(next)) {
+    const a = prev[k]
+    const b = next[k]
+    if (a === b) continue
+    if (a && b && typeof a === 'object' && JSON.stringify(a) === JSON.stringify(b)) out[k] = a
+    else same = false
+  }
+  return same ? prev : out
+}
+
 /** Live app state, settings and lyric lines from the main process. */
 export function useGlowtide() {
   const [state, setState] = useState(null)
@@ -16,7 +35,11 @@ export function useGlowtide() {
       setSettings(d.settings)
       setLyrics(d.lyrics)
     })
-    const offs = [api.onState(setState), api.onSettings(setSettings), api.onLyrics(setLyrics)]
+    const offs = [
+      api.onState((next) => setState((prev) => keepSame(prev, next))),
+      api.onSettings((next) => setSettings((prev) => keepSame(prev, next))),
+      api.onLyrics(setLyrics)
+    ]
     return () => {
       alive = false
       offs.forEach((f) => f())

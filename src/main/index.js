@@ -902,7 +902,7 @@ function scheduleSnapshot() {
   if (process.env.GLOWTIDE_SKY_PROBE)
     setTimeout(async () => {
       // Also the words on the figure and where they sit, to check a word never moves once placed.
-      const js = `(() => { const q = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).transform : null }; const fig = document.querySelector('.figure:not(.gone)'); return { cam: q('.sky-cam'), drift: q('.sky-drift'), field: q('.starfield'), figures: document.querySelectorAll('.figure').length, edges: fig ? fig.querySelectorAll('.sky-edge').length : 0, stars: fig ? fig.querySelectorAll('.star').length : 0, words: fig ? [...fig.querySelectorAll('.sky-word')].map((t) => [t.textContent, t.getAttribute('x'), t.getAttribute('y'), t.getAttribute('class')]) : [], focus: fig?.querySelector('.focus')?.style.transform || null, cap: document.querySelector('.sky-caption .cap:not(.leave)')?.textContent || null } })()`
+      const js = `(() => { const q = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).transform : null }; const fig = document.querySelector('.fig:not(.gone)'); return { cam: q('.fig:not(.gone)'), drift: q('.sky-drift'), field: q('.starfield'), figures: document.querySelectorAll('.fig').length, edges: fig ? fig.querySelectorAll('.sky-edge:not(.glow)').length : 0, stars: fig ? fig.querySelectorAll('.star').length : 0, words: fig ? [...fig.querySelectorAll('.sky-word')].map((t) => [t.textContent, t.getAttribute('x'), t.getAttribute('y'), t.getAttribute('class')]) : [], focus: fig?.querySelector('.focus')?.style.transform || null, cap: document.querySelector('.sky-caption .cap:not(.leave)')?.textContent || null } })()`
       const out = []
       for (let i = 0; i < 8; i++) {
         out.push(await lyricsWin?.webContents.executeJavaScript(js))
@@ -911,6 +911,54 @@ function scheduleSnapshot() {
       mkdirSync(dir, { recursive: true })
       writeFileSync(join(dir, 'sky.json'), JSON.stringify(out, null, 1))
     }, 6000)
+  // GLOWTIDE_PERF=<seconds>: CPU and memory per window over that many seconds, written to
+  // perf.json. GLOWTIDE_PERF_HIDE=1 hides the player first, as when using another app.
+  if (process.env.GLOWTIDE_PERF)
+    setTimeout(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+      if (process.env.GLOWTIDE_PERF_HIDE) player?.hide()
+      await wait(4000)
+      const names = new Map()
+      const named = [
+        ['player', player],
+        ['lyrics', lyricsWin],
+        ...glowWins.map((w, i) => [`glow${i}`, w]),
+        ...(widgets ? widgets.windows() : []).map((w) => [w.widgetKind || 'stage', w])
+      ]
+      for (const [n, w] of named)
+        if (w && !w.isDestroyed()) names.set(w.webContents.getOSProcessId(), n)
+      app.getAppMetrics() // the first reading only starts the clock
+      await wait(Number(process.env.GLOWTIDE_PERF) * 1000)
+      const rows = app.getAppMetrics().map((p) => ({
+        name: names.get(p.pid) || p.type,
+        cpu: Math.round(p.cpu.percentCPUUsage * 10) / 10,
+        wakeups: p.cpu.idleWakeupsPerSecond,
+        mb: Math.round(p.memory.workingSetSize / 1024)
+      }))
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(
+        join(dir, 'perf.json'),
+        JSON.stringify(
+          {
+            playing: !!state.playback?.isPlaying,
+            focused: state.playerFocused,
+            gpu: app.getGPUFeatureStatus(),
+            rows
+          },
+          null,
+          1
+        )
+      )
+    }, 3000)
+  // GLOWTIDE_EVAL=<js>: evaluate an expression in the lyrics overlay after 9 s, into eval.json.
+  if (process.env.GLOWTIDE_EVAL)
+    setTimeout(async () => {
+      const out = await lyricsWin?.webContents
+        .executeJavaScript(process.env.GLOWTIDE_EVAL)
+        .catch((e) => String(e))
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'eval.json'), JSON.stringify(out, null, 1))
+    }, 9000)
   // GLOWTIDE_UNFOCUS=1: hand focus to a throwaway window so the overlay shows, as when using another app.
   if (process.env.GLOWTIDE_UNFOCUS)
     setTimeout(() => {
@@ -990,7 +1038,7 @@ function scheduleSnapshot() {
       if (glowWins[0] && !glowWins[0].isDestroyed()) {
         const read = () =>
           glowWins[0].webContents.executeJavaScript(
-            "(document.querySelector('.edge-flow')?.style.getPropertyValue('--flow-a')) || null"
+            "document.querySelector('.flow-frame i')?.style.transform || null"
           )
         const a = await read()
         await new Promise((r) => setTimeout(r, 500))

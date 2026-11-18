@@ -238,6 +238,9 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
     done,
     resize,
     sizeOf: (kind) => wins[kind]?.getBounds(),
+    /** The display the full-screen view is open on, or null. */
+    stageDisplay: () =>
+      stage && !stage.isDestroyed() ? screen.getDisplayMatching(stage.getBounds()).id : null,
     toggleHidden,
     setCovered,
     openStage,

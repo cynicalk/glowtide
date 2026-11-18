@@ -123,6 +123,9 @@ const state = {
   playerMaximized: false,
   // Another app fills a display (a game, a full-screen video): the overlays there step aside.
   fullscreenApp: false,
+  // Glowtide's own full-screen view is open on the lyrics overlay's display: the overlay keeps
+  // its corner text clear of the view's song title.
+  lyricsOverStage: false,
   update: null // see updater.js
 }
 let lyricsLines = []
@@ -137,6 +140,8 @@ function all() {
   )
 }
 function broadcast() {
+  const stageOn = widgets?.stageDisplay() ?? null
+  state.lyricsOverStage = stageOn !== null && !!lyricsWin && lyricsDisplayId === stageOn
   for (const w of all()) w.webContents.send('state', state)
   syncAwake()
 }
@@ -788,6 +793,7 @@ function syncOverlays() {
     lyricsDisplayId = target.id
   }
   syncFullscreenWatch()
+  broadcast() // which display the overlay is on decides whether it sits over the full-screen view
   rebuildTray()
 }
 

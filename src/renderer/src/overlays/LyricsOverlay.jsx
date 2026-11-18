@@ -431,7 +431,7 @@ export default function LyricsOverlay() {
 
   return (
     <div
-      className={`lyr s-${style} ${settings.colour.fade ? 'fade' : ''} ${l.context ? '' : 'solo'}`}
+      className={`lyr s-${style} ${settings.colour.fade ? 'fade' : ''} ${l.context ? '' : 'solo'} ${state.lyricsOverStage ? 'over-stage' : ''}`}
       style={{
         '--lyr': colours.lyrics,
         '--hi': colours.highlight,

@@ -223,13 +223,24 @@ export function placeLabels(stars, { fontPx = 18 } = {}) {
       y: s.y + uy * gap + (Math.abs(uy) > 0.7 ? (uy > 0 ? h * 0.8 : 0) : h * 0.35),
       anchor: side(ux)
     })
+    // Straight outward first, near the star and then a step further; then turned a little
+    // either way; then above, below and to each side.
+    const turn = (deg) => {
+      const r = (deg * Math.PI) / 180
+      return [dx * Math.cos(r) - dy * Math.sin(r), dx * Math.sin(r) + dy * Math.cos(r)]
+    }
+    const dirs = [
+      turn(40),
+      turn(-40),
+      [0, -1],
+      [0, 1],
+      [dx >= 0 ? 1 : -1, 0],
+      [dx >= 0 ? -1 : 1, 0]
+    ]
     const tries = [
       at(dx, dy, 14),
-      at(dx, dy, 26),
-      at(0, -1, 14),
-      at(0, 1, 14),
-      at(dx >= 0 ? 1 : -1, 0, 14),
-      at(dx >= 0 ? -1 : 1, 0, 14)
+      at(dx, dy, 30),
+      ...[14, 30].flatMap((gap) => dirs.map(([ux, uy]) => at(ux, uy, gap)))
     ]
     for (const t of tries) {
       const x0 = t.anchor === 'start' ? t.x : t.anchor === 'end' ? t.x - w : t.x - w / 2

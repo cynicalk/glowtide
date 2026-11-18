@@ -289,24 +289,23 @@ function FigureView({ sky, labelPx, gone }) {
             </g>
           )
         })}
-        {sky.stars.map((s, i) => {
-          const at = placed.get(i)
-          if (!at) return null
-          const age = s.current ? 'cur' : s.line === top ? 'l0' : s.line === top - 1 ? 'l1' : 'l2'
-          return (
-            <text
-              key={`w${i}`}
-              className={`sky-word ${age}`}
-              x={at.x}
-              y={at.y}
-              textAnchor={at.anchor}
-              style={{ fontSize: labelPx }}
-            >
-              {s.word}
-            </text>
-          )
-        })}
       </svg>
+      {/* Words are HTML, each on its own layer: they arrive large and glowing, then settle
+          beside their star, all by scale and opacity, so the sky itself never repaints. */}
+      {sky.stars.map((s, i) => {
+        const at = placed.get(i)
+        if (!at) return null
+        const age = s.current ? 'cur' : s.line === top ? 'l0' : s.line === top - 1 ? 'l1' : 'l2'
+        return (
+          <div
+            key={`w${i}`}
+            className={`sky-word ${age} a-${at.anchor}`}
+            style={{ transform: skyOffset(at.x, at.y) }}
+          >
+            <span data-w={s.word}>{s.word}</span>
+          </div>
+        )
+      })}
       {f && !gone && (
         <div className={`focus ${f.idle ? 'idle' : ''}`} style={{ transform: skyOffset(f.x, f.y) }}>
           <svg viewBox="-40 -40 80 80">
@@ -331,13 +330,14 @@ function Constellation({ sky, scale }) {
   const capLine = fig?.stars.find((s) => s.current)?.line
   // The caption changes once per line, not once per word, so it never flickers.
   const { prev: leavingCap } = useSwap(f ? `${capLine}|${f.text}` : 'none', f?.text || '')
-  const labelPx = Math.round(19 * Math.min(1.2, Math.max(0.85, scale)))
+  // The size a word settles at (sky units); the word being sung is drawn larger still.
+  const labelPx = Math.round(28 * Math.min(1.2, Math.max(0.85, scale)))
   const len = f?.text.length || 0
   const capEm = len <= 22 ? 1 : len <= 38 ? 0.82 : len <= 60 ? 0.68 : 0.56
   const figures = [leaving, fig].filter((s, i, a) => s && a.indexOf(s) === i)
   return (
     <>
-      <div className="sky-drift">
+      <div className="sky-drift" style={{ '--wpx': labelPx }}>
         {figures.map((s) => (
           <FigureView key={s.figure.n} sky={s} labelPx={labelPx} gone={s === leaving} />
         ))}

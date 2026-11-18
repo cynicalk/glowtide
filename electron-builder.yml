@@ -8,6 +8,7 @@ files:
   - '!src/*'
   - '!test/*'
   - '!scripts/*'
+  - '!dist/**'
   - '!{THIRD_PARTY_NOTICES.md,electron-builder.yml}'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
@@ -36,3 +37,10 @@ electronFuses:
   onlyLoadAppFromAsar: true
   enableEmbeddedAsarIntegrityValidation: true
   enableCookieEncryption: true
+# Where installed copies look for updates (src/main/updater.js). The build writes this into
+# app-update.yml; each release must carry latest.yml next to the installer.
+publish:
+  provider: github
+  owner: cynicalk
+  repo: glowtide-releases
+  releaseType: release

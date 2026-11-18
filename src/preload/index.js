@@ -32,5 +32,7 @@ contextBridge.exposeInMainWorld('glowtide', {
   widgetDone: (kind) => ipcRenderer.invoke('widget:done', kind),
   widgetSize: (kind) => ipcRenderer.invoke('widget:size', kind),
   widgetResize: (kind, w, h) => ipcRenderer.send('widget:resize', kind, w, h),
-  open: (url) => ipcRenderer.invoke('open', url)
+  open: (url) => ipcRenderer.invoke('open', url),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install')
 })

@@ -495,6 +495,20 @@ export default function SettingsPanel({ state, settings, onClose }) {
           For the edge glow and the lyrics. 60 is smoother; 30 uses about a third less of your
           computer while music plays, and is the default.
         </p>
+        <div className="srow">
+          <span>Hide for full-screen apps</span>
+          <Toggle
+            label="Hide for full-screen apps"
+            on={settings.hideForFullscreen !== false}
+            onChange={(v) => set({ hideForFullscreen: v })}
+          />
+        </div>
+        <p className="fine">
+          While a game, a full-screen video or a presentation fills a display, the edge glow, the
+          lyrics and the desktop widgets on that display pause and hide, and come back when it
+          closes.
+          {state.fullscreenApp && settings.hideForFullscreen !== false && ' Hidden right now.'}
+        </p>
       </Fold>
 
       <WidgetSettings settings={settings} set={set} />
@@ -563,7 +577,68 @@ export default function SettingsPanel({ state, settings, onClose }) {
           </p>
         )}
       </Fold>
+
+      <Updates update={state.update} settings={settings} set={set} />
     </div>
+  )
+}
+
+const UPDATE_TEXT = {
+  dev: 'Updates are off in a development run',
+  idle: 'Not checked yet',
+  checking: 'Checking…',
+  current: 'Up to date',
+  error: 'Couldn’t check. Are you online?'
+}
+
+/** The version, whether a newer one is on the way, and the switch for automatic checks. */
+function Updates({ update, settings, set }) {
+  const u = update || { status: 'idle' }
+  const status =
+    u.status === 'downloading'
+      ? `Downloading ${u.version}… ${u.percent || 0}%`
+      : u.status === 'ready'
+        ? `${u.version} is ready`
+        : UPDATE_TEXT[u.status] || ''
+  return (
+    <Fold k="updates">
+      <div className="sh">
+        <h3>Updates</h3>
+      </div>
+      <div className="srow">
+        <span>Glowtide {u.current}</span>
+        <span className="acct">
+          <span className="muted">{status}</span>
+          {u.status === 'ready' ? (
+            <button className="pill on" onClick={() => api.installUpdate()}>
+              Restart now
+            </button>
+          ) : (
+            u.status !== 'dev' && (
+              <button
+                className="pill"
+                disabled={u.status === 'checking' || u.status === 'downloading'}
+                onClick={() => api.checkUpdate()}
+              >
+                Check now
+              </button>
+            )
+          )}
+        </span>
+      </div>
+      <div className="srow">
+        <span>Check automatically</span>
+        <Toggle
+          label="Check for updates automatically"
+          on={settings.autoUpdate !== false}
+          onChange={(v) => set({ autoUpdate: v })}
+        />
+      </div>
+      <p className="fine">
+        Glowtide looks for a new release when it starts and every few hours, downloads it in the
+        background, and installs it when you restart or quit. Your settings and sign-ins are kept.
+      </p>
+    </Fold>
   )
 }
 

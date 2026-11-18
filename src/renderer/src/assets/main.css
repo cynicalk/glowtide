@@ -1891,3 +1891,16 @@ input[type='range']:hover::-webkit-slider-thumb,
   -webkit-mask-composite: source-over;
   mask-composite: add;
 }
+
+/* "Restart to update" in the title bar, once an update has downloaded */
+.winbtns button.update-ready {
+  width: auto;
+  padding: 0 10px;
+  margin-right: 6px;
+  font-size: 11px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--glow) 26%, var(--pill));
+}
+.winbtns button.update-ready:hover {
+  background: color-mix(in srgb, var(--glow) 40%, var(--pill));
+}

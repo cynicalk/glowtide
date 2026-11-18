@@ -13,6 +13,7 @@ import {
   shell
 } from 'electron'
 import { join } from 'path'
+import os from 'os'
 import { writeFileSync, mkdirSync, rmSync, appendFileSync, statSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -30,6 +31,8 @@ import { extractPalette } from '../shared/colour.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
 import { appLabel, systemTrack, repeatFromSmtc } from '../shared/media.mjs'
 import { createSmtc } from './smtc'
+import { createFullscreenWatch } from './fullscreen'
+import { createUpdater } from './updater'
 import { hardenContents, hardenSession, isSafeExternal, trustedSender } from './security'
 
 // The GLOWTIDE_* test hooks (snapshots, probes, separate profiles) only work in a development
@@ -67,6 +70,21 @@ const googleAuth = createGoogleAuth(() => ({
 const yt = createYouTube(googleAuth)
 const demo = createDemo()
 const smtc = createSmtc((m) => onSystemMessage(m))
+const updater = createUpdater({
+  automatic: () => !!loadSettings().autoUpdate,
+  // GLOWTIDE_UPDATE_FEED=<url>: a development run updates from this feed instead of not at all
+  devFeed: (DEV && process.env.GLOWTIDE_UPDATE_FEED) || null,
+  onError: (e) => logError('update', e),
+  onChange: (u) => {
+    const readyChanged = (state.update?.status === 'ready') !== (u.status === 'ready')
+    state.update = u
+    broadcast()
+    if (readyChanged) rebuildTray()
+    // GLOWTIDE_UPDATE_INSTALL=1: install as soon as the update has downloaded
+    if (DEV && process.env.GLOWTIDE_UPDATE_INSTALL && u.status === 'ready')
+      setTimeout(installUpdate, 1500)
+  }
+})
 
 let player = null
 let lyricsWin = null
@@ -102,7 +120,10 @@ const state = {
   // True while Glowtide's own window is the one in use: the lyrics overlay steps aside so it
   // never covers Glowtide's settings or controls.
   playerFocused: false,
-  playerMaximized: false
+  playerMaximized: false,
+  // Another app fills a display (a game, a full-screen video): the overlays there step aside.
+  fullscreenApp: false,
+  update: null // see updater.js
 }
 let lyricsLines = []
 const ytMeta = new Map() // videoId -> metadata from our own API calls (cleaner than player titles)
@@ -684,9 +705,67 @@ function overlayWindow(bounds, route) {
   })
   w.setAlwaysOnTop(true, 'screen-saver')
   w.setIgnoreMouseEvents(true)
-  w.on('ready-to-show', () => w.showInactive())
+  w.on('ready-to-show', () => {
+    w.glowtideReady = true
+    if (!coveredByFullscreen(w)) w.showInactive()
+  })
   load(w, route)
   return w
+}
+
+// ---------- full-screen apps ----------
+// While another app fills a display, the edge glow, the lyrics overlay and the desktop widgets
+// on that display hide. A hidden window stops drawing, so a game gets the graphics card back.
+// Displays with nothing full screen keep theirs.
+let fullscreenRect = null // the display being filled, in physical pixels
+const fullscreen = createFullscreenWatch((rect) => {
+  fullscreenRect = rect
+  applyFullscreen()
+})
+
+/** The id of the display another app fills, or null. */
+function filledDisplay() {
+  if (!fullscreenRect || !loadSettings().hideForFullscreen) return null
+  return screen.getDisplayMatching(screen.screenToDipRect(null, fullscreenRect)).id
+}
+
+function coveredByFullscreen(w) {
+  const id = filledDisplay()
+  return id !== null && screen.getDisplayMatching(w.getBounds()).id === id
+}
+
+function applyFullscreen() {
+  if (quitting) return
+  for (const w of [...glowWins, lyricsWin]) {
+    if (!w || w.isDestroyed() || !w.glowtideReady) continue
+    const hide = coveredByFullscreen(w)
+    // Glowtide's pages never throttle (the wallpaper widgets count as covered and would stall),
+    // so a hidden overlay would keep drawing. Throttled while hidden, it stops.
+    if (hide && w.isVisible()) {
+      w.webContents.setBackgroundThrottling(true)
+      w.hide()
+    } else if (!hide && !w.isVisible()) {
+      w.webContents.setBackgroundThrottling(false)
+      w.showInactive()
+    }
+  }
+  const id = filledDisplay()
+  widgets?.setCovered(id)
+  if (state.fullscreenApp !== (id !== null)) {
+    state.fullscreenApp = id !== null
+    broadcast()
+  }
+}
+
+/** The watcher runs only while there's an overlay or widget it could hide. */
+function syncFullscreenWatch() {
+  const s = loadSettings()
+  const want =
+    s.hideForFullscreen &&
+    (s.glow.enabled || s.lyrics.overlay || s.widgets.viz.enabled || s.widgets.clock.enabled)
+  if (want) fullscreen.start()
+  else fullscreen.stop()
+  applyFullscreen()
 }
 
 function syncOverlays() {
@@ -708,6 +787,7 @@ function syncOverlays() {
     lyricsWin = overlayWindow(target.bounds, 'lyrics')
     lyricsDisplayId = target.id
   }
+  syncFullscreenWatch()
   rebuildTray()
 }
 
@@ -754,9 +834,18 @@ function rebuildTray() {
       },
       { label: 'Full screen (Ctrl+Alt+F)', click: () => widgets?.openStage() },
       { type: 'separator' },
+      ...(state.update?.status === 'ready'
+        ? [{ label: `Restart to update to ${state.update.version}`, click: installUpdate }]
+        : []),
       { label: 'Quit Glowtide', click: () => ((quitting = true), app.quit()) }
     ])
   )
+}
+
+function installUpdate() {
+  if (state.update?.status !== 'ready') return false
+  quitting = true // the player's close button only hides it; this is a real quit
+  return updater.install()
 }
 
 function setSettings(patch) {
@@ -774,6 +863,7 @@ function setSettings(patch) {
   const next = updateSettings(patch)
   if (placeKey(next) !== prevWidgets) {
     widgets?.sync()
+    syncFullscreenWatch()
     rebuildTray() // the Move entries follow which widgets are on
   }
   if (
@@ -781,6 +871,8 @@ function setSettings(patch) {
     JSON.stringify([next.lyrics.overlay, next.lyrics.display]) !== prevLyr
   )
     syncOverlays()
+  else if (next.hideForFullscreen !== before.hideForFullscreen) syncFullscreenWatch()
+  if (next.autoUpdate && !before.autoUpdate) updater.check()
   sendSettings()
   syncAwake()
   return next
@@ -793,6 +885,8 @@ function registerIpc() {
     ipcMain.handle(ch, (e, ...args) => (trustedSender(e) ? fn(e, ...args) : undefined))
   const on = (ch, fn) => ipcMain.on(ch, (e, ...args) => trustedSender(e) && fn(e, ...args))
   handle('init', () => ({ state, settings: loadSettings(), lyrics: lyricsLines }))
+  handle('update:check', () => updater.check())
+  handle('update:install', () => installUpdate())
   handle('settings:set', (_, patch) => setSettings(patch))
   handle('control', (_, action, arg) => control(action, arg))
   handle('query', (_, kind, arg) => query(kind, arg))
@@ -972,6 +1066,51 @@ function scheduleSnapshot() {
       mkdirSync(dir, { recursive: true })
       writeFileSync(join(dir, 'eval.json'), JSON.stringify(out, null, 1))
     }, 9000)
+  // GLOWTIDE_FS_TEST=1: log whether each overlay is showing, on every change, for 40 s, into
+  // fs.json (open a full-screen app meanwhile to see them step aside).
+  if (process.env.GLOWTIDE_FS_TEST) {
+    const log = []
+    let last = ''
+    const t0 = Date.now()
+    const tick = setInterval(() => {
+      const now = JSON.stringify({
+        fullscreenApp: state.fullscreenApp,
+        glow: glowWins.map((w) => !w.isDestroyed() && w.isVisible()),
+        lyrics: !!lyricsWin && lyricsWin.isVisible(),
+        widgets: widgets?.windows().map((w) => w.isVisible()),
+        watching: fullscreen.running()
+      })
+      if (now !== last) log.push({ s: (Date.now() - t0) / 1000, ...JSON.parse(now) })
+      last = now
+      // CPU of the whole app, in cores, every two seconds
+      if (log.length && Date.now() - (tick.cpuAt || 0) > 2000) {
+        tick.cpuAt = Date.now()
+        const names = new Map()
+        for (const w of BrowserWindow.getAllWindows())
+          names.set(
+            w.webContents.getOSProcessId(),
+            w === player
+              ? 'player'
+              : w === lyricsWin
+                ? 'lyrics'
+                : glowWins.includes(w)
+                  ? 'glow'
+                  : 'widget'
+          )
+        const by = {}
+        for (const m of app.getAppMetrics()) {
+          const k = names.get(m.pid) || m.type
+          by[k] = +((by[k] || 0) + (m.cpu.percentCPUUsage * os.cpus().length) / 100).toFixed(2)
+        }
+        log.push({ s: (Date.now() - t0) / 1000, full: state.fullscreenApp, ...by })
+      }
+      if (Date.now() - t0 > 40000) {
+        clearInterval(tick)
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(join(dir, 'fs.json'), JSON.stringify(log, null, 1))
+      }
+    }, 250)
+  }
   // GLOWTIDE_SEC_TEST=1 (with the YouTube source): try what the guards in security.js refuse,
   // from Glowtide's own page and from YouTube's frame inside it, into sec.json.
   if (process.env.GLOWTIDE_SEC_TEST)
@@ -1169,6 +1308,7 @@ else {
       }
     })
     widgets.sync()
+    syncFullscreenWatch()
     tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
     tray.setToolTip('Glowtide')
     // Ctrl+Alt+L turns the lyrics overlay on and off from anywhere.
@@ -1194,11 +1334,15 @@ else {
       screen.on(ev, () => syncOverlays())
     poll()
     scheduleSnapshot()
+    state.update = { ...updater.state }
+    updater.start()
   })
 
   app.on('before-quit', () => {
     quitting = true
     globalShortcut.unregisterAll()
+    updater.stop()
+    fullscreen.stop()
     smtc.stop()
     widgets?.stop()
   })

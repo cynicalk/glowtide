@@ -66,7 +66,11 @@ export default function Player() {
         '--hi-text': colours.highlightText
       }}
     >
-      <TitleBar tag={screen === 'player' ? tag : null} maximized={state.playerMaximized} />
+      <TitleBar
+        tag={screen === 'player' ? tag : null}
+        maximized={state.playerMaximized}
+        update={state.update}
+      />
       {screen === 'welcome' && <Welcome state={state} setPanel={setPanel} />}
       {screen === 'spotify-setup' && (
         <Connect state={state} settings={settings} onBack={() => api.setSource(null)} />
@@ -121,11 +125,20 @@ const PANEL_TITLES = {
   settings: 'Settings'
 }
 
-function TitleBar({ tag, maximized }) {
+function TitleBar({ tag, maximized, update }) {
   return (
     <div className="titlebar">
       <span className="brand">Glowtide{tag && <span className="tag">{tag}</span>}</span>
       <div className="winbtns">
+        {update?.status === 'ready' && (
+          <button
+            className="update-ready"
+            title={`Glowtide ${update.version} is downloaded. Restart to install it.`}
+            onClick={() => api.installUpdate()}
+          >
+            Restart to update
+          </button>
+        )}
         <button aria-label="Minimise" onClick={() => api.windowAction('minimize')}>
           <Minus size={14} />
         </button>

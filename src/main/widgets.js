@@ -20,6 +20,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
   const wins = { viz: null, clock: null }
   let stage = null
   let hidden = false
+  let coveredDisplay = null // a display another app fills full screen: its widgets pause
   let saveTimer = null
 
   function boundsFor(kind) {
@@ -97,8 +98,31 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
     } else {
       win.showInactive()
     }
-    if (hidden && place !== 'edit') win.hide()
+    if (place !== 'edit' && shouldHide(kind)) setShown(win, false)
     return win
+  }
+
+  /** Hidden by Ctrl+Alt+M, or behind a full-screen app on its display. */
+  function shouldHide(kind) {
+    if (hidden) return true
+    return (
+      coveredDisplay !== null && screen.getDisplayMatching(boundsFor(kind)).id === coveredDisplay
+    )
+  }
+
+  // Glowtide's pages never throttle, so a hidden widget would keep drawing; throttled, it stops.
+  function setShown(w, show) {
+    if (show === w.isVisible()) return
+    w.webContents.setBackgroundThrottling(!show)
+    if (show) w.showInactive()
+    else w.hide()
+  }
+
+  function applyHidden() {
+    for (const kind of ['viz', 'clock']) {
+      const w = wins[kind]
+      if (w && !w.isDestroyed() && !editing[kind]) setShown(w, !shouldHide(kind))
+    }
   }
 
   async function sync() {
@@ -121,7 +145,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
   const guard = setInterval(async () => {
     for (const kind of ['viz', 'clock']) {
       const w = wins[kind]
-      if (!w || w.isDestroyed() || w.widgetPlace !== 'wallpaper' || hidden) continue
+      if (!w || w.isDestroyed() || w.widgetPlace !== 'wallpaper' || !w.isVisible()) continue
       if ((await wall.check(w)) === 'loose') {
         const b = boundsFor(kind)
         await wall.attach(w, b, screen.getDisplayMatching(b).scaleFactor)
@@ -166,9 +190,14 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
 
   function toggleHidden() {
     hidden = !hidden
-    for (const w of Object.values(wins))
-      if (w && !w.isDestroyed()) hidden ? w.hide() : w.showInactive()
+    applyHidden()
     return hidden
+  }
+
+  /** The display (id) another app fills full screen, or null. */
+  function setCovered(displayId) {
+    coveredDisplay = displayId ?? null
+    applyHidden()
   }
 
   function openStage(display) {
@@ -210,6 +239,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
     resize,
     sizeOf: (kind) => wins[kind]?.getBounds(),
     toggleHidden,
+    setCovered,
     openStage,
     closeStage,
     toggleStage: (d) => (stage && !stage.isDestroyed() ? closeStage() : openStage(d)),

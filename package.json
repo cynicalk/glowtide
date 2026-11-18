@@ -1,6 +1,6 @@
 {
   "name": "glowtide",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A music companion for Windows: album-coloured edge glow, kinetic lyrics and desktop visualizers for Spotify, YouTube Music and any app",
   "main": "./out/main/index.js",
   "author": "Glowtide",
@@ -17,7 +17,8 @@
     "build:icon": "electron scripts/build-icon.mjs"
   },
   "dependencies": {
-    "@electron-toolkit/utils": "^4.0.0"
+    "@electron-toolkit/utils": "^4.0.0",
+    "electron-updater": "^6.8.11"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config": "^3.0.0",

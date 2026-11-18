@@ -6,9 +6,10 @@ with no setup, or plays **YouTube Music (free)** and controls **Spotify** itself
 
 ## Install
 
-1. Download `Glowtide-<version>-setup.exe` from the latest release and run it. It installs for
-   your Windows account only (no administrator prompt), starts Glowtide, and adds Start menu and
-   desktop shortcuts.
+1. Download `Glowtide-<version>-setup.exe` from the
+   [latest release](https://github.com/cynicalk/glowtide-releases/releases/latest) and run it. It
+   installs for your Windows account only (no administrator prompt), starts Glowtide, and adds
+   Start menu and desktop shortcuts.
 2. The installer isn't code-signed yet, so Windows SmartScreen may say "Windows protected
    your PC". Choose **More info → Run anyway**.
 3. Glowtide lives in the tray (by the clock). Closing its window hides it there; quit from the
@@ -17,15 +18,21 @@ with no setup, or plays **YouTube Music (free)** and controls **Spotify** itself
 Settings, sign-in tokens and `glowtide.log` (errors, if any) are in `%APPDATA%Glowtide`.
 Uninstall from Settings → Apps; your settings folder is kept unless you delete it.
 
+**Updates.** From 1.0.3, Glowtide checks the latest release in `cynicalk/glowtide-releases` when it
+starts and every six hours, downloads a newer one in the background, and shows **Restart to update** in its title
+bar and tray menu. Declined, it installs the next time Glowtide quits. Settings → Updates has
+**Check now** and a switch to stop automatic checks. The download is checked against the
+SHA-512 in the release's `latest.yml` before it runs.
+
 ## Music sources
 
-| | Costs | Playback | Library |
-|---|---|---|---|
-| **Any app** (recommended) | Free, no setup | Whatever is playing: Spotify (free or Premium), YouTube Music or YouTube in a browser, Apple Music, TIDAL, foobar2000… | Lives in that app. Glowtide follows it and sends play/pause/skip/seek where the app allows |
-| **YouTube Music** | Free | YouTube's official embedded player, inside Glowtide | Paste any link with no account. Sign in with Google for your playlists, liked music and search |
-| **Spotify Premium** | Premium | Spotify app, controlled from Glowtide | Liked songs, playlists, recent, search, queue, devices |
-| **Spotify Free** | Free | Spotify app | Glowtide *follows* what plays: glow, lyrics and colours work, but Spotify doesn't allow remote control |
-| **Demo** | Free | Built-in tracks | Preview every style with no account |
+|                           | Costs          | Playback                                                                                                               | Library                                                                                            |
+| ------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Any app** (recommended) | Free, no setup | Whatever is playing: Spotify (free or Premium), YouTube Music or YouTube in a browser, Apple Music, TIDAL, foobar2000… | Lives in that app. Glowtide follows it and sends play/pause/skip/seek where the app allows             |
+| **YouTube Music**         | Free           | YouTube's official embedded player, inside Glowtide                                                                        | Paste any link with no account. Sign in with Google for your playlists, liked music and search     |
+| **Spotify Premium**       | Premium        | Spotify app, controlled from Glowtide                                                                                      | Liked songs, playlists, recent, search, queue, devices                                             |
+| **Spotify Free**          | Free           | Spotify app                                                                                                            | Glowtide _follows_ what plays: glow, lyrics and colours work, but Spotify doesn't allow remote control |
+| **Demo**                  | Free           | Built-in tracks                                                                                                        | Preview every style with no account                                                                |
 
 Switch sources from the Welcome screen, Settings → Music source, or the tray icon.
 
@@ -64,6 +71,7 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 
   The player says which one is showing ("Word-timed lyrics · AMLL TTML DB" or "word timing
   estimated"), and only measured timing gets the karaoke fill.
+
 - **Lyric styles**:
   - **Stack**: the word or line big in the middle.
   - **Aura**: the lyric over a soft, drifting cloud of the cover's colours.
@@ -83,6 +91,10 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   - Which display the overlay uses.
   - Keep the screen awake while music plays.
   - The overlay steps aside while Glowtide's own window is in use. Ctrl+Alt+L toggles it.
+- **Full-screen apps**: while a game, a full-screen video or a presentation fills a display,
+  the glow, the lyrics and the desktop widgets on that display hide and stop drawing, then
+  come back when it closes. A small helper (`resources/fullscreen.ps1`) looks at the window in
+  front once a second. Settings → Lyrics overlay → Hide for full-screen apps turns it off.
 - **Colours**: a 5-swatch palette from each cover. Pick which swatch drives the glow, the
   lyrics and the highlight, then adjust brightness and saturation. Dark picks are lifted so
   they stay readable. Or choose Custom. Colours crossfade between songs.
@@ -116,11 +128,11 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   - Music plays in the Spotify app, because playing inside Glowtide would need Widevine DRM.
 - **Word-timed lyrics are limited**: the AMLL database has about 3,500 songs, mostly Chinese
   and Japanese, with some Western pop (Taylor Swift, The Weeknd, Sabrina Carpenter…).
-  Everything else falls back to LRCLIB, timed by line with words *estimated*. The index
+  Everything else falls back to LRCLIB, timed by line with words _estimated_. The index
   (~1.7 MB) is downloaded at most once a day. Background vocals and translations in TTML
   files are skipped for now.
 - **Lyrics** from LRCLIB are timed by line. Word timing within a line is
-  *estimated*. Songs with only untimed lyrics get no overlay. YouTube lyrics are matched by
+  _estimated_. Songs with only untimed lyrics get no overlay. YouTube lyrics are matched by
   title, so a music video with an intro may need the ±0.25 s nudge.
 - **No lock screen.** Windows doesn't let apps draw there.
 
@@ -130,6 +142,7 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 chooses which app to follow when several are playing.
 
 **YouTube**
+
 - **No setup needed for links:** choose YouTube Music and paste a link.
 - **For your library:**
   1. In Google Cloud, enable **YouTube Data API v3**.
@@ -138,6 +151,7 @@ chooses which app to follow when several are playing.
   4. Paste its ID and secret in Library.
 
 **Spotify**
+
 1. Create an app at <https://developer.spotify.com/dashboard> and choose Web API.
 2. Add the redirect URI `http://127.0.0.1:43821/callback`.
 3. Paste the Client ID and press **Connect Spotify**.
@@ -155,6 +169,12 @@ npm run build:win    # lint + tests + build, then the installer in dist/
 npm run build:icon   # re-render build/icon.ico and the tray icon from scripts/build-icon.mjs
 ```
 
+To release: `npm run build:win`, then attach `Glowtide-<version>-setup.exe`, its `.blockmap` and
+`latest.yml` from `dist/` to a release in the public `cynicalk/glowtide-releases` repository
+(not a draft or pre-release).
+This source repository is private, so installed copies can't read its releases. They update from whichever full release is marked latest; without `latest.yml` they
+can't see it.
+
 The installer is unsigned. To sign it, set `CSC_LINK` (a .pfx path or base64) and
 `CSC_KEY_PASSWORD` before `build:win`; electron-builder picks them up.
 
@@ -171,6 +191,11 @@ or `npx electron .` after `npm run build`); a packaged copy ignores every one of
   `$env:GLOWTIDE_SYS_TEST=<app id>` follows that app; add `GLOWTIDE_SYS_TEST_CMD="pause"` to send a
   command after 6 s.
   `$env:GLOWTIDE_DEBUG=1` logs player messages.
+- `$env:GLOWTIDE_FS_TEST=1` (with `GLOWTIDE_SNAPSHOT`) logs, for 40 s, whether each overlay and
+  widget is showing and the CPU of each window, into `fs.json`.
+- `$env:GLOWTIDE_UPDATE_FEED="http://127.0.0.1:8899/"` updates a development run from a local
+  folder of `latest.yml` and an installer (needs a `dev-app-update.yml` in the project);
+  add `GLOWTIDE_UPDATE_INSTALL=1` to install as soon as it has downloaded.
 
 ## Layout
 
@@ -182,7 +207,8 @@ src/main/      Electron main: OAuth (PKCE), Spotify + YouTube clients, YouTube p
                media-session helper supervisor, LRCLIB, windows, tray
 scripts/       build-sky.mjs: regenerates src/shared/skyData.mjs from d3-celestial;
                build-icon.mjs: renders the app icon
-resources/     smtc.ps1: the Windows media-session helper (unpacked from the asar)
+resources/     smtc.ps1: the Windows media-session helper; fullscreen.ps1: spots full-screen
+               apps; wallpaper.ps1: puts widgets on the wallpaper (all unpacked from the asar)
 src/preload/   window.glowtide bridge
 src/renderer/  React: #/player, #/glow, #/lyrics
 ```

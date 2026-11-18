@@ -26,3 +26,13 @@ nsis:
   createDesktopShortcut: always
   oneClick: true
 npmRebuild: false
+# Electron's build-time switches: the packaged app can't be turned into a plain Node.js
+# runtime, can't be steered through NODE_OPTIONS or --inspect, loads its code only from
+# app.asar, and refuses to start if app.asar has been changed after the build.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+  enableCookieEncryption: true

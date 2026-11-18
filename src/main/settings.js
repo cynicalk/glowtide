@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
+import { mergeSettings } from '../shared/settingsMerge.mjs'
 
 export const DEFAULT_SETTINGS = {
   source: null, // 'system' | 'spotify' | 'youtube' | 'demo' | null (not chosen yet)
@@ -80,17 +81,8 @@ export const DEFAULT_SETTINGS = {
 
 const file = () => join(app.getPath('userData'), 'settings.json')
 
-function isObj(v) {
-  return v && typeof v === 'object' && !Array.isArray(v)
-}
-
-export function deepMerge(base, patch) {
-  const out = { ...base }
-  for (const [k, v] of Object.entries(patch || {})) {
-    out[k] = isObj(v) && isObj(base[k]) ? deepMerge(base[k], v) : v
-  }
-  return out
-}
+/** Merge a change into settings, keeping only known keys of the right shape. */
+export const deepMerge = mergeSettings
 
 let current = null
 

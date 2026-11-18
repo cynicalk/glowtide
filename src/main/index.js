@@ -30,10 +30,11 @@ import { extractPalette } from '../shared/colour.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
 import { appLabel, systemTrack, repeatFromSmtc } from '../shared/media.mjs'
 import { createSmtc } from './smtc'
+import { hardenContents, hardenSession, isSafeExternal, trustedSender } from './security'
 
 // The GLOWTIDE_* test hooks (snapshots, probes, separate profiles) only work in a development
-// run, or in a packaged build started with GLOWTIDE_DEV=1. An installed copy ignores them.
-const DEV = !app.isPackaged || process.env.GLOWTIDE_DEV === '1'
+// run. A packaged copy ignores them all, so nothing in the environment can steer it.
+const DEV = !app.isPackaged
 
 // A main-process error is written to glowtide.log in the settings folder rather than shown as
 // Electron's raw "A JavaScript error occurred" dialog. The log is kept under 1 MB.
@@ -151,6 +152,7 @@ function ytCommand(action, arg) {
 
 async function paletteFor(url) {
   try {
+    if (!/^(https:|data:image\/)/i.test(url || '')) return null
     const buf = url.startsWith('data:')
       ? Buffer.from(url.slice(url.indexOf(',') + 1), 'base64')
       : Buffer.from(await (await fetch(url)).arrayBuffer())
@@ -464,6 +466,8 @@ async function control(action, arg) {
       return { error: `Use ${state.systemApp?.label || 'the app'} for that.` }
     if (!allowed[action])
       return { error: `${state.systemApp?.label || 'This app'} doesn't allow that from outside.` }
+    // one plain value at most: a seek position, on/off, or a repeat mode
+    if (arg !== undefined && !/^[\w.-]{1,32}$/.test(String(arg))) return { error: 'Bad value.' }
     smtc.send(`${action}${arg !== undefined ? ` ${arg}` : ''}`)
     if (state.playback && (action === 'play' || action === 'pause')) {
       state.playback = { ...state.playback, isPlaying: action === 'play', at: Date.now() }
@@ -479,11 +483,16 @@ async function control(action, arg) {
     if (action === 'shuffle') ytShuffle = !!arg
     if (action === 'repeat') ytRepeat = arg
     if (action === 'playItems') {
-      for (const v of arg.items || []) ytMeta.set(v.videoId, v)
+      // YouTube ids only: 11 characters for a video, a short token for a playlist
+      const items = (Array.isArray(arg?.items) ? arg.items : []).filter((v) =>
+        /^[\w-]{11}$/.test(v?.videoId)
+      )
+      const playlistId = /^[\w-]{2,64}$/.test(arg?.playlistId) ? arg.playlistId : undefined
+      for (const v of items) ytMeta.set(v.videoId, v)
       ytCommand('load', {
-        videoIds: arg.items?.map((v) => v.videoId),
-        playlistId: arg.playlistId,
-        index: arg.index || 0
+        videoIds: items.length ? items.map((v) => v.videoId) : undefined,
+        playlistId,
+        index: Number.isInteger(arg?.index) ? arg.index : 0
       })
       return { ok: true }
     }
@@ -653,7 +662,7 @@ function createPlayer() {
   })
   for (const ev of ['blur', 'hide', 'minimize']) player.on(ev, () => setFocused(false))
   player.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\//.test(url)) shell.openExternal(url)
+    if (isSafeExternal(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
   load(player, 'player')
@@ -779,27 +788,31 @@ function setSettings(patch) {
 
 // ---------- ipc ----------
 function registerIpc() {
-  ipcMain.handle('init', () => ({ state, settings: loadSettings(), lyrics: lyricsLines }))
-  ipcMain.handle('settings:set', (_, patch) => setSettings(patch))
-  ipcMain.handle('control', (_, action, arg) => control(action, arg))
-  ipcMain.handle('query', (_, kind, arg) => query(kind, arg))
-  ipcMain.handle('source', (_, src) => setSource(src))
-  ipcMain.handle('system:select', (_, appId) => {
-    state.systemSelected = appId || 'auto'
+  // Every handler answers only Glowtide's own pages (not a frame inside one, like YouTube's).
+  const handle = (ch, fn) =>
+    ipcMain.handle(ch, (e, ...args) => (trustedSender(e) ? fn(e, ...args) : undefined))
+  const on = (ch, fn) => ipcMain.on(ch, (e, ...args) => trustedSender(e) && fn(e, ...args))
+  handle('init', () => ({ state, settings: loadSettings(), lyrics: lyricsLines }))
+  handle('settings:set', (_, patch) => setSettings(patch))
+  handle('control', (_, action, arg) => control(action, arg))
+  handle('query', (_, kind, arg) => query(kind, arg))
+  handle('source', (_, src) => setSource(src))
+  handle('system:select', (_, appId) => {
+    state.systemSelected = typeof appId === 'string' && appId ? appId.slice(0, 256) : 'auto'
     updateSettings({ systemApp: state.systemSelected })
     smtc.select(state.systemSelected)
     broadcast()
   })
-  ipcMain.on('yt:state', (e, m) => {
+  on('yt:state', (e, m) => {
     if (e.sender === player?.webContents) onYtMessage(m)
   })
-  ipcMain.handle('lyrics:nudge', (_, delta) => {
+  handle('lyrics:nudge', (_, delta) => {
     state.lyricsOffsetMs =
       delta === 0 ? 0 : Math.max(-5000, Math.min(5000, state.lyricsOffsetMs + delta))
     saveOffset(state.track, state.lyricsOffsetMs)
     broadcast()
   })
-  ipcMain.handle('auth:connect', async () => {
+  handle('auth:connect', async () => {
     try {
       await spotifyAuth.signIn()
       state.connected = true
@@ -812,14 +825,14 @@ function registerIpc() {
       return { error: e.message }
     }
   })
-  ipcMain.handle('auth:disconnect', () => {
+  handle('auth:disconnect', () => {
     spotifyAuth.signOut()
     state.connected = false
     state.spotifyPlan = null
     if (state.source === 'spotify') clearTrack()
     broadcast()
   })
-  ipcMain.handle('google:connect', async () => {
+  handle('google:connect', async () => {
     try {
       await googleAuth.signIn()
       state.google = true
@@ -832,28 +845,28 @@ function registerIpc() {
       return { error: e.message }
     }
   })
-  ipcMain.handle('google:disconnect', () => {
+  handle('google:disconnect', () => {
     googleAuth.signOut()
     state.google = false
     broadcast()
   })
-  ipcMain.handle('stage', (_, action) => {
+  handle('stage', (_, action) => {
     if (action === 'close') widgets?.closeStage()
     else widgets?.openStage(player && screen.getDisplayMatching(player.getBounds()))
   })
-  ipcMain.handle('widgets:toggle', () => widgets?.toggleHidden())
-  ipcMain.handle('widget:edit', (_, kind) => widgets?.edit(kind))
-  ipcMain.handle('widget:done', (_, kind) => widgets?.done(kind))
-  ipcMain.handle('widget:size', (_, kind) => widgets?.sizeOf(kind))
-  ipcMain.on('widget:resize', (_, kind, w, h) => widgets?.resize(kind, w, h))
-  ipcMain.handle('displays', () => {
+  handle('widgets:toggle', () => widgets?.toggleHidden())
+  handle('widget:edit', (_, kind) => widgets?.edit(kind))
+  handle('widget:done', (_, kind) => widgets?.done(kind))
+  handle('widget:size', (_, kind) => widgets?.sizeOf(kind))
+  on('widget:resize', (_, kind, w, h) => widgets?.resize(kind, w, h))
+  handle('displays', () => {
     const primary = screen.getPrimaryDisplay().id
     return screen.getAllDisplays().map((d, i) => ({
       id: d.id,
       label: `Display ${i + 1} · ${d.size.width}×${d.size.height}${d.id === primary ? ' (main)' : ''}`
     }))
   })
-  ipcMain.handle('window', (_, action) => {
+  handle('window', (_, action) => {
     if (action === 'minimize') player?.minimize()
     if (action === 'maximize') {
       if (player?.isFullScreen()) player.setFullScreen(false)
@@ -862,7 +875,7 @@ function registerIpc() {
     }
     if (action === 'close') player?.hide()
   })
-  ipcMain.handle('open', (_, url) => {
+  handle('open', (_, url) => {
     if (
       /^https:\/\/((developer|open|accounts)\.spotify\.com|console\.cloud\.google\.com|music\.youtube\.com)\//.test(
         url
@@ -958,6 +971,40 @@ function scheduleSnapshot() {
         .catch((e) => String(e))
       mkdirSync(dir, { recursive: true })
       writeFileSync(join(dir, 'eval.json'), JSON.stringify(out, null, 1))
+    }, 9000)
+  // GLOWTIDE_SEC_TEST=1 (with the YouTube source): try what the guards in security.js refuse,
+  // from Glowtide's own page and from YouTube's frame inside it, into sec.json.
+  if (process.env.GLOWTIDE_SEC_TEST)
+    setTimeout(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+      const capture =
+        "navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then((s) => { const n = s.getAudioTracks().length; s.getTracks().forEach((t) => t.stop()); return 'granted, audio tracks: ' + n }, (e) => 'refused: ' + e.name)"
+      const out = {}
+      const wc = player.webContents
+      out.appCapture = await wc.executeJavaScript(capture, true).catch((e) => 'error ' + e.message)
+      const yt = wc.mainFrame.frames.find((fr) => fr.url.startsWith(YT_HOST_ORIGIN))
+      out.ytFrame = yt ? yt.url : 'no frame'
+      out.ytCapture = yt
+        ? await yt.executeJavaScript(capture, true).catch((e) => 'error ' + e.message)
+        : null
+      out.ytHasBridge = yt ? await yt.executeJavaScript('typeof window.glowtide') : null
+      out.ytGeolocation = yt
+        ? await yt.executeJavaScript(
+            "navigator.permissions.query({ name: 'geolocation' }).then((p) => p.state)",
+            true
+          )
+        : null
+      const before = wc.getURL()
+      await wc.executeJavaScript("location.href = 'https://example.com/'; 1")
+      await wait(1500)
+      out.navigationBlocked = wc.getURL() === before
+      const windowsBefore = BrowserWindow.getAllWindows().length
+      await wc.executeJavaScript("window.open('file:///C:/Windows/win.ini'); 1", true)
+      await wait(800)
+      out.popupBlocked = BrowserWindow.getAllWindows().length === windowsBefore
+      out.devToolsAllowed = wc.isDevToolsOpened() || null
+      mkdirSync(dir, { recursive: true })
+      writeFileSync(join(dir, 'sec.json'), JSON.stringify(out, null, 1))
     }, 9000)
   // GLOWTIDE_UNFOCUS=1: hand focus to a throwaway window so the overlay shows, as when using another app.
   if (process.env.GLOWTIDE_UNFOCUS)
@@ -1070,6 +1117,8 @@ function scheduleSnapshot() {
 // never touches the user's settings or closes the Glowtide they have open.
 if (DEV && process.env.GLOWTIDE_PROFILE) app.setPath('userData', process.env.GLOWTIDE_PROFILE)
 
+hardenContents()
+
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
   app.on('second-instance', () => {
@@ -1098,13 +1147,11 @@ else {
       state.error = `YouTube player couldn't start (${e.message}).`
     }
 
-    // Edge glow reacts to what the PC is playing: system audio loopback, never the microphone.
-    session.defaultSession.setDisplayMediaRequestHandler((_req, cb) => {
-      desktopCapturer
-        .getSources({ types: ['screen'] })
-        .then((sources) => cb({ video: sources[0], audio: 'loopback' }))
-        .catch(() => cb({}))
-    })
+    // Edge glow reacts to what the PC is playing: system audio loopback, never the
+    // microphone, and only for Glowtide's own pages (see security.js).
+    hardenSession(session.defaultSession, () =>
+      desktopCapturer.getSources({ types: ['screen'] }).then((sources) => sources[0])
+    )
 
     loadAmllIndex() // warm the word-timed lyrics index so the first song doesn't wait
     registerIpc()

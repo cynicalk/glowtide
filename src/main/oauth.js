@@ -11,6 +11,13 @@ import { join } from 'path'
 export const REDIRECT_PORT = 43821
 export const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`
 
+// The sign-in page is shown in the user's browser, so anything placed in it is escaped.
+const esc = (s) =>
+  String(s).replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+  )
+
 const b64url = (buf) =>
   buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
@@ -104,14 +111,29 @@ export function createOAuth({ name, label, authUrl, tokenUrl, scopes, extraAuth 
     const challenge = b64url(createHash('sha256').update(verifier).digest())
     const state = b64url(randomBytes(12))
     const page = (msg) =>
-      `<!doctype html><meta charset=utf-8><body style="background:#070608;color:#f3ece6;font:16px 'Segoe UI';display:grid;place-items:center;height:100vh;margin:0"><div>${msg}</div>`
+      `<!doctype html><meta charset=utf-8><body style="background:#070608;color:#f3ece6;font:16px 'Segoe UI';display:grid;place-items:center;height:100vh;margin:0"><div>${esc(msg)}</div>`
 
     return new Promise((resolve, reject) => {
       const server = createServer(async (req, res) => {
+        // Only the browser coming back from the provider, addressed as 127.0.0.1 (a page
+        // that rebinds its own domain to this machine arrives with another Host and is refused).
+        if (req.method !== 'GET' || req.headers.host !== `127.0.0.1:${REDIRECT_PORT}`)
+          return res.writeHead(403).end()
         const url = new URL(req.url, REDIRECT_URI)
         if (url.pathname !== '/callback') return res.writeHead(404).end()
+        // A response without this sign-in's state is not the provider's: ignore it rather
+        // than letting it cancel the sign-in that is under way.
+        if (url.searchParams.get('state') !== state) return res.writeHead(400).end()
         const done = (ok, msg) => {
-          res.writeHead(200, { 'Content-Type': 'text/html' }).end(page(msg))
+          res
+            .writeHead(200, {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+              'X-Content-Type-Options': 'nosniff',
+              'Referrer-Policy': 'no-referrer',
+              'Cache-Control': 'no-store'
+            })
+            .end(page(msg))
           server.close()
           pendingServer = null
           ok ? resolve() : reject(new Error(msg))
@@ -119,8 +141,7 @@ export function createOAuth({ name, label, authUrl, tokenUrl, scopes, extraAuth 
         const err = url.searchParams.get('error')
         const code = url.searchParams.get('code')
         if (err) return done(false, `${label} sign-in was cancelled (${err}).`)
-        if (url.searchParams.get('state') !== state || !code)
-          return done(false, 'Sign-in response did not match. Try again.')
+        if (!code) return done(false, 'Sign-in response did not match. Try again.')
         try {
           await tokenRequest({
             grant_type: 'authorization_code',

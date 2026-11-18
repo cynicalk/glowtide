@@ -37,6 +37,9 @@ export function createSpotify(auth) {
   async function call(method, path, { query, body, retry = true } = {}) {
     const token = await getAccessToken()
     const url = new URL(path.startsWith('http') ? path : `https://api.spotify.com/v1${path}`)
+    // The access token goes to Spotify's API and nowhere else, whatever address is passed.
+    if (url.origin !== 'https://api.spotify.com')
+      throw new SpotifyError(0, 'Not a Spotify API address.')
     for (const [k, v] of Object.entries(query || {}))
       if (v !== undefined && v !== null) url.searchParams.set(k, v)
     const res = await fetch(url, {
@@ -107,8 +110,9 @@ export function createSpotify(auth) {
     likedTracks: (offset = 0) => call('GET', '/me/tracks', { query: { limit: 50, offset } }),
     playlists: (offset = 0) => call('GET', '/me/playlists', { query: { limit: 50, offset } }),
     playlistTracks: (id, offset = 0) =>
-      call('GET', `/playlists/${id}/tracks`, { query: { limit: 100, offset } }),
-    albumTracks: (id) => call('GET', `/albums/${id}/tracks`, { query: { limit: 50 } }),
+      call('GET', `/playlists/${encodeURIComponent(id)}/tracks`, { query: { limit: 100, offset } }),
+    albumTracks: (id) =>
+      call('GET', `/albums/${encodeURIComponent(id)}/tracks`, { query: { limit: 50 } }),
     recent: () => call('GET', '/me/player/recently-played', { query: { limit: 30 } }),
     isLiked: (id) => call('GET', '/me/tracks/contains', { query: { ids: id } }),
     setLiked: (id, on) => call(on ? 'PUT' : 'DELETE', '/me/tracks', { query: { ids: ids([id]) } })

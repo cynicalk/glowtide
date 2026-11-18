@@ -97,10 +97,15 @@ setInterval(report, 1000)
 export function startYtHost() {
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
+      // Addressed as 127.0.0.1 only: a website rebinding its domain to this machine
+      // arrives with its own Host and is refused.
+      if (req.method !== 'GET' || req.headers.host !== `127.0.0.1:${YT_HOST_PORT}`)
+        return res.writeHead(403).end()
       if (req.url === '/yt' || req.url.startsWith('/yt?')) {
         res.writeHead(200, {
           'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'no-store'
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff'
         })
         res.end(PAGE)
       } else res.writeHead(404).end()

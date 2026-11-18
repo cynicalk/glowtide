@@ -2,6 +2,7 @@
 // Started only while the "Any app" source is selected, restarted if it dies.
 
 import { spawn } from 'child_process'
+import { POWERSHELL, oneLine } from './powershell'
 import { app } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
@@ -23,7 +24,7 @@ export function createSmtc(onMessage) {
   function start() {
     if (child || !wanted) return
     child = spawn(
-      'powershell.exe',
+      POWERSHELL,
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath()],
       { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
     )
@@ -76,7 +77,7 @@ export function createSmtc(onMessage) {
   }
 
   function send(line) {
-    if (child?.stdin.writable) child.stdin.write(`${line}\n`)
+    if (child?.stdin.writable) child.stdin.write(`${oneLine(line)}\n`)
   }
 
   return {

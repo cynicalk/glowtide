@@ -158,8 +158,8 @@ npm run build:icon   # re-render build/icon.ico and the tray icon from scripts/b
 The installer is unsigned. To sign it, set `CSC_LINK` (a .pfx path or base64) and
 `CSC_KEY_PASSWORD` before `build:win`; electron-builder picks them up.
 
-PowerShell variables used for debugging. They work in `npm run dev` and in an unpacked build
-started with `$env:GLOWTIDE_DEV=1`; an installed copy ignores them.
+PowerShell variables used for debugging. They work only in a development run (`npm run dev`
+or `npx electron .` after `npm run build`); a packaged copy ignores every one of them.
 
 - `$env:GLOWTIDE_PROFILE="C:somewhere"` uses a separate settings folder, so a test run never
   touches your real settings or closes the Glowtide you have open.

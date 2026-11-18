@@ -2,6 +2,7 @@
 // (behind the icons and every application window). Requests are answered in order.
 
 import { spawn } from 'child_process'
+import { POWERSHELL, oneLine } from './powershell'
 import { app } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
@@ -21,7 +22,7 @@ export function createWallpaper() {
   function ensure() {
     if (child) return
     child = spawn(
-      'powershell.exe',
+      POWERSHELL,
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script()],
       { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] }
     )
@@ -55,7 +56,7 @@ export function createWallpaper() {
     ensure()
     return new Promise((resolve) => {
       waiting.push(resolve)
-      child.stdin.write(`${line}\n`)
+      child.stdin.write(`${oneLine(line)}\n`)
       setTimeout(() => {
         const i = waiting.indexOf(resolve)
         if (i >= 0) {

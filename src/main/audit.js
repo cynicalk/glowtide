@@ -116,6 +116,10 @@ export async function runAudit(c, dir) {
 
   // ---------- the rail ----------
   await step('rail', async () => {
+    // start from the cover view (the window remembers lyrics left open last time)
+    if (await has(c.player, '.np.lyrics-open'))
+      await click('.rail [aria-label="Lyrics in this window"]')
+    await wait(300)
     await click('.rail [aria-label="Lyrics in this window"]')
     await wait(500)
     check(

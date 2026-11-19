@@ -572,6 +572,18 @@ export default function SettingsPanel({ state, settings, onClose }) {
             <h3>Glowtide</h3>
           </div>
           <div className="srow">
+            <span>Start with Windows</span>
+            <Toggle
+              label="Start Glowtide when you sign in to Windows"
+              on={settings.startWithWindows !== false}
+              onChange={(v) => set({ startWithWindows: v })}
+            />
+          </div>
+          <p className="fine">
+            Glowtide starts in the tray when you sign in, with the glow and lyrics ready and the window
+            closed.
+          </p>
+          <div className="srow">
             <span>Button hints</span>
             <Toggle
               label="Show a short description when the pointer rests on a button"

@@ -107,7 +107,10 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 - **Tray**: click the icon for quick settings beside it (gradient, animation, taskbar,
   thickness, glow, override colours, display, desktop lyrics, taskbar button, updates, open
   and quit); double-click for the player; right-click for the menu. Closing the window hides
-  it to the tray. **Show in taskbar** off keeps Glowtide in the tray only.
+  it to the tray. **Show in taskbar** off keeps Glowtide in the tray only. Hovering the taskbar
+  button shows previous, play/pause and next under the preview.
+- **Start with Windows** (Settings → App, on by default in installed copies): Glowtide starts in
+  the tray when you sign in, with the glow and lyrics ready and the window closed.
 
 ## Honest limits
 
@@ -141,7 +144,8 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   (~1.7 MB) is downloaded at most once a day. Background vocals and translations in TTML
   files are skipped for now.
 - **Lyrics** from LRCLIB are timed by line. Word timing within a line is
-  _estimated_. Songs with only untimed lyrics get no overlay. YouTube lyrics are matched by
+  _estimated_. Songs with only untimed lyrics get no overlay; the player shows the
+  text to read along, scrolling with the song (a guess from how far in it is, labelled so). YouTube lyrics are matched by
   title, so a music video with an intro may need the ±0.25 s nudge.
 - **No lock screen.** Windows doesn't let apps draw there.
 
@@ -212,6 +216,8 @@ or `npx electron .` after `npm run build`); a packaged copy ignores every one of
   at 2.5 s, and `$env:GLOWTIDE_HOVER="<selector>"` rests the pointer on that element of the player
   (or the tray panel, with `GLOWTIDE_HOVER_IN=quick`) so hover states show. `state.json` also
   records each glow window's bounds.
+- `$env:GLOWTIDE_PLAIN_TEST=1` (with `GLOWTIDE_DEMO`) serves the demo's lyrics untimed, to see the
+  read-along view.
 - `$env:GLOWTIDE_PROBE_JS="<js>"` (with `GLOWTIDE_SNAPSHOT`) runs in the lyrics overlay, or in the
   window `GLOWTIDE_PROBE_IN` names (`player`, `stage`), at `GLOWTIDE_PROBE_AT` ms (default 3000), and
   writes what it returns, awaited if it's a promise, to `probe.json`.

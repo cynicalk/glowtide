@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS = {
   awake: false, // keep the screen awake while music plays
   hideForFullscreen: true, // the glow and lyrics overlay hide while another app is full screen
   autoUpdate: true, // check GitHub releases and download updates in the background
+  startWithWindows: true, // start (in the tray, window closed) when you sign in to Windows
   showInTaskbar: true, // the player has a taskbar button (off: it lives in the tray only)
   hints: true, // a short description when the pointer rests on a button
   reduceMotion: false, // Glowtide's own switch: covers and messages hold still (Windows' is ignored)

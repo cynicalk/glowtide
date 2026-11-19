@@ -2,8 +2,9 @@
 //
 // LRCLIB gives line-level timestamps only. Word timing here is an ESTIMATE,
 // spread across each line by word length. Callers must not present it as
-// measured. If a song has only plain (untimed) lyrics, we return no lines,
-// because inventing timing for a whole song would be worse than showing nothing.
+// measured. If a song has only plain (untimed) lyrics, they come as plainLines() with no
+// times at all: shown to read along, never timed, because inventing timing for a whole
+// song would be worse than showing nothing.
 
 const TIME_TAG = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g
 // Enhanced (A2) LRC puts per-word times inside the line: [00:12.00]<00:12.00>Hey <00:12.40>you
@@ -237,4 +238,19 @@ export function karaokeAt(lines, posMs, { countFromMs = 3000, breakMs = 4000 } =
     if (gap >= breakMs && left > 0 && left <= countFromMs) countdown = Math.ceil(left / 1000)
   }
   return { line: null, next: next?.text ?? null, countdown, key: `c${next?.t}|${countdown}` }
+}
+
+/**
+ * Untimed lyrics as lines: [{ text }] with no times, so nothing that needs timing can
+ * mistake them for synced ones. Blank lines between verses become one '' (a gap); none at
+ * the start or end.
+ */
+export function plainLines(text) {
+  const out = []
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const t = raw.trim()
+    if (t || (out.length && out.at(-1).text)) out.push({ text: t })
+  }
+  while (out.length && !out.at(-1).text) out.pop()
+  return out
 }

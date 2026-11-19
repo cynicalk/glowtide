@@ -149,3 +149,18 @@ test('karaoke: no count-in between lines that follow closely', async () => {
   const lines = estimateWordTiming(parseLrc('[00:05.00] one two\n[00:08.00] three four'), 60000)
   for (let t = 5000; t < 8000; t += 250) assert.equal(karaokeAt(lines, t).countdown, 0)
 })
+
+test('untimed lyrics: lines with no times, one gap between verses, none at the ends', async () => {
+  const { plainLines } = await import('../src/shared/lyrics.mjs')
+  assert.deepEqual(plainLines('\n\n  first line \r\nsecond\n\n\n\nthird\n\n'), [
+    { text: 'first line' },
+    { text: 'second' },
+    { text: '' },
+    { text: 'third' }
+  ])
+  assert.deepEqual(plainLines(null), [])
+  assert.equal(
+    plainLines('a').some((l) => 't' in l),
+    false
+  )
+})

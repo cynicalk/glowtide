@@ -61,6 +61,14 @@ function logError(kind, e) {
   }
 }
 process.on('uncaughtException', (e) => logError('uncaught', e))
+// The GPU and other helper processes: when windows die together, this says which one went.
+app.on('child-process-gone', (_e, d) => {
+  if (d.reason !== 'clean-exit')
+    logError(
+      `${d.type} process`,
+      `${d.reason} (exit code ${d.exitCode}${d.name ? `, ${d.name}` : ''})`
+    )
+})
 process.on('unhandledRejection', (e) => logError('unhandled', e))
 
 const spotifyAuth = createSpotifyAuth(() => loadSettings().clientId)
@@ -149,6 +157,7 @@ function broadcast() {
   state.lyricsOverStage = stageOn !== null && !!lyricsWin && lyricsDisplayId === stageOn
   for (const w of all()) w.webContents.send('state', state)
   syncAwake()
+  syncThumbar()
 }
 
 // Keep the display on while music plays, if asked.
@@ -304,6 +313,11 @@ async function poll() {
         state.lyricsTiming = 'line'
         state.lyricsSource = 'Demo'
         lyricsLines = s.lyrics.lines
+        // GLOWTIDE_PLAIN_TEST=1: the demo's lyrics as untimed text, to see the read-along view
+        if (DEV && process.env.GLOWTIDE_PLAIN_TEST) {
+          state.lyricsStatus = 'plain'
+          lyricsLines = lyricsLines.map((l) => ({ text: l.text }))
+        }
         sendLyrics()
       }
       state.playback = s.playback
@@ -659,7 +673,7 @@ function load(win, route) {
   if (!win.glowtideGuarded) {
     win.glowtideGuarded = true
     win.webContents.on('render-process-gone', (_e, d) => {
-      logError(`renderer ${route}`, d.reason)
+      logError(`renderer ${route}`, `${d.reason} (exit code ${d.exitCode})`)
       if (d.reason !== 'clean-exit' && !win.isDestroyed()) setTimeout(() => load(win, route), 1000)
     })
   }
@@ -684,6 +698,82 @@ const prefs = {
   backgroundThrottling: false
 }
 
+const startedAtLogin = process.argv.includes('--hidden')
+
+/** Start with Windows (installed copies only), in the tray. */
+function syncLoginItem() {
+  if (!app.isPackaged) return
+  app.setLoginItemSettings({ openAtLogin: !!loadSettings().startWithWindows, args: ['--hidden'] })
+}
+
+// ---------- taskbar buttons: previous, play/pause, next under the taskbar preview ----------
+// Drawn here as white glyphs (16 px, and 32 px for scaled displays), so no image files ship.
+function glyph(kind) {
+  const draw = (n) => {
+    const buf = Buffer.alloc(n * n * 4)
+    const u = n / 16
+    const dot = (x, y) => {
+      const i = (y * n + x) * 4
+      buf[i] = buf[i + 1] = buf[i + 2] = buf[i + 3] = 255
+    }
+    // a triangle pointing right (dir 1) or left (dir -1) across columns x0..x1
+    const tri = (x0, x1, dir) => {
+      for (let x = Math.round(x0 * u); x < Math.round(x1 * u); x++) {
+        const k = (x - x0 * u) / ((x1 - x0) * u)
+        const half = ((dir > 0 ? 1 - k : k) * 5.5 * u) | 0
+        for (let y = Math.round(8 * u) - half; y < Math.round(8 * u) + half; y++) dot(x, y)
+      }
+    }
+    const bar = (x0, x1) => {
+      for (let x = Math.round(x0 * u); x < Math.round(x1 * u); x++)
+        for (let y = Math.round(2.5 * u); y < Math.round(13.5 * u); y++) dot(x, y)
+    }
+    if (kind === 'play') tri(4, 13, 1)
+    if (kind === 'pause') (bar(4, 7), bar(9, 12))
+    if (kind === 'next') (tri(3, 11, 1), bar(11, 13))
+    if (kind === 'previous') (bar(3, 5), tri(5, 13, -1))
+    return buf
+  }
+  const img = nativeImage.createFromBuffer(draw(16), { width: 16, height: 16 })
+  img.addRepresentation({ scaleFactor: 2, width: 32, height: 32, buffer: draw(32) })
+  return img
+}
+const glyphs = {}
+const glyphFor = (k) => (glyphs[k] ||= glyph(k))
+let thumbKey = ''
+function syncThumbar() {
+  if (!player || player.isDestroyed() || !player.isVisible()) return
+  const playing = !!state.playback?.isPlaying
+  const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
+  const can = (a) =>
+    !!state.track && !followOnly && (state.source !== 'system' || !!state.caps?.[a])
+  const key = JSON.stringify([playing, can('previous'), can('play'), can('pause'), can('next')])
+  if (key === thumbKey) return
+  thumbKey = key
+  const flags = (on) => (on ? [] : ['disabled'])
+  const ok = player.setThumbarButtons([
+    {
+      tooltip: 'Previous',
+      icon: glyphFor('previous'),
+      flags: flags(can('previous')),
+      click: () => control('previous')
+    },
+    {
+      tooltip: playing ? 'Pause' : 'Play',
+      icon: glyphFor(playing ? 'pause' : 'play'),
+      flags: flags(can(playing ? 'pause' : 'play')),
+      click: () => control(playing ? 'pause' : 'play')
+    },
+    {
+      tooltip: 'Next',
+      icon: glyphFor('next'),
+      flags: flags(can('next')),
+      click: () => control('next')
+    }
+  ])
+  if (!ok) logError('taskbar buttons', 'Windows refused them')
+}
+
 function createPlayer() {
   player = new BrowserWindow({
     width: 460,
@@ -698,7 +788,15 @@ function createPlayer() {
     webPreferences: { ...prefs, autoplayPolicy: 'no-user-gesture-required' }
   })
   player.setSkipTaskbar(!loadSettings().showInTaskbar)
-  player.on('ready-to-show', () => player.show())
+  // Started with Windows: Glowtide waits in the tray (the glow and lyrics still run) until it's opened.
+  player.on('ready-to-show', () => {
+    if (!startedAtLogin) player.show()
+  })
+  // back from the tray: a new taskbar button, which needs its buttons again
+  player.on('show', () => {
+    thumbKey = ''
+    syncThumbar()
+  })
   // Without a taskbar button, a minimised player would have nowhere to come back from:
   // it goes to the tray instead.
   player.on('minimize', () => {
@@ -976,7 +1074,12 @@ function setSettings(patch) {
     syncOverlays()
   else if (next.hideForFullscreen !== before.hideForFullscreen) syncFullscreenWatch()
   if (next.autoUpdate && !before.autoUpdate) updater.check()
-  if (next.showInTaskbar !== before.showInTaskbar) player?.setSkipTaskbar(!next.showInTaskbar)
+  if (next.showInTaskbar !== before.showInTaskbar) {
+    player?.setSkipTaskbar(!next.showInTaskbar)
+    thumbKey = '' // a new taskbar button needs its buttons again
+    syncThumbar()
+  }
+  if (next.startWithWindows !== before.startWithWindows) syncLoginItem()
   sendSettings()
   syncAwake()
   return next
@@ -1466,6 +1569,7 @@ else {
 
     loadAmllIndex() // warm the word-timed lyrics index so the first song doesn't wait
     registerIpc()
+    syncLoginItem()
     createPlayer()
     syncOverlays()
     widgets = createWidgets({

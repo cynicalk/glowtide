@@ -46,7 +46,7 @@ import { SystemInfo, SystemApps } from './SystemPanels'
 const LYRIC_STATUS = {
   loading: 'Looking for lyrics…',
   synced: 'Synced lyrics · word timing estimated',
-  plain: 'Lyrics found, but without timing, so the overlay stays off',
+  plain: 'Lyrics without timing · read them in the window; the desktop overlay stays off',
   instrumental: 'Instrumental',
   none: 'No synced lyrics for this song',
   error: "Couldn't reach the lyrics service"
@@ -604,6 +604,7 @@ function NowPlaying({
               <PlayerLyrics
                 lines={lyrics}
                 synced={synced}
+                plain={state.lyricsStatus === 'plain' && lyrics.length > 0}
                 note={track ? LYRIC_STATUS[state.lyricsStatus] : 'Nothing playing'}
                 playback={playback}
                 durationMs={track?.durationMs}
@@ -682,7 +683,7 @@ function positionNow(playback, fallback) {
 }
 
 /** The song's lyrics inside the player, the current line centred and the list following it. */
-function PlayerLyrics({ lines, synced, note, playback, durationMs, offsetMs }) {
+function PlayerLyrics({ lines, synced, plain, note, playback, durationMs, offsetMs }) {
   const pos = usePosition(playback, durationMs, 200) + (offsetMs || 0)
   const idx = synced ? lineIndexAt(lines, pos) : -1
   const list = useRef(null)
@@ -695,6 +696,8 @@ function PlayerLyrics({ lines, synced, note, playback, durationMs, offsetMs }) {
       behavior: 'smooth'
     })
   }, [idx])
+  if (!synced && plain)
+    return <PlainLyrics lines={lines} playback={playback} durationMs={durationMs} />
   if (!synced)
     return (
       <div className="pl-lyrics empty">
@@ -714,6 +717,42 @@ function PlayerLyrics({ lines, synced, note, playback, durationMs, offsetMs }) {
           </div>
         ) : (
           <div key={i} className={`pl-gap ${i === idx ? 'cur' : ''}`}>
+            ♪
+          </div>
+        )
+      )}
+      <div className="pl-pad" />
+    </div>
+  )
+}
+
+/**
+ * Lyrics with no timing: the whole text, scrolled gently through as the song goes (by how
+ * far into the song it is, as a guess, not a claim of timing). Scrolling it yourself holds
+ * it where you put it for a few seconds.
+ */
+function PlainLyrics({ lines, playback, durationMs }) {
+  const pos = usePosition(playback, durationMs, 1000)
+  const box = useRef(null)
+  const heldUntil = useRef(0)
+  useEffect(() => {
+    const el = box.current
+    if (!el || !durationMs || Date.now() < heldUntil.current) return
+    const f = Math.min(1, Math.max(0, pos / durationMs))
+    el.scrollTo({ top: f * (el.scrollHeight - el.clientHeight), behavior: 'smooth' })
+  }, [pos, durationMs])
+  const hold = () => (heldUntil.current = Date.now() + 6000)
+  return (
+    <div className="pl-lyrics plain" ref={box} onWheel={hold} onTouchMove={hold}>
+      <div className="pl-pad" />
+      <div className="pl-untimed">Not timed · scrolls along with the song</div>
+      {lines.map((l, i) =>
+        l.text ? (
+          <div key={i} className="pl-line">
+            {l.text}
+          </div>
+        ) : (
+          <div key={i} className="pl-gap">
             ♪
           </div>
         )

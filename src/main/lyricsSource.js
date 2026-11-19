@@ -4,7 +4,13 @@
 //   3. LRCLIB line-synced LRC: words spread across each line    timing 'line' (estimated)
 // "timing" travels with the lyrics so the UI never presents an estimate as measured.
 
-import { parseLrc, estimateWordTiming, hasWordTags, enhancedLrcLines } from '../shared/lyrics.mjs'
+import {
+  parseLrc,
+  estimateWordTiming,
+  hasWordTags,
+  enhancedLrcLines,
+  plainLines
+} from '../shared/lyrics.mjs'
 import { amllLyrics } from './amll'
 
 const UA = 'Glowtide for Windows/0.1.0'
@@ -56,7 +62,8 @@ async function fromLrclib(track, toleranceS) {
   }
   if (!hit) return { status: 'none', lines: [] }
   if (hit.instrumental) return { status: 'instrumental', lines: [] }
-  if (!hit.syncedLyrics) return { status: 'plain', lines: [] }
+  // the text, untimed: the player shows it to read along; nothing times it
+  if (!hit.syncedLyrics) return { status: 'plain', lines: plainLines(hit.plainLyrics) }
   if (hasWordTags(hit.syncedLyrics)) {
     const lines = enhancedLrcLines(hit.syncedLyrics, track.durationMs)
     if (lines.length) return { status: 'synced', timing: 'word', source: 'LRCLIB', lines }
@@ -69,7 +76,7 @@ async function fromLrclib(track, toleranceS) {
 
 /**
  * { status, timing?, source?, lines }
- * status: 'synced' | 'plain' (text but no timing; we do not invent it) |
+ * status: 'synced' | 'plain' (text but no timing; we do not invent it: lines are { text }) |
  *         'instrumental' | 'none' | 'error'
  */
 export async function fetchLyrics(track, { toleranceS = 4, spotifyId } = {}) {

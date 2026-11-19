@@ -31,6 +31,8 @@ import {
 } from 'lucide-react'
 import { api, fmtTime, useColours, useDisplays, useGlowtide, usePosition } from '../lib/store'
 import { lineIndexAt } from '../../../shared/lyrics.mjs'
+import { Messages } from '../overlays/Messages'
+import { messagesView } from '../overlays/messagesView'
 import { glowAnimation } from '../../../shared/glow.mjs'
 import { ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
 import Welcome from './Welcome'
@@ -279,6 +281,15 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
         </div>
       )}
       {immersive && <EscToLeave onLeave={() => setImmersive(false)} />}
+      {immersive && synced && settings.lyrics.style === 'messages' && (
+        <PlayerMessages
+          lines={lyrics}
+          playback={playback}
+          durationMs={track?.durationMs}
+          offsetMs={state.lyricsOffsetMs}
+          track={track}
+        />
+      )}
       <div className="np-main">
         <div className="np-card">
           <div className="np-left">
@@ -544,6 +555,16 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
           <Library size={15} />
         </button>
       </div>
+    </div>
+  )
+}
+
+/** The lyrics as messages over the full-window cover, word by word. */
+function PlayerMessages({ lines, playback, durationMs, offsetMs, track }) {
+  const pos = usePosition(playback, durationMs, 80) + (offsetMs || 0)
+  return (
+    <div className="np-msgs">
+      <Messages view={messagesView(lines, pos)} track={track} />
     </div>
   )
 }

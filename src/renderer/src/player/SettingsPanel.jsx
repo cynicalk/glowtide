@@ -39,7 +39,7 @@ const STYLES = [
   ['aura', 'Aura', Sun, 'Lyrics over a glowing cloud of the cover’s colours'],
   ['waves', 'Waves', WavesIcon, 'The whole line rides a ripple'],
   ['beat', 'Beat', Activity, 'Pulses with the music'],
-  ['messages', 'Messages', MessageCircle, 'The lyrics arrive as text messages, with emojis']
+  ['messages', 'Messages', MessageCircle, 'Each line arrives as a text message, word by word']
 ]
 
 /**

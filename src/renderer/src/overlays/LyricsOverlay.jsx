@@ -485,7 +485,7 @@ export default function LyricsOverlay() {
             {style === 'beat' && (
               <Beat win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
             )}
-            {style === 'messages' && <Messages view={win?.chat ? win : null} />}
+            {style === 'messages' && <Messages view={win?.chat ? win : null} track={state.track} />}
             {style === 'constellation' && (
               <>
                 <Starfield seed={seed} />

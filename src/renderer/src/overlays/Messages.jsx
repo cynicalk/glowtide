@@ -1,31 +1,33 @@
 /**
- * Messages: the lyrics arrive as text messages floating over the screen. The singer's are
- * frosted glass on the left, "yours" on the right in the album's highlight colour, taking
- * turns verse by verse. Typing dots come first, each message glides up into place, and the
- * oldest fade away at the top. Words pick up an emoji; now and then one gets a reaction.
+ * Messages: each sung line is a text message. The bubble fills word by word as the line is
+ * sung, each word fading in; lines alternate between a dark bubble on the left and a blue
+ * one on the right; the two before the current one rise, fade and blur away. The song's
+ * first message carries its title and artist beneath, like a shared location.
+ * Used by the lyrics overlay and by the player's full-window cover.
  */
-export function Messages({ view }) {
+export function Messages({ view, track }) {
   if (!view) return null
-  const { messages, typing } = view
+  const detail = track ? [track.name, (track.artists || '').split(',')[0]].filter(Boolean) : []
   return (
-    <div className="msg-float" aria-hidden="true">
-      {messages.map((m) => (
-        <div key={m.i} className={`msg ${m.from} ${m.reaction ? 'reacted' : ''}`}>
+    <div className="msgs" aria-hidden="true">
+      {view.items.map((m) => (
+        <div key={m.i} className={`msg ${m.from} age-${m.age}`}>
           <div className="bubble">
-            {m.emoji ? `${m.text} ${m.emoji}` : m.text}
-            {m.reaction && <span className={`tapback ${m.from}`}>{m.reaction}</span>}
+            <div className="msg-text">
+              {m.words.map((w, k) => (
+                <span key={k} className="mw">
+                  {w}{' '}
+                </span>
+              ))}
+            </div>
+            {m.first && detail.length > 0 && (
+              <div className="msg-detail">
+                <span className="pin">➤</span> {detail.join(', ')}
+              </div>
+            )}
           </div>
         </div>
       ))}
-      {typing && (
-        <div key={`typing-${view.index}`} className={`msg ${typing} typing`}>
-          <div className="bubble">
-            <i />
-            <i />
-            <i />
-          </div>
-        </div>
-      )}
     </div>
   )
 }

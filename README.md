@@ -146,7 +146,9 @@ chooses which app to follow when several are playing.
 - **No setup needed for links:** choose YouTube Music and paste a link.
 - **For your library:**
   1. In Google Cloud, enable **YouTube Data API v3**.
-  2. Set the OAuth consent screen to **External**, with yourself as a test user.
+  2. Under Google Auth Platform (the OAuth consent screen), choose **External**, and in
+     **Audience → Test users** add the Gmail you sign in with. Without it Google blocks the
+     sign-in: the app "can only be accessed by developer-approved testers".
   3. Create an OAuth client of type **Desktop app**.
   4. Paste its ID and secret in Library.
 

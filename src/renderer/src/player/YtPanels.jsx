@@ -123,7 +123,10 @@ export function GoogleSetup({ settings }) {
         </li>
         <li>
           <span>
-            On the OAuth consent screen, choose <b>External</b> and add yourself as a test user.
+            Under <b>Google Auth Platform</b> (the OAuth consent screen), choose <b>External</b>.
+            Then in <b>Audience → Test users</b>, add the Gmail address you’ll sign in with. Without
+            it, Google blocks the sign-in and says the app “can only be accessed by
+            developer-approved testers”.
           </span>
         </li>
         <li>
@@ -152,6 +155,15 @@ export function GoogleSetup({ settings }) {
         {busy ? 'Waiting for Google…' : 'Sign in with Google'}
       </button>
       <p className="fine">Glowtide only asks to read your YouTube account, never to change it.</p>
+      <div className="heads-up">
+        <p>
+          Rather skip the setup? Play YouTube Music in your browser (Premium works as usual) and
+          choose <b>Any app</b>: Glowtide follows it with nothing to set up.
+        </p>
+        <button className="pill on" onClick={() => api.setSource('system')}>
+          Use Any app instead
+        </button>
+      </div>
     </div>
   )
 }

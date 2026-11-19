@@ -2116,7 +2116,6 @@ input[type='range']:hover::-webkit-slider-thumb,
   height: 32px;
   border-radius: 16px;
   background: var(--pill);
-  overflow: hidden;
   font-size: 11px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -2128,6 +2127,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   display: flex;
   align-items: center;
   max-width: 0;
+  overflow: hidden;
   opacity: 0;
   transition:
     max-width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -2991,4 +2991,15 @@ html[data-route='quick'] body {
 }
 .player.no-hints [data-tip]::after {
   display: none;
+}
+
+/* YouTube's player must stay visible while it plays: with a page open, the video becomes a
+   small player in the corner, over the page, instead of being hidden behind it */
+.main.has-page .yt-stage {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: min(220px, 46%);
+  z-index: 6;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 }

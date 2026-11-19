@@ -557,9 +557,8 @@ export default function SettingsPanel({ state, settings, onClose }) {
             />
           </div>
           <p className="fine">
-            While a game, a full-screen video or a presentation fills a display, the edge glow, the
-            lyrics and the desktop widgets on that display pause and hide, and come back when it
-            closes.
+            While a game, a full-screen video or a presentation fills a display, the edge glow and
+            the lyrics on that display pause and hide, and come back when it closes.
             {state.fullscreenApp && settings.hideForFullscreen !== false && ' Hidden right now.'}
           </p>
         </Fold>
@@ -761,7 +760,7 @@ function WidgetSettings({ settings, set }) {
             onChange={(x) => set({ widgets: { fps: Number(x) } })}
           />
         </div>
-        <p className="fine">Widgets drop to 20 fps on their own when nothing is playing.</p>
+        <p className="fine">It drops to 20 fps on its own when nothing is playing.</p>
       </Fold>
     </>
   )

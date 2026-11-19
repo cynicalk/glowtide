@@ -6,19 +6,16 @@ import { migrateGlowSettings } from './glow.mjs'
 
 /**
  * - The glow's old "moving light" and "pulse" switches become an animation (glow.mjs).
- * - The desktop visualizer is gone. The clock used its colour theme and the full-screen
- *   view its custom accent, so those move: theme to the clock, accent to the widgets.
+ * - The desktop visualizer is gone; the full-screen view keeps its custom accent, which
+ *   moves to the widget settings.
  */
 export function migrateSettings(saved) {
-  let s = migrateGlowSettings(saved)
+  const s = migrateGlowSettings(saved)
   const w = s?.widgets
   const viz = w?.viz
   if (!viz || typeof viz !== 'object') return s
   const next = { ...w }
   delete next.viz
   if (typeof viz.accent === 'string' && next.accent === undefined) next.accent = viz.accent
-  const clock = next.clock && typeof next.clock === 'object' ? next.clock : {}
-  if (typeof viz.theme === 'string' && clock.theme === undefined)
-    next.clock = { ...clock, theme: viz.theme }
   return { ...s, widgets: next }
 }

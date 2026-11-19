@@ -51,20 +51,23 @@ export function createDemo() {
   let base = 0
   let at = Date.now()
   let shuffle = false
-  let repeat = 'off' // 'off' | 'context' | 'track'
+  let repeat = 'context' // 'off' | 'context' (the list loops) | 'track'
   const lines = estimateWordTiming(parseLrc(LRC), 30000)
   const pos = () => (playing ? base + Date.now() - at : base)
 
   function tick() {
     if (pos() < TRACKS[i].durationMs) return
     if (repeat === 'track') restart()
-    else next()
+    else if (repeat === 'off' && !shuffle && i === TRACKS.length - 1) {
+      base = TRACKS[i].durationMs // the end of the list: stop there
+      playing = false
+    } else next()
   }
   function restart() {
     base = 0
     at = Date.now()
   }
-  // Shuffle picks any other song; the demo list always loops, as "repeat all" would.
+  // Shuffle picks any other song.
   function next() {
     i = shuffle
       ? (i + 1 + Math.floor(Math.random() * (TRACKS.length - 1))) % TRACKS.length

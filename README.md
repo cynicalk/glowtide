@@ -97,7 +97,7 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   - Keep the screen awake while music plays.
   - The overlay steps aside while Glowtide's own window is in use. Ctrl+Alt+L toggles it.
 - **Full-screen apps**: while a game, a full-screen video or a presentation fills a display,
-  the glow, the lyrics and the desktop widgets on that display hide and stop drawing, then
+  the glow and the lyrics on that display hide and stop drawing, then
   come back when it closes. A small helper (`resources/fullscreen.ps1`) looks at the window in
   front once a second. Settings → Lyrics overlay → Hide for full-screen apps turns it off.
 - **Colours**: a 5-swatch palette from each cover. Pick which swatch drives the glow, the

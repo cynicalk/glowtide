@@ -94,7 +94,7 @@ export default function Player() {
       {screen === 'player' && (
         <div className="shell">
           <Sidebar state={state} panel={panel} setPanel={setPanel} />
-          <main className="main">
+          <main className={`main ${panel ? 'has-page' : ''}`}>
             <NowPlaying
               state={state}
               settings={settings}
@@ -103,6 +103,7 @@ export default function Player() {
               lyricsView={lyricsView}
               immersiveOn={immersiveOn}
               setImmersive={setImmersive}
+              pageOpen={!!panel}
             />
             {/* Pages belong to the player screen: never over Welcome or Connect Spotify. */}
             {panel && (
@@ -145,11 +146,13 @@ export default function Player() {
             lyricsView={lyricsView}
             toggleLyricsView={() => {
               setPanel(null)
+              if (!lyricsView && immersiveOn) setImmersive(false)
               toggleLyricsView()
             }}
-            immersive={immersiveOn}
+            immersive={immersiveOn && !lyricsView}
             setImmersive={(v) => {
               setPanel(null)
+              if (v && lyricsView) toggleLyricsView()
               setImmersive(v)
             }}
           />
@@ -346,7 +349,16 @@ function Skip15({ back }) {
   )
 }
 
-function NowPlaying({ state, settings, lyrics, setPanel, lyricsView, immersiveOn, setImmersive }) {
+function NowPlaying({
+  state,
+  settings,
+  lyrics,
+  setPanel,
+  lyricsView,
+  immersiveOn,
+  setImmersive,
+  pageOpen
+}) {
   const { track, playback } = state
   const pos = usePosition(playback, track?.durationMs, 250)
   const [drag, setDrag] = useState(null)
@@ -398,7 +410,7 @@ function NowPlaying({ state, settings, lyrics, setPanel, lyricsView, immersiveOn
           <img src={track.cover} alt="" />
         </div>
       )}
-      {immersive && <EscToLeave onLeave={() => setImmersive(false)} />}
+      {immersive && !pageOpen && <EscToLeave onLeave={() => setImmersive(false)} />}
       {immersive && synced && settings.lyrics.style === 'messages' && (
         <PlayerMessages
           lines={lyrics}
@@ -544,7 +556,7 @@ function NowPlaying({ state, settings, lyrics, setPanel, lyricsView, immersiveOn
               {synced && (
                 <div
                   className={`sync-xp ${state.lyricsOffsetMs ? 'moved' : ''}`}
-                  data-tip="Sync · lyrics early or late? Nudge them"
+                  data-tip="Sync · nudge the lyrics earlier or later (double-click resets)"
                 >
                   <span className="rd sync-icon" aria-hidden="true">
                     <History size={15} />

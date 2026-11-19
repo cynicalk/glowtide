@@ -2672,15 +2672,17 @@ html[data-route='quick'] body {
 .np .dock {
   z-index: 1;
 }
-@media (prefers-reduced-motion: reduce) {
-  .cover img,
-  .stage-cover img,
-  .immersive-art img {
-    animation: none;
-  }
-  .immersive-art {
-    transition: opacity 0.3s;
-  }
+/* Reduce motion (Settings → App). Windows' animation-effects switch is not followed: it is
+   often off for speed, and it left the covers and messages lifeless. */
+.still .cover img,
+.still .stage-cover img,
+.still .immersive-art img,
+.still .bubble,
+.still .mw {
+  animation: none;
+}
+.still .immersive-art {
+  transition: opacity 0.3s;
 }
 
 /* ---------- Messages: each line a text message, filling word by word ---------- */

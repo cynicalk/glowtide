@@ -212,6 +212,9 @@ or `npx electron .` after `npm run build`); a packaged copy ignores every one of
   at 2.5 s, and `$env:GLOWTIDE_HOVER="<selector>"` rests the pointer on that element of the player
   (or the tray panel, with `GLOWTIDE_HOVER_IN=quick`) so hover states show. `state.json` also
   records each glow window's bounds.
+- `$env:GLOWTIDE_PROBE_JS="<js>"` (with `GLOWTIDE_SNAPSHOT`) runs in the lyrics overlay, or in the
+  window `GLOWTIDE_PROBE_IN` names (`player`, `stage`), at `GLOWTIDE_PROBE_AT` ms (default 3000), and
+  writes what it returns, awaited if it's a promise, to `probe.json`.
 - `$env:GLOWTIDE_UPDATE_FEED="http://127.0.0.1:8899/"` updates a development run from a local
   folder of `latest.yml` and an installer (needs a `dev-app-update.yml` in the project);
   add `GLOWTIDE_UPDATE_INSTALL=1` to install as soon as it has downloaded.

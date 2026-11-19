@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS = {
   autoUpdate: true, // check GitHub releases and download updates in the background
   showInTaskbar: true, // the player has a taskbar button (off: it lives in the tray only)
   hints: true, // a short description when the pointer rests on a button
+  reduceMotion: false, // Glowtide's own switch: covers and messages hold still (Windows' is ignored)
   fps: 30, // the glow and lyrics overlay: 30 (lighter) or 60 (smoother)
   widgets: {
     fps: 60,

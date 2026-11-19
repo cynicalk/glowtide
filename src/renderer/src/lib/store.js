@@ -45,6 +45,12 @@ export function useGlowtide() {
       offs.forEach((f) => f())
     }
   }, [])
+  // Glowtide's own "Reduce motion" (Settings → App), not Windows' animation-effects switch,
+  // which is often off for speed rather than by choice: stylesheets check html.still.
+  const still = !!settings?.reduceMotion
+  useEffect(() => {
+    document.documentElement.classList.toggle('still', still)
+  }, [still])
   return { state, settings, lyrics }
 }
 

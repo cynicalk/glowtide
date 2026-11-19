@@ -29,6 +29,7 @@ import { createWidgets } from './widgets'
 import { createDemo } from './demo'
 import { extractPalette } from '../shared/colour.mjs'
 import { glowBounds, pickDisplays } from '../shared/glow.mjs'
+import { largerCover } from '../shared/cover.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
 import { appLabel, systemTrack, repeatFromSmtc } from '../shared/media.mjs'
 import { createSmtc } from './smtc'
@@ -180,6 +181,32 @@ function ytCommand(action, arg) {
   if (player && !player.isDestroyed()) player.webContents.send('yt:command', { action, arg })
 }
 
+// Whether a larger cover exists, per URL (a YouTube video may have no full-size still).
+const coverChecks = new Map()
+function coverExists(url) {
+  if (!coverChecks.has(url)) {
+    if (coverChecks.size > 200) coverChecks.clear()
+    coverChecks.set(
+      url,
+      fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(6000) })
+        .then((r) => r.ok)
+        .catch(() => false)
+    )
+  }
+  return coverChecks.get(url)
+}
+
+/** Swaps in the source's largest cover once it's known to exist; the list size until then. */
+function sharpenCover(track) {
+  const big = largerCover(track.cover)
+  if (!big) return
+  coverExists(big).then((ok) => {
+    if (!ok || state.track?.id !== track.id || state.track.cover !== track.cover) return
+    state.track = { ...state.track, cover: big }
+    broadcast()
+  })
+}
+
 async function paletteFor(url) {
   try {
     if (!/^(https:|data:image\/)/i.test(url || '')) return null
@@ -219,6 +246,7 @@ async function onTrackChange(track) {
   lyricsLines = []
   sendLyrics()
   const id = track.id
+  sharpenCover(track)
   if (track.cover)
     paletteFor(track.cover).then((p) => {
       if (state.track?.id === id) {
@@ -1116,6 +1144,23 @@ function scheduleSnapshot() {
   }
   if (process.env.GLOWTIDE_PLAYER_JS)
     setTimeout(() => player?.webContents.executeJavaScript(process.env.GLOWTIDE_PLAYER_JS), 2500)
+  // GLOWTIDE_PROBE_JS runs in the lyrics overlay (GLOWTIDE_PROBE_IN=player or stage: that window)
+  // at GLOWTIDE_PROBE_AT ms (default 3000) and writes what it returns (it may be a promise) to
+  // probe.json in the snapshot folder.
+  if (process.env.GLOWTIDE_PROBE_JS)
+    setTimeout(
+      async () => {
+        const where = process.env.GLOWTIDE_PROBE_IN
+        const win =
+          where === 'player' ? player : where === 'stage' ? widgets?.windows()[0] : lyricsWin
+        const out = await win?.webContents
+          .executeJavaScript(process.env.GLOWTIDE_PROBE_JS, true)
+          .catch((e) => `ERR ${e.message}`)
+        mkdirSync(dir, { recursive: true })
+        writeFileSync(join(dir, 'probe.json'), JSON.stringify(out ?? null, null, 1))
+      },
+      Number(process.env.GLOWTIDE_PROBE_AT || 3000)
+    )
   if (process.env.GLOWTIDE_HOVER)
     setTimeout(
       async () => {

@@ -57,6 +57,7 @@ function useGlide(box, key, trackId) {
       last.current = { track: trackId, rows }
       return
     }
+    const still = document.documentElement.classList.contains('still')
     for (const row of el.children) {
       const bubble = row.firstElementChild
       // where it shows now, mid-glide included, before the glide is replaced
@@ -67,7 +68,7 @@ function useGlide(box, key, trackId) {
       const k = row.dataset.k
       rows.set(k, { top: r.top, w: b.width, h: b.height })
       const p = prev.get(k)
-      if (!p) continue
+      if (!p || still) continue
       // shown before this change: its old place plus the glide it was partway through
       const dy = p.top + shown - r.top
       if (Math.abs(dy) > 0.5)

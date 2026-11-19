@@ -581,6 +581,18 @@ export default function SettingsPanel({ state, settings, onClose }) {
           </div>
           <p className="fine">A short description when the pointer rests on a button.</p>
           <div className="srow">
+            <span>Reduce motion</span>
+            <Toggle
+              label="Hold the covers and messages still"
+              on={!!settings.reduceMotion}
+              onChange={(v) => set({ reduceMotion: v })}
+            />
+          </div>
+          <p className="fine">
+            Covers stop drifting and messages appear without gliding. Glowtide moves even when the
+            animation effects in Windows are off; this is its own switch.
+          </p>
+          <div className="srow">
             <span>Show in taskbar</span>
             <Toggle
               label="Show in taskbar"

@@ -2555,3 +2555,130 @@ html[data-route='quick'] body {
   gap: 8px;
   padding-top: 2px;
 }
+
+/* ---------- album art is round everywhere: the player, its lyrics card, full screen
+   (widgets.css) and the small covers in every list ---------- */
+.cover,
+.player.max .cover,
+.row img,
+.row img.wide,
+.thumb-ph {
+  border-radius: 50%;
+}
+/* video thumbnails are cut to the same circle as every other cover */
+.row img.wide {
+  width: 38px;
+  height: 38px;
+}
+
+/* ---------- moving covers: the art drifts slowly inside its circle while music plays
+   (a transform on the image, so the compositor moves it and nothing is repainted) ---------- */
+.cover,
+.stage-cover {
+  overflow: hidden;
+}
+.cover img,
+.stage-cover img,
+.immersive-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: 50% 45%;
+  animation: art-drift 28s ease-in-out infinite alternate;
+  animation-play-state: paused;
+  will-change: transform;
+}
+.cover.moving img,
+.stage-cover.moving img,
+.immersive-art.moving img {
+  animation-play-state: running;
+}
+@keyframes art-drift {
+  0% {
+    transform: scale(1.06) translate(0, 0);
+  }
+  35% {
+    transform: scale(1.16) translate(-2.6%, 1.8%);
+  }
+  70% {
+    transform: scale(1.12) translate(2.2%, -1.6%);
+  }
+  100% {
+    transform: scale(1.2) translate(-1%, -2.4%);
+  }
+}
+.cover {
+  cursor: zoom-in;
+}
+
+/* ---------- the cover fills the window: it opens out from the circle ---------- */
+.immersive-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  clip-path: circle(0% at 50% 40%);
+  transition:
+    clip-path 0.75s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.35s;
+  cursor: zoom-out;
+}
+.immersive-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.35),
+    transparent 22%,
+    transparent 42%,
+    rgba(0, 0, 0, 0.82) 88%
+  );
+}
+.np.immersive .immersive-art {
+  opacity: 1;
+  pointer-events: auto;
+  clip-path: circle(80% at 50% 40%);
+}
+.np.immersive .backdrop,
+.np.immersive .art-tint {
+  opacity: 0;
+}
+.np.immersive .np-main {
+  justify-content: flex-end;
+  padding-bottom: 6px;
+  z-index: 1;
+  pointer-events: none;
+}
+.np.immersive .np-main * {
+  pointer-events: auto;
+}
+.np.immersive .np-left .cover {
+  display: none;
+}
+.np.immersive .title,
+.np.immersive .artist {
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7);
+}
+.np.immersive .title {
+  font-size: 22px;
+}
+.np.immersive .artist,
+.np.immersive .status {
+  color: rgba(255, 255, 255, 0.75);
+}
+.np .dock {
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cover img,
+  .stage-cover img,
+  .immersive-art img {
+    animation: none;
+  }
+  .immersive-art {
+    transition: opacity 0.3s;
+  }
+}

@@ -100,7 +100,9 @@ export default function Stage() {
           />
         ))}
         {t?.cover ? (
-          <img className="stage-cover" src={t.cover} alt="" />
+          <div className={`stage-cover ${playing ? 'moving' : ''}`}>
+            <img src={t.cover} alt="" />
+          </div>
         ) : (
           <div className="stage-cover empty" />
         )}

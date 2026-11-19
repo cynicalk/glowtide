@@ -192,6 +192,26 @@ function useLyricsView() {
   return [on, toggle]
 }
 
+/** Remembered per window: whether the cover fills the player window. */
+function useImmersive() {
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem('immersive') === '1'
+    } catch {
+      return false
+    }
+  })
+  const set = (v) => {
+    try {
+      localStorage.setItem('immersive', v ? '1' : '0')
+    } catch {
+      /* remembering is optional */
+    }
+    setOn(v)
+  }
+  return [on, set]
+}
+
 /** "15" inside a turning arrow: back or forward fifteen seconds. */
 function Skip15({ back }) {
   const Icon = back ? RotateCcw : RotateCw
@@ -209,6 +229,7 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
   const [drag, setDrag] = useState(null)
   const [artBig, setArtBig] = useState(false)
   const [lyricsView, toggleLyricsView] = useLyricsView()
+  const [immersiveOn, setImmersive] = useImmersive()
   const playing = !!playback?.isPlaying
   const repeatNext = { off: 'context', context: 'track', track: 'off' }[playback?.repeat || 'off']
   const synced = state.lyricsStatus === 'synced' && lyrics.length > 0
@@ -239,24 +260,49 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
     )
   const canSkip = !!track && can('seek') && !!track.durationMs
   const open = lyricsView && !yt
+  // The cover fills the window (click it; click it again or press Esc to shrink it back).
+  const immersive = immersiveOn && !open && !yt && !!track?.cover
 
   return (
-    <div className={`np ${artBig && !open ? 'art-big' : ''} ${open ? 'lyrics-open' : ''}`}>
+    <div
+      className={`np ${artBig && !open && !immersive ? 'art-big' : ''} ${open ? 'lyrics-open' : ''} ${immersive ? 'immersive' : ''}`}
+    >
       {track?.cover && <img className="backdrop" src={track.cover} alt="" />}
       <div className="art-tint" />
+      {track?.cover && !yt && !open && (
+        <div
+          className={`immersive-art ${playing ? 'moving' : ''}`}
+          title="Click, or press Esc, to shrink the cover"
+          onClick={() => setImmersive(false)}
+        >
+          <img src={track.cover} alt="" />
+        </div>
+      )}
+      {immersive && <EscToLeave onLeave={() => setImmersive(false)} />}
       <div className="np-main">
         <div className="np-card">
           <div className="np-left">
             {yt ? (
               <YouTubeStage state={state} onOpenLibrary={() => setPanel('library')} />
             ) : track?.cover ? (
-              <img
-                className="cover"
-                src={track.cover}
-                alt={`${track.album || track.name} cover`}
+              <div
+                className={`cover ${playing ? 'moving' : ''}`}
+                role="button"
+                tabIndex={0}
+                aria-label="Fill the window with the cover"
+                title="Click to fill the window"
                 onMouseEnter={() => setArtBig(true)}
                 onMouseLeave={() => setArtBig(false)}
-              />
+                onClick={() => {
+                  setArtBig(false)
+                  if (!open) setImmersive(true)
+                }}
+                onKeyDown={(e) =>
+                  (e.key === 'Enter' || e.key === ' ') && !open && setImmersive(true)
+                }
+              >
+                <img src={track.cover} alt={`${track.album || track.name} cover`} />
+              </div>
             ) : (
               <div className="cover placeholder" />
             )}
@@ -500,6 +546,16 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
       </div>
     </div>
   )
+}
+
+/** Esc shrinks the full-window cover back (while it's open). */
+function EscToLeave({ onLeave }) {
+  useEffect(() => {
+    const k = (e) => e.key === 'Escape' && onLeave()
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onLeave])
+  return null
 }
 
 /** The playback position right now (the interval-updated one can be up to 250 ms old). */

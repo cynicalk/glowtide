@@ -50,16 +50,26 @@ export function createDemo() {
   let playing = true
   let base = 0
   let at = Date.now()
+  let shuffle = false
+  let repeat = 'off' // 'off' | 'context' | 'track'
   const lines = estimateWordTiming(parseLrc(LRC), 30000)
   const pos = () => (playing ? base + Date.now() - at : base)
 
   function tick() {
-    if (pos() >= TRACKS[i].durationMs) next()
+    if (pos() < TRACKS[i].durationMs) return
+    if (repeat === 'track') restart()
+    else next()
   }
-  function next() {
-    i = (i + 1) % TRACKS.length
+  function restart() {
     base = 0
     at = Date.now()
+  }
+  // Shuffle picks any other song; the demo list always loops, as "repeat all" would.
+  function next() {
+    i = shuffle
+      ? (i + 1 + Math.floor(Math.random() * (TRACKS.length - 1))) % TRACKS.length
+      : (i + 1) % TRACKS.length
+    restart()
   }
   return {
     tracks: TRACKS,
@@ -73,8 +83,8 @@ export function createDemo() {
           isPlaying: playing,
           progressMs: pos(),
           at: Date.now(),
-          shuffle: false,
-          repeat: 'off',
+          shuffle,
+          repeat,
           volume: 70,
           device: { name: 'Demo', type: 'Computer' }
         },
@@ -97,6 +107,10 @@ export function createDemo() {
       } else if (action === 'seek') {
         base = arg
         at = Date.now()
+      } else if (action === 'shuffle') {
+        shuffle = !!arg
+      } else if (action === 'repeat') {
+        repeat = ['off', 'context', 'track'].includes(arg) ? arg : 'off'
       } else if (action === 'playIndex') {
         i = arg % TRACKS.length
         base = 0

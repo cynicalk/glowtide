@@ -38,27 +38,25 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 
 ## Features
 
-- **Desktop clock widget**: lives on the wallpaper, behind the icons and every window (it
-  joins the window Explorer draws the wallpaper in, and re-joins if Explorer restarts), or
-  floats on top, or is an ordinary window. Digital, Stacked, Minimal, Analog and Words, in
-  the album's colours, six presets or a custom accent, with 24-hour, seconds and date
-  options.
 - **Full screen** (Ctrl+Alt+F): the cover blurred and drifting as the room light, a sharp
   copy in the middle with the visualizer orbiting it, and a ripple on every bass hit.
   Six visualizer styles (Bars, Mirror, Blocks, Ring, Waveform, Aurora). Space, the arrows,
-  V (visualizer), C (colours) and Esc work. Ctrl+Alt+M hides or shows the clock.
-- Widgets cap their frame rate (30/60) and drop to 20 fps when nothing is playing.
+  V (visualizer), C (colours) and Esc work. It caps its frame rate (30/60) and drops to
+  20 fps when nothing is playing.
 - **Light on the computer**: the edge glow and the lyrics draw at 30 fps by default (60 is an option in Settings → Lyrics overlay). Everything that moves continuously is moved by the GPU compositor rather than repainted, and the overlay stops all work while it is hidden. Paused, Glowtide uses almost nothing.
 - **Maximise**: the title-bar button or a double-click gives a roomy full-window player; F11 goes full screen.
-- **Player window**: small, dark and centred, showing the cover (or the video for YouTube).
-  It has controls, seek, back and forward 15 seconds, like (Spotify) and panels for search,
-  library, queue and devices. Rest the pointer on the cover and it grows while the window
-  takes on its colour; rest it on a button and its name appears. **Lyrics** shows the song's
-  synced lyrics in the window: beside the cover in a wide window, above the controls in a
-  narrow one. The desktop-lyrics button next to it turns the overlay on and off, and
-  **Sync** opens into − / + to nudge the timing.
-- **Dock**: gradient, animation, glow brightness (click the bulb to turn the glow off),
-  display and taskbar each open into their choices while the pointer is over them.
+- **Player window**: three parts. On the left, where you go: Now playing, Library, Search,
+  Queue, Devices (or Apps) and Settings, as icons in a narrow window and with their names
+  when wide; each opens as a page in the middle. In the middle, the round cover (or the
+  video for YouTube), seek and the controls, with back 15 s, like (Spotify) and forward
+  15 s grouped beneath. On the right, what you see: lyrics in the window (beside the cover
+  when wide, above the controls when narrow), lyrics on the desktop, the edge glow (a click
+  turns it on or off; resting on it opens every glow choice), the cover filling the window,
+  and full screen. Every button has a short description on hover (Settings → App → Button
+  hints turns them off). Rest the pointer on the cover and it grows while the window takes
+  on its colour; click it to fill the window. **Sync** opens into − / + to nudge lyric
+  timing.
+- **Settings** is a page with tabs: Glow, Lyrics, Colours, Full screen and App.
 - **Edge glow**: one transparent, click-through window per display (all, the main one, or
   one you pick). Its colours come from the cover: **1 colour**, or **2 colours** sharing the
   edge by a split you set and blending where they meet. **Animation**: Default (the light
@@ -204,6 +202,9 @@ or `npx electron .` after `npm run build`); a packaged copy ignores every one of
   `$env:GLOWTIDE_SYS_TEST=<app id>` follows that app; add `GLOWTIDE_SYS_TEST_CMD="pause"` to send a
   command after 6 s.
   `$env:GLOWTIDE_DEBUG=1` logs player messages.
+- `$env:GLOWTIDE_AUDIT=1` (with `GLOWTIDE_SNAPSHOT`, `GLOWTIDE_DEMO` and `GLOWTIDE_UNFOCUS`) clicks every
+  button and changes every setting in the running app, checks each has its effect, writes
+  `audit.json` and quits.
 - `$env:GLOWTIDE_FS_TEST=1` (with `GLOWTIDE_SNAPSHOT`) logs, for 40 s, whether each overlay and
   widget is showing and the CPU of each window, into `fs.json`.
 - With `GLOWTIDE_SNAPSHOT`: `$env:GLOWTIDE_QUICK=1` opens the tray panel (and photographs it),
@@ -226,7 +227,7 @@ src/main/      Electron main: OAuth (PKCE), Spotify + YouTube clients, YouTube p
 scripts/       build-sky.mjs: regenerates src/shared/skyData.mjs from d3-celestial;
                build-icon.mjs: renders the app icon
 resources/     smtc.ps1: the Windows media-session helper; fullscreen.ps1: spots full-screen
-               apps; wallpaper.ps1: puts widgets on the wallpaper (all unpacked from the asar)
+               apps (both unpacked from the asar)
 src/preload/   window.glowtide bridge
 src/renderer/  React: #/player, #/glow, #/lyrics
 ```

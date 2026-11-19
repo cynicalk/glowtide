@@ -588,15 +588,28 @@ function NowPlaying({
             {track && <div className="status">{lyricNote}</div>}
             {state.error && <div className="error">{state.error}</div>}
           </div>
-          {open && (
-            <PlayerLyrics
-              lines={lyrics}
-              synced={synced}
-              note={track ? LYRIC_STATUS[state.lyricsStatus] : 'Nothing playing'}
-              playback={playback}
-              durationMs={track?.durationMs}
-              offsetMs={state.lyricsOffsetMs}
-            />
+          {open && synced && settings.lyrics.style === 'messages' ? (
+            <div className="pl-lyrics pl-msgs">
+              <PlayerMessages
+                lines={lyrics}
+                playback={playback}
+                durationMs={track?.durationMs}
+                offsetMs={state.lyricsOffsetMs}
+                track={track}
+                bare
+              />
+            </div>
+          ) : (
+            open && (
+              <PlayerLyrics
+                lines={lyrics}
+                synced={synced}
+                note={track ? LYRIC_STATUS[state.lyricsStatus] : 'Nothing playing'}
+                playback={playback}
+                durationMs={track?.durationMs}
+                offsetMs={state.lyricsOffsetMs}
+              />
+            )
           )}
         </div>
       </div>
@@ -642,14 +655,14 @@ function NowPlaying({
   )
 }
 
-/** The lyrics as messages over the full-window cover, word by word. */
-function PlayerMessages({ lines, playback, durationMs, offsetMs, track }) {
+/**
+ * The lyrics as messages, word by word: over the full-window cover, or (bare) in the
+ * lyrics view, in place of the list.
+ */
+function PlayerMessages({ lines, playback, durationMs, offsetMs, track, bare }) {
   const pos = usePosition(playback, durationMs, 80) + (offsetMs || 0)
-  return (
-    <div className="np-msgs">
-      <Messages view={messagesView(lines, pos)} track={track} />
-    </div>
-  )
+  const view = <Messages view={messagesView(lines, pos)} track={track} />
+  return bare ? view : <div className="np-msgs">{view}</div>
 }
 
 /** Esc shrinks the full-window cover back (while it's open). */

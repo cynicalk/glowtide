@@ -49,28 +49,44 @@ test('the key changes with each word, and only then', () => {
 test('three bubbles at most: the one being sung and two before it, whole', () => {
   const th = buildThread([L(1000, 'a b'), L(3000, 'c d'), L(5000, 'e f'), L(7000, 'g h')])
   const v = messagesAt(th, 7100)
-  assert.equal(v.items.length, SHOWN)
+  assert.equal(v.items.filter((m) => m.age < SHOWN).length, SHOWN)
   assert.deepEqual(
     v.items.map((m) => [m.words.join(' '), m.age, m.from]),
     [
+      ['a b', 3, 'them'],
       ['c d', 2, 'me'],
       ['e f', 1, 'them'],
       ['g', 0, 'me']
     ]
   )
-  assert.equal(
-    v.items.some((m) => m.first),
-    false
-  )
+  assert.equal(v.items[0].first, true, 'the one fading out is the first line')
+  assert.equal(messagesAt(th, 9000).items.length, SHOWN + 1, 'never more than one fading')
   assert.equal(messagesAt(th, 1100).items[0].first, true)
 })
 
-test('a long instrumental clears the messages, and they return with the next line', () => {
+test('a long instrumental fades the messages, and the next line starts afresh', () => {
   const th = buildThread([L(1000, 'a b'), L(20000, 'c')])
-  assert.equal(messagesAt(th, 2500).items.length, 1)
-  assert.equal(messagesAt(th, 9000).items.length, 0, 'quiet')
-  assert.equal(messagesAt(th, 19200).items.length, 1, 'the next line is about to start')
-  assert.equal(messagesAt(th, 20000).items.at(-1).words.join(' '), 'c')
+  assert.equal(messagesAt(th, 2500).leaving, false)
+  const quiet = messagesAt(th, 9000)
+  assert.equal(quiet.leaving, true, 'quiet: the last messages fade')
+  assert.equal(quiet.items.at(-1).words.join(' '), 'a b', 'whole, as they leave')
+  assert.equal(messagesAt(th, 19200).leaving, true, 'still quiet just before the next line')
+  const after = messagesAt(th, 20000)
+  assert.equal(after.leaving, false)
+  assert.deepEqual(
+    after.items.map((m) => m.words.join(' ')),
+    ['c'],
+    'the earlier lines do not come back'
+  )
+})
+
+test('a short pause keeps the conversation going', () => {
+  const th = buildThread([L(1000, 'a b'), L(5000, 'c')])
+  assert.equal(messagesAt(th, 4900).leaving, false)
+  assert.deepEqual(
+    messagesAt(th, 5000).items.map((m) => m.words.join(' ')),
+    ['a b', 'c']
+  )
 })
 
 test('word timings split differently from the text are spread over its words', () => {

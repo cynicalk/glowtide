@@ -10,6 +10,31 @@ import { screen } from 'electron'
  * c: the running app. player, lyricsWin, glowWins, quickWin and widgets are read through c
  * each time (they are replaced as windows come and go); the rest are its functions.
  */
+// Samples every frame for 8 s: how far each message moves between frames (the largest step)
+// and how many times one moved at all, plus the bubbles that opened out as they grew.
+const MOTION_PROBE = `new Promise((done) => {
+  const last = new Map()
+  let maxStep = 0, moves = 0, grew = 0, frames = 0
+  const t0 = performance.now()
+  const frame = () => {
+    frames++
+    for (const row of document.querySelectorAll('.msgs .msg:not(.age-3)')) {
+      const top = row.getBoundingClientRect().top
+      const k = row.dataset.k
+      if (last.has(k)) {
+        const d = Math.abs(top - last.get(k))
+        if (d > 0.5) moves++
+        maxStep = Math.max(maxStep, d)
+      }
+      last.set(k, top)
+      if (row.firstElementChild.getAnimations().some((a) => a.effect?.getKeyframes()[0]?.clipPath)) grew++
+    }
+    if (performance.now() - t0 < 8000) requestAnimationFrame(frame)
+    else done({ maxStep: Math.round(maxStep * 10) / 10, moves, grew, frames })
+  }
+  requestAnimationFrame(frame)
+})`
+
 export async function runAudit(c, dir) {
   const { state, setSettings, loadSettings, updateSettings, sendSettings, control } = c
   const { toggleQuick, fullscreen } = c
@@ -325,6 +350,23 @@ export async function runAudit(c, dir) {
     await wait(2500)
     check('messages over the full cover in the player', await has(c.player, '.np-msgs .msg'))
     await p(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`)
+    await wait(300)
+    await click('.rail [aria-label="Lyrics in this window"]')
+    await wait(2500)
+    check('messages in the player lyrics view', await has(c.player, '.pl-msgs .msg'))
+    // smooth, not stiff: over 8 s of song, no message ever jumps; each one glides
+    for (const [where, w] of [
+      ['player', c.player],
+      ['overlay', c.lyricsWin]
+    ]) {
+      const m = await js(w, MOTION_PROBE)
+      check(
+        `messages glide in the ${where} (no jump over 14 px a frame)`,
+        m && m.moves > 0 && m.maxStep <= 14,
+        m
+      )
+    }
+    await click('.rail [aria-label="Lyrics in this window"]')
   })
 
   // ---------- the app ----------

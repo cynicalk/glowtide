@@ -640,9 +640,18 @@ function load(win, route) {
   else win.loadFile(join(__dirname, '../renderer/index.html'), { hash: `/${route}` })
 }
 
+// Every Glowtide window. The safe values are Electron's defaults, but they are written out so a
+// change of default can never quietly turn one off: no Node.js in pages, pages isolated
+// from the preload, sandboxed, web security on, and no middle-click opening windows.
 const prefs = {
   preload: join(__dirname, '../preload/index.js'),
   sandbox: true,
+  contextIsolation: true,
+  nodeIntegration: false,
+  nodeIntegrationInSubFrames: false,
+  webSecurity: true,
+  allowRunningInsecureContent: false,
+  disableBlinkFeatures: 'Auxclick',
   devTools: DEV,
   backgroundThrottling: false
 }

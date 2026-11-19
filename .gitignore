@@ -4,3 +4,9 @@ out
 .DS_Store
 .eslintcache
 *.log*
+
+# never commit local secrets
+.env
+.env.*
+*.pem
+*.key

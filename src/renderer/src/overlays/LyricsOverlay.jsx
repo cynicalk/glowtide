@@ -4,6 +4,7 @@ import { wordWindowAt, lineWindowAt, lineWordsAt, karaokeAt } from '../../../sha
 import { Aura, Waves, Beat, Karaoke } from './LyricStyles'
 import { useSwap, useBeatVars, useHandoff, useLinger } from '../lib/motion'
 import { useFrameRateCap } from '../lib/frameRate'
+import { listensToMusic } from '../../../shared/glow.mjs'
 import {
   buildFigures,
   placeLabels,
@@ -422,7 +423,7 @@ export default function LyricsOverlay() {
   useBeatVars(beatRef, {
     playing: ['aura', 'waves', 'beat'].includes(style) && !!active,
     fps,
-    listen: !!settings?.glow.reactToAudio
+    listen: !!settings && listensToMusic(settings.glow)
   })
 
   if (!state || !settings || !colours) return null

@@ -28,6 +28,7 @@ import { offsetFor, saveOffset } from './offsets'
 import { createWidgets } from './widgets'
 import { createDemo } from './demo'
 import { extractPalette } from '../shared/colour.mjs'
+import { glowBounds, pickDisplays } from '../shared/glow.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
 import { appLabel, systemTrack, repeatFromSmtc } from '../shared/media.mjs'
 import { createSmtc } from './smtc'
@@ -89,6 +90,7 @@ const updater = createUpdater({
 let player = null
 let lyricsWin = null
 let glowWins = []
+let quickWin = null // the tray's quick settings panel
 let tray = null
 let widgets = null
 let quitting = false
@@ -135,7 +137,9 @@ let ytRepeat = 'off'
 let ytErrorVideo = null
 
 function all() {
-  return [player, lyricsWin, ...glowWins, ...(widgets ? widgets.windows() : [])].filter(
+  // The tray panel only while it's open: hidden, it would redraw for nothing every second.
+  const quick = quickWin && !quickWin.isDestroyed() && quickWin.isVisible() ? quickWin : null
+  return [player, lyricsWin, quick, ...glowWins, ...(widgets ? widgets.windows() : [])].filter(
     (w) => w && !w.isDestroyed()
   )
 }
@@ -645,10 +649,10 @@ const prefs = {
 
 function createPlayer() {
   player = new BrowserWindow({
-    width: 400,
-    height: 680,
-    minWidth: 360,
-    minHeight: 560,
+    width: 460,
+    height: 700,
+    minWidth: 420,
+    minHeight: 580,
     show: false,
     frame: false,
     backgroundColor: '#070608',
@@ -656,7 +660,13 @@ function createPlayer() {
     icon,
     webPreferences: { ...prefs, autoplayPolicy: 'no-user-gesture-required' }
   })
+  player.setSkipTaskbar(!loadSettings().showInTaskbar)
   player.on('ready-to-show', () => player.show())
+  // Without a taskbar button, a minimised player would have nowhere to come back from:
+  // it goes to the tray instead.
+  player.on('minimize', () => {
+    if (!loadSettings().showInTaskbar) player.hide()
+  })
   player.on('close', (e) => {
     if (!quitting) {
       e.preventDefault()
@@ -694,7 +704,7 @@ function createPlayer() {
   load(player, 'player')
 }
 
-function overlayWindow(bounds, route) {
+function overlayWindow(bounds, route, { exact = false } = {}) {
   const w = new BrowserWindow({
     ...bounds,
     show: false,
@@ -710,6 +720,10 @@ function overlayWindow(bounds, route) {
   })
   w.setAlwaysOnTop(true, 'screen-saver')
   w.setIgnoreMouseEvents(true)
+  // Windows trims a new window to the work area. exact: put it back over the taskbar too.
+  const fit = () => exact && !w.isDestroyed() && w.setBounds(bounds)
+  fit()
+  w.on('show', fit)
   w.on('ready-to-show', () => {
     w.glowtideReady = true
     if (!coveredByFullscreen(w)) w.showInactive()
@@ -778,9 +792,14 @@ function syncOverlays() {
   for (const w of glowWins) if (!w.isDestroyed()) w.destroy()
   glowWins = []
   if (s.glow.enabled) {
-    const displays =
-      s.glow.displays === 'primary' ? [screen.getPrimaryDisplay()] : screen.getAllDisplays()
-    glowWins = displays.map((d, i) => overlayWindow(d.bounds, `glow?d=${i}`))
+    const displays = pickDisplays(
+      s.glow.displays,
+      screen.getAllDisplays(),
+      screen.getPrimaryDisplay().id
+    )
+    glowWins = displays.map((d, i) =>
+      overlayWindow(glowBounds(d, s.glow.taskbar), `glow?d=${i}`, { exact: true })
+    )
   }
   const target = lyricsDisplay()
   // Moved to another display (or that display's size changed): rebuild the overlay there.
@@ -795,6 +814,72 @@ function syncOverlays() {
   syncFullscreenWatch()
   broadcast() // which display the overlay is on decides whether it sits over the full-screen view
   rebuildTray()
+}
+
+// ---------- the tray's quick settings panel ----------
+const QUICK = { width: 320, height: 640 }
+let quickHiddenAt = 0
+
+function toggleQuick() {
+  // Clicking the tray icon while the panel is open first blurs (and hides) it: don't reopen.
+  if (Date.now() - quickHiddenAt < 300) return
+  if (quickWin && !quickWin.isDestroyed() && quickWin.isVisible()) return quickWin.hide()
+  if (!quickWin || quickWin.isDestroyed()) {
+    quickWin = new BrowserWindow({
+      ...QUICK,
+      show: false,
+      frame: false,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      backgroundColor: '#141116',
+      title: 'Glowtide',
+      icon,
+      // throttled: it does nothing while hidden, and gets fresh state each time it opens
+      webPreferences: { ...prefs, backgroundThrottling: true }
+    })
+    quickWin.on('blur', () => {
+      if (DEV && process.env.GLOWTIDE_QUICK) return // a test run keeps it open to photograph it
+      quickHiddenAt = Date.now()
+      quickWin?.hide()
+    })
+    quickWin.on('close', (e) => {
+      if (!quitting) {
+        e.preventDefault()
+        quickWin.hide()
+      }
+    })
+    quickWin.on('closed', () => (quickWin = null))
+    load(quickWin, 'quick')
+    quickWin.once('ready-to-show', () => placeQuick(true))
+    return
+  }
+  placeQuick(true)
+}
+
+/** Beside the tray icon, inside the work area of the display the icon is on. */
+function placeQuick(show) {
+  if (!quickWin || quickWin.isDestroyed()) return
+  const t = tray?.getBounds() || screen.getCursorScreenPoint()
+  const d = screen.getDisplayNearestPoint({ x: t.x, y: t.y })
+  const wa = d.workArea
+  const h = Math.min(QUICK.height, wa.height - 16)
+  const x = Math.round(
+    Math.min(wa.x + wa.width - QUICK.width - 8, Math.max(wa.x + 8, t.x - QUICK.width / 2))
+  )
+  // the taskbar at the bottom (the usual place) or the top: the panel sits against it
+  const y = t.y > wa.y + wa.height / 2 ? wa.y + wa.height - h - 8 : wa.y + 8
+  quickWin.setBounds({ x, y, width: QUICK.width, height: h })
+  if (show) {
+    // it heard nothing while hidden: bring it up to date as it opens
+    quickWin.webContents.send('state', state)
+    quickWin.webContents.send('settings', loadSettings())
+    quickWin.show()
+    quickWin.focus()
+  }
 }
 
 function rebuildTray() {
@@ -856,7 +941,8 @@ function installUpdate() {
 
 function setSettings(patch) {
   const before = loadSettings()
-  const prevGlow = JSON.stringify([before.glow.enabled, before.glow.displays])
+  const glowKey = (x) => JSON.stringify([x.glow.enabled, x.glow.displays, x.glow.taskbar])
+  const prevGlow = glowKey(before)
   const prevLyr = JSON.stringify([before.lyrics.overlay, before.lyrics.display])
   const placeKey = (x) =>
     JSON.stringify([
@@ -873,12 +959,13 @@ function setSettings(patch) {
     rebuildTray() // the Move entries follow which widgets are on
   }
   if (
-    JSON.stringify([next.glow.enabled, next.glow.displays]) !== prevGlow ||
+    glowKey(next) !== prevGlow ||
     JSON.stringify([next.lyrics.overlay, next.lyrics.display]) !== prevLyr
   )
     syncOverlays()
   else if (next.hideForFullscreen !== before.hideForFullscreen) syncFullscreenWatch()
   if (next.autoUpdate && !before.autoUpdate) updater.check()
+  if (next.showInTaskbar !== before.showInTaskbar) player?.setSkipTaskbar(!next.showInTaskbar)
   sendSettings()
   syncAwake()
   return next
@@ -893,6 +980,16 @@ function registerIpc() {
   handle('init', () => ({ state, settings: loadSettings(), lyrics: lyricsLines }))
   handle('update:check', () => updater.check())
   handle('update:install', () => installUpdate())
+  handle('app:quit', () => {
+    quitting = true
+    app.quit()
+  })
+  handle('player:show', () => {
+    quickWin?.hide()
+    player?.show()
+    player?.focus()
+  })
+  handle('quick:close', () => quickWin?.hide())
   handle('settings:set', (_, patch) => setSettings(patch))
   handle('control', (_, action, arg) => control(action, arg))
   handle('query', (_, kind, arg) => query(kind, arg))
@@ -993,6 +1090,31 @@ function scheduleSnapshot() {
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
   if (process.env.GLOWTIDE_MAXIMIZE) setTimeout(() => player?.maximize(), 1200)
   if (process.env.GLOWTIDE_STAGE) setTimeout(() => widgets?.openStage(), 2000)
+  // GLOWTIDE_QUICK=1 opens the tray's quick panel; GLOWTIDE_PLAYER_SIZE="w,h" sizes the player;
+  // GLOWTIDE_PLAYER_JS runs in the player at 2.5 s; GLOWTIDE_HOVER="<selector>" rests the pointer on
+  // that element of the player (or of the quick panel, with GLOWTIDE_HOVER_IN=quick) 1.2 s
+  // before the snapshot, so hover states show in it.
+  if (process.env.GLOWTIDE_QUICK) setTimeout(() => toggleQuick(), 1500)
+  if (process.env.GLOWTIDE_PLAYER_SIZE) {
+    const [w, h] = process.env.GLOWTIDE_PLAYER_SIZE.split(',').map(Number)
+    setTimeout(() => player?.setSize(w, h), 1000)
+  }
+  if (process.env.GLOWTIDE_PLAYER_JS)
+    setTimeout(() => player?.webContents.executeJavaScript(process.env.GLOWTIDE_PLAYER_JS), 2500)
+  if (process.env.GLOWTIDE_HOVER)
+    setTimeout(
+      async () => {
+        const win = process.env.GLOWTIDE_HOVER_IN === 'quick' ? quickWin : player
+        const r = await win?.webContents.executeJavaScript(
+          `(() => { const b = document.querySelector(${JSON.stringify(process.env.GLOWTIDE_HOVER)})?.getBoundingClientRect(); return b && { x: b.x + b.width / 2, y: b.y + b.height / 2 } })()`
+        )
+        if (!r) return
+        const at = { x: Math.round(r.x), y: Math.round(r.y) }
+        win.webContents.sendInputEvent({ type: 'mouseEnter', ...at })
+        win.webContents.sendInputEvent({ type: 'mouseMove', ...at })
+      },
+      Number(process.env.GLOWTIDE_SNAPSHOT_MS || 6000) - 1200
+    )
   // GLOWTIDE_EDIT_TEST=1: lift the visualizer, resize it, press Done, and record what happened.
   if (process.env.GLOWTIDE_EDIT_TEST)
     setTimeout(async () => {
@@ -1200,13 +1322,14 @@ function scheduleSnapshot() {
       const wins = [
         ['player', player],
         ['lyrics', lyricsWin],
+        ['quick', quickWin],
         ...glowWins.map((w, i) => [`glow${i}`, w]),
         ...(widgets ? widgets.windows() : []).map((w) => [w.widgetKind || 'stage', w])
       ]
       for (const [name, w] of wins) {
-        if (!w || w.isDestroyed()) continue
+        if (!w || w.isDestroyed() || !w.isVisible()) continue
         // Transparent overlays capture over nothing: paint a dark desktop behind them first.
-        if (w !== player)
+        if (w !== player && w !== quickWin)
           await w.webContents.executeJavaScript(
             "document.body.style.background='#14161c'; new Promise(r => setTimeout(r, 120))"
           )
@@ -1241,6 +1364,7 @@ function scheduleSnapshot() {
         JSON.stringify(
           {
             flow,
+            glowBounds: glowWins.map((w) => !w.isDestroyed() && w.getBounds()),
             ...state,
             lyricsCount: lyricsLines.length,
             overlay,
@@ -1334,7 +1458,14 @@ else {
     } catch {
       /* taken by another app: the settings buttons still work */
     }
-    tray.on('click', () => (player.isVisible() ? player.focus() : player.show()))
+    // A click opens the quick settings panel by the tray icon (as Glowtide's menu-bar panel does
+    // on a Mac); a double-click opens the player. The right-click menu is unchanged.
+    tray.on('click', () => toggleQuick())
+    tray.on('double-click', () => {
+      quickWin?.hide()
+      player.show()
+      player.focus()
+    })
     rebuildTray()
     for (const ev of ['display-added', 'display-removed', 'display-metrics-changed'])
       screen.on(ev, () => syncOverlays())

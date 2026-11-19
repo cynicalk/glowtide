@@ -78,6 +78,19 @@ export function useColours(state, settings) {
   )
 }
 
+/** The connected displays, [{ id, label }], for the display pickers. */
+export function useDisplays() {
+  const [list, setList] = useState([])
+  useEffect(() => {
+    let alive = true
+    api.displays().then((d) => alive && setList(d || []))
+    return () => {
+      alive = false
+    }
+  }, [])
+  return list
+}
+
 export function fmtTime(ms) {
   if (!Number.isFinite(ms) || ms < 0) return '0:00'
   const s = Math.floor(ms / 1000)

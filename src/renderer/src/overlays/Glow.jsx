@@ -2,8 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useColours, useGlowtide } from '../lib/store'
 import { startBeatTracker } from '../lib/beat'
 import { useFrameRateCap } from '../lib/frameRate'
-
-const BASE_SPEED = 22 // degrees a second for the travelling light when the music is quiet
+import { ANIMATIONS, duoGradient, glowAnimation } from '../../../shared/glow.mjs'
 
 /**
  * The edge glow. Nothing on it is ever repainted while music plays; per frame it only
@@ -11,8 +10,15 @@ const BASE_SPEED = 22 // degrees a second for the travelling light when the musi
  * - the frame is painted once; the music changes its opacity and that of a softer outer
  *   halo laid over it (the "swell"),
  * - the travelling light is a gradient that is turned (a transform), faster with the music.
- * One loop drives both at the chosen frame rate (30 or 60), and only while something plays. Paused, it all holds
- * still and nothing runs.
+ *
+ * One colour: a steady frame in the glow colour with a light of the same colour travelling
+ * round it. Two colours: the frame itself is the two colours, sharing the edge by the split
+ * and blending where they meet, and the animation carries them round.
+ *
+ * Animations (shared/glow.mjs): Default travels at a steady pace, Music Sync travels faster
+ * and swells with the beat, Idle drifts slowly and breathes, No Animation holds still.
+ * One loop drives it all at the chosen frame rate (30 or 60), and only while something
+ * plays and something moves. Paused, it all holds still and nothing runs.
  */
 export default function Glow() {
   const { state, settings } = useGlowtide()
@@ -25,8 +31,10 @@ export default function Glow() {
   const playing = !!state?.playback?.isPlaying
   const hasTrack = !!state?.track
   const g = settings?.glow
-  const react = !!g?.reactToAudio
-  const moving = !!g && g.motion !== 'still'
+  const anim = ANIMATIONS[glowAnimation(g)]
+  const react = anim.react
+  const moving = anim.move
+  const duo = g?.gradient === 2
   const shown = hasTrack && (playing || g?.idle !== 'off')
   const fps = settings?.fps === 60 ? 60 : 30
   useFrameRateCap(fps)
@@ -65,8 +73,13 @@ export default function Glow() {
       apply(shown ? 0.6 : 0) // paused: a steady glow, and nothing runs
       return
     }
+    if (!moving && !react && !anim.breathe) {
+      apply(0.9) // No Animation: full and still, and nothing runs
+      return
+    }
     let raf
     let last = 0
+    const breatheMs = anim.speed < 10 ? 1700 : 900
     const loop = (t) => {
       raf = requestAnimationFrame(loop)
       // every frame of this window is copied out for Windows, so fewer frames are cheaper
@@ -75,30 +88,48 @@ export default function Glow() {
       last = t
       const live = react && level.current.ok
       const { energy, pulse } = level.current
-      const strength = live ? 0.8 + 0.15 * energy + 0.35 * pulse : 0.85 + 0.15 * Math.sin(t / 900) // no audio signal: a slow breathe, not a fake beat
+      // no audio signal: a slow breathe, not a fake beat
+      const strength = live
+        ? 0.8 + 0.15 * energy + 0.35 * pulse
+        : 0.85 + anim.breathe * Math.sin(t / breatheMs)
       apply(strength)
-      if (moving) turn(dt * (BASE_SPEED + (live ? energy * 70 + pulse * 110 : 0)))
+      if (moving) turn(dt * (anim.speed + (live ? energy * 70 + pulse * 110 : 0)))
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [g, shown, playing, react, moving, fps])
+  }, [g, anim, shown, playing, react, moving, fps, duo])
 
   if (!settings || !colours) return null
+  const c = colours.glow
   const vars = {
-    '--c': colours.glow,
-    '--c2': colours.highlight,
-    '--c3': colours.lyrics,
+    '--c': c,
+    '--g2': colours.glow2,
+    // one colour: the travelling light is a brighter shade of the glow, not other colours
+    '--c2': duo ? colours.highlight : `color-mix(in srgb, ${c} 60%, white)`,
+    '--c3': duo ? colours.lyrics : c,
     '--th': `${settings.glow.thickness}px`,
     '--sp': `${settings.glow.spread}px`
   }
   const fade = settings.colour.fade ? 'fade' : ''
-  const layer = (cls, i) => (
+  const layer = (cls, i, background) => (
     <div className={cls}>
       <div className="flow-frame">
-        <i ref={(el) => (spinners.current[i] = el)} />
+        <i ref={(el) => (spinners.current[i] = el)} style={background ? { background } : null} />
       </div>
     </div>
   )
+  if (duo) {
+    const bg = duoGradient(g.split)
+    return (
+      <>
+        <div ref={edge} className={`edge-duo ${fade}`} style={{ ...vars, opacity: 0 }}>
+          {layer('flow-soft', 0, bg)}
+          {layer('flow-sharp duo-line', 1, bg)}
+        </div>
+        <div ref={halo} className={`edge-halo duo ${fade}`} style={{ ...vars, opacity: 0 }} />
+      </>
+    )
+  }
   return (
     <>
       <div ref={edge} className={`edge ${fade}`} style={{ ...vars, opacity: 0 }} />

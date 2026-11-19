@@ -55,10 +55,21 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 - **Light on the computer**: the edge glow and the lyrics draw at 30 fps by default (60 is an option in Settings → Lyrics overlay). Everything that moves continuously is moved by the GPU compositor rather than repainted, and the overlay stops all work while it is hidden. Paused, Glowtide uses almost nothing.
 - **Maximise**: the title-bar button or a double-click gives a roomy full-window player; F11 goes full screen.
 - **Player window**: small, dark and centred, showing the cover (or the video for YouTube).
-  It has controls, seek, like (Spotify) and panels for search, library, queue and devices.
-- **Edge glow**: one transparent, click-through window per display. Its colour comes from
-  the cover, and it pulses on the beat by listening to the PC's sound output (loopback),
-  never the microphone. With no audio signal it breathes slowly rather than faking a beat.
+  It has controls, seek, back and forward 15 seconds, like (Spotify) and panels for search,
+  library, queue and devices. Rest the pointer on the cover and it grows while the window
+  takes on its colour; rest it on a button and its name appears. **Lyrics** shows the song's
+  synced lyrics in the window: beside the cover in a wide window, above the controls in a
+  narrow one. The desktop-lyrics button next to it turns the overlay on and off, and
+  **Sync** opens into − / + to nudge the timing.
+- **Dock**: gradient, animation, glow brightness (click the bulb to turn the glow off),
+  display and taskbar each open into their choices while the pointer is over them.
+- **Edge glow**: one transparent, click-through window per display (all, the main one, or
+  one you pick). Its colours come from the cover: **1 colour**, or **2 colours** sharing the
+  edge by a split you set and blending where they meet. **Animation**: Default (the light
+  travels round at a steady pace), Music Sync (faster and swelling on the beat, from the
+  PC's sound output, never the microphone), Idle (a slow drift and breathe) or No Animation.
+  **Keep clear of the taskbar** (on by default) runs it along the top of the taskbar
+  instead of behind it.
 - **Kinetic lyrics**: a click-through overlay with the clock and three stacked words. The
   word being sung is large and the next one sits in a highlight block. With word-timed
   lyrics, a karaoke fill sweeps across each word over its real duration.
@@ -97,8 +108,12 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   front once a second. Settings → Lyrics overlay → Hide for full-screen apps turns it off.
 - **Colours**: a 5-swatch palette from each cover. Pick which swatch drives the glow, the
   lyrics and the highlight, then adjust brightness and saturation. Dark picks are lifted so
-  they stay readable. Or choose Custom. Colours crossfade between songs.
-- **Tray**: source, lyrics and glow toggles. Closing the window hides it to the tray.
+  they stay readable. Or **Override** the album: two colour wheels (primary and secondary,
+  each with a brightness slider). Colours crossfade between songs.
+- **Tray**: click the icon for quick settings beside it (gradient, animation, taskbar,
+  thickness, glow, override colours, display, desktop lyrics, taskbar button, updates, open
+  and quit); double-click for the player; right-click for the menu. Closing the window hides
+  it to the tray. **Show in taskbar** off keeps Glowtide in the tray only.
 
 ## Honest limits
 
@@ -195,6 +210,11 @@ or `npx electron .` after `npm run build`); a packaged copy ignores every one of
   `$env:GLOWTIDE_DEBUG=1` logs player messages.
 - `$env:GLOWTIDE_FS_TEST=1` (with `GLOWTIDE_SNAPSHOT`) logs, for 40 s, whether each overlay and
   widget is showing and the CPU of each window, into `fs.json`.
+- With `GLOWTIDE_SNAPSHOT`: `$env:GLOWTIDE_QUICK=1` opens the tray panel (and photographs it),
+  `$env:GLOWTIDE_PLAYER_SIZE="1100,720"` sizes the player, `$env:GLOWTIDE_PLAYER_JS` runs in the player
+  at 2.5 s, and `$env:GLOWTIDE_HOVER="<selector>"` rests the pointer on that element of the player
+  (or the tray panel, with `GLOWTIDE_HOVER_IN=quick`) so hover states show. `state.json` also
+  records each glow window's bounds.
 - `$env:GLOWTIDE_UPDATE_FEED="http://127.0.0.1:8899/"` updates a development run from a local
   folder of `latest.yml` and an installer (needs a `dev-app-update.yml` in the project);
   add `GLOWTIDE_UPDATE_INSTALL=1` to install as soon as it has downloaded.

@@ -1988,3 +1988,570 @@ input[type='range']:hover::-webkit-slider-thumb,
   color: var(--text);
   font-weight: 600;
 }
+
+/* ======================================================================
+   Features from the Mac version (1.1)
+   ====================================================================== */
+
+/* ---------- edge glow: two colours sharing the edge ---------- */
+@property --g2 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ff5fa2;
+}
+.edge-duo {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  will-change: opacity;
+}
+.edge-duo.fade {
+  transition:
+    --c 1.2s,
+    --g2 1.2s;
+}
+.edge-duo .flow-soft {
+  opacity: 0.95;
+}
+.duo-line .flow-frame {
+  padding: var(--th);
+}
+.edge-halo.duo {
+  box-shadow: inset 0 0 calc(var(--sp) * 1.2) calc(var(--sp) * 0.3)
+    color-mix(in srgb, color-mix(in srgb, var(--c) 50%, var(--g2)) 45%, transparent);
+}
+
+/* ---------- player: hover the cover and it grows, the window takes on its colour ---------- */
+.cover {
+  transition:
+    width 0.45s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 1s;
+}
+.art-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s;
+  background:
+    radial-gradient(
+      120% 80% at 50% 30%,
+      color-mix(in srgb, var(--glow) 36%, transparent),
+      transparent 72%
+    ),
+    color-mix(in srgb, var(--glow) 9%, transparent);
+}
+.np.art-big .art-tint {
+  opacity: 1;
+}
+.np.art-big .backdrop {
+  opacity: 0.55;
+}
+.np.art-big .cover {
+  width: min(330px, 74vw, 52vh);
+  transform: none;
+}
+.player.max .np.art-big .cover {
+  width: min(64vh, 48vw, 760px);
+}
+
+/* ---------- player: back and forward fifteen seconds ---------- */
+.controls {
+  gap: 8px;
+}
+.skip15 {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.skip15 b {
+  position: absolute;
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 1px;
+}
+
+/* ---------- labels that appear over a button while the pointer rests on it ---------- */
+[data-tip] {
+  position: relative;
+}
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 4px);
+  padding: 4px 9px;
+  border-radius: 9px;
+  background: rgba(24, 21, 27, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+  z-index: 40;
+}
+[data-tip]:hover:not(:disabled)::after,
+[data-tip]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0.35s;
+}
+
+/* ---------- lyric timing: a small button that opens into − Sync + ---------- */
+.lyric-row {
+  gap: 8px;
+}
+.sync-xp {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border-radius: 16px;
+  background: var(--pill);
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sync-xp .sync-icon {
+  background: transparent;
+}
+.sync-body {
+  display: flex;
+  align-items: center;
+  max-width: 0;
+  opacity: 0;
+  transition:
+    max-width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s;
+}
+.sync-xp:hover .sync-body,
+.sync-xp:focus-within .sync-body,
+.sync-xp.moved .sync-body {
+  max-width: 150px;
+  opacity: 1;
+  padding-right: 3px;
+}
+.sync-body span {
+  min-width: 46px;
+  text-align: center;
+  cursor: default;
+}
+.sync-xp.moved {
+  color: var(--text);
+}
+
+/* ---------- lyrics inside the player ---------- */
+.np-card,
+.np-left {
+  display: contents;
+}
+.np.lyrics-open .np-main {
+  padding: 6px 18px 0;
+  justify-content: stretch;
+}
+.np.lyrics-open .np-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 8px;
+}
+.np.lyrics-open .np-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  order: 2;
+  min-width: 0;
+}
+.np.lyrics-open .np-left .cover {
+  display: none;
+}
+.np.lyrics-open .np-left .title {
+  margin-top: 0;
+}
+.pl-lyrics {
+  order: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(transparent, #000 16%, #000 84%, transparent);
+  text-align: center;
+  padding: 0 6px;
+}
+.pl-lyrics::-webkit-scrollbar {
+  display: none;
+}
+.pl-lyrics.empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 13px;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.pl-pad {
+  height: 45%;
+}
+.pl-line,
+.pl-gap {
+  padding: 6px 2px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: rgba(243, 236, 230, 0.42);
+  transition:
+    color 0.35s,
+    opacity 0.35s,
+    font-size 0.3s;
+}
+.pl-line.past {
+  color: rgba(243, 236, 230, 0.3);
+}
+.pl-line.far {
+  opacity: 0.55;
+}
+.pl-line.cur {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+  text-shadow: 0 0 22px color-mix(in srgb, var(--glow) 45%, transparent);
+}
+.pl-gap {
+  font-size: 13px;
+  opacity: 0.5;
+}
+.pl-gap.cur {
+  color: var(--glow);
+  opacity: 1;
+}
+/* A wide window: the Mac layout, a card with the cover and controls on the left and the
+   lyrics running down the right. */
+@media (min-width: 720px) {
+  .np.lyrics-open .np-main {
+    justify-content: center;
+    padding: 6px 28px 0;
+  }
+  .np.lyrics-open .np-card {
+    flex-direction: row;
+    align-items: center;
+    gap: 28px;
+    width: min(100%, 1040px);
+    height: min(100%, 560px);
+    margin: auto;
+    padding: 22px 26px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 30px 80px -40px color-mix(in srgb, var(--glow) 40%, transparent);
+  }
+  .np.lyrics-open .np-left {
+    order: 0;
+    width: min(300px, 38%);
+  }
+  .np.lyrics-open .np-left .cover {
+    display: block;
+    width: min(220px, 100%, 30vh);
+  }
+  .np.lyrics-open .np-left .title {
+    margin-top: 14px;
+  }
+  .np.lyrics-open .np-left .controls {
+    gap: 4px;
+  }
+  .np.lyrics-open .np-left .controls .rd {
+    width: 30px;
+    height: 30px;
+  }
+  .np.lyrics-open .np-left .controls .rd.big {
+    width: 42px;
+    height: 42px;
+  }
+  .np.lyrics-open .pl-lyrics {
+    align-self: stretch;
+    text-align: left;
+    padding-left: 18px;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .pl-line.cur {
+    font-size: 22px;
+  }
+}
+
+/* ---------- dock: buttons that open into their choices ---------- */
+.dock {
+  gap: 4px;
+}
+.dock .rd {
+  width: 28px;
+  height: 28px;
+}
+.qx {
+  display: inline-flex;
+}
+.qx-pop {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% - 8px);
+  transform: translate(-50%, 4px);
+  padding-bottom: 10px;
+  opacity: 0;
+  visibility: hidden;
+  z-index: 30;
+  transition:
+    opacity 0.15s 0.2s,
+    transform 0.15s 0.2s,
+    visibility 0s linear 0.35s;
+}
+.qx:hover .qx-pop,
+.qx:focus-within .qx-pop {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  z-index: 31;
+  transition-delay: 0s;
+}
+.qx-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 190px;
+  padding: 10px 12px 12px;
+  border-radius: 18px;
+  background: rgba(26, 23, 29, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.7);
+}
+.qx-title {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.qx-note {
+  font-size: 10.5px;
+  color: var(--faint);
+  text-align: center;
+}
+.qseg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 13px;
+  background: #0b0a0c;
+}
+.qseg button {
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.qseg button:hover {
+  color: var(--text);
+}
+.qseg button.on {
+  background: var(--pill-hover);
+  color: var(--text);
+}
+.qslide {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 230px;
+}
+.qlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 250px;
+  align-self: stretch;
+}
+.qlist button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #cfc8c2;
+  text-align: left;
+}
+.qlist button span {
+  flex: 1;
+}
+.qlist button:hover {
+  background: var(--pill-hover);
+}
+.qlist button.on {
+  color: var(--text);
+  background: color-mix(in srgb, var(--glow) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glow) 50%, transparent);
+}
+.qlist button.on svg:last-child {
+  color: var(--glow);
+}
+
+/* ---------- colour wheels ("Override album colour") ---------- */
+.wheels {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  margin: 8px 0 12px;
+}
+.cwheel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.cw-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cw-head em {
+  margin-left: 6px;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--faint);
+}
+.cw-ring {
+  position: relative;
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+  background:
+    radial-gradient(circle closest-side, #fff, rgba(255, 255, 255, 0)),
+    conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.cw-dark {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #000;
+  pointer-events: none;
+}
+.cw-knob {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.cw-bright {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 124px;
+  color: var(--muted);
+}
+.cw-bright input[type='range'] {
+  background: linear-gradient(to right, var(--text) var(--p, 50%), var(--line) var(--p, 50%));
+}
+
+/* the settings rows that now hold four choices */
+.srow .seg.small {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ---------- the tray's quick settings panel ---------- */
+html[data-route='quick'],
+html[data-route='quick'] body {
+  background: #141116;
+}
+.quick {
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px 16px 14px;
+  font-size: 12px;
+  color: #cfc8c2;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  scrollbar-width: thin;
+}
+.q-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.q-head > span {
+  flex: 1;
+}
+.q-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+}
+.q-row select {
+  min-width: 130px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #0b0a0c;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.q-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0;
+}
+.q-slider input[type='range'] {
+  flex: none;
+  width: 100%;
+}
+.q-label {
+  margin: 8px 0 6px;
+}
+.q-displays {
+  min-width: 0;
+}
+.quick hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 8px 0;
+}
+.quick .muted {
+  color: var(--muted);
+}
+.q-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}

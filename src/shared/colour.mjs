@@ -59,6 +59,24 @@ export function hslToRgb([h, s, l]) {
   return [(r1 + m) * 255, (g1 + m) * 255, (b1 + m) * 255]
 }
 
+/** Hue 0..360, saturation and value 0..1: what a colour wheel and its brightness slider pick. */
+export function hexToHsv(hex) {
+  const [r, g, b] = hexToRgb(hex).map((v) => v / 255)
+  const mx = Math.max(r, g, b)
+  const d = mx - Math.min(r, g, b)
+  let h = 0
+  if (d) h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4
+  return [h * 60, mx ? d / mx : 0, mx]
+}
+
+export function hsvToHex([h, s, v]) {
+  const f = (n) => {
+    const k = (n + (((h % 360) + 360) % 360) / 60) % 6
+    return (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255
+  }
+  return rgbToHex([f(5), f(3), f(1)])
+}
+
 /** WCAG relative luminance, 0..1. */
 export function luminance(hex) {
   const [r, g, b] = hexToRgb(hex).map((v) => {
@@ -156,29 +174,37 @@ export const DEFAULT_PALETTE = ['#e07a3a', '#f1d9a8', '#e0a040', '#6b2e17', '#2a
 
 /**
  * Turn palette + colour settings into the three colours the app paints with.
- * settings: { source: 'album'|'custom', glow, lyrics, highlight (swatch indexes),
- *             brightness, saturation, custom (hex) }
+ * settings: { source: 'album'|'custom', glow, glow2, lyrics, highlight (swatch indexes),
+ *             brightness, saturation, custom, custom2 (hex) }
+ * glow2 is the second colour of a two-colour edge glow.
  */
+/** A colour from settings, as #rrggbb, or the fallback: settings.json is edited by hand too. */
+export const safeHex = (v, fallback) =>
+  typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback
+
 export function resolveColours(palette, settings) {
-  const pal = palette?.length ? palette : DEFAULT_PALETTE
+  const pal = (palette?.length ? palette : DEFAULT_PALETTE).map((c) => safeHex(c, '#808080'))
   const pick = (i) => pal[Math.min(pal.length - 1, Math.max(0, i ?? 0))]
   const adj = { brightness: settings.brightness ?? 0, saturation: settings.saturation ?? 0 }
-  let glow, lyrics, highlight, secondary
+  let glow, glow2, lyrics, highlight, secondary
   if (settings.source === 'custom') {
-    glow = adjust(settings.custom || '#5fb4ff', adj)
+    glow = adjust(safeHex(settings.custom, '#5fb4ff'), adj)
+    glow2 = adjust(safeHex(settings.custom2, '#ff5fa2'), adj)
     highlight = glow
     lyrics = adjust('#f3ece6', { brightness: adj.brightness })
     secondary = adjust('#b9b2bb', { brightness: adj.brightness })
   } else {
     glow = adjust(pick(settings.glow), adj)
+    glow2 = adjust(pick(settings.glow2 ?? 2), adj)
     lyrics = adjust(pick(settings.lyrics), adj)
     highlight = adjust(pick(settings.highlight), adj)
     // Secondary text: words already sung, constellation labels and lines.
     secondary = adjust(pick(settings.secondary ?? settings.lyrics), adj)
   }
   glow = readableOnDark(glow, 0.08)
+  glow2 = readableOnDark(glow2, 0.08)
   lyrics = readableOnDark(lyrics)
   highlight = readableOnDark(highlight, 0.12)
   secondary = readableOnDark(secondary, 0.14)
-  return { glow, lyrics, highlight, secondary, highlightText: textOn(highlight) }
+  return { glow, glow2, lyrics, highlight, secondary, highlightText: textOn(highlight) }
 }

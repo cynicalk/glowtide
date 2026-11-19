@@ -94,3 +94,43 @@ test('resolveColours survives a missing palette and out-of-range indexes', () =>
   const c = resolveColours(null, { source: 'album', glow: 9, lyrics: -3, highlight: 2 })
   assert.match(c.glow, /^#[0-9a-f]{6}$/)
 })
+
+test('hsv: what the colour wheels pick', async () => {
+  const { hexToHsv, hsvToHex } = await import('../src/shared/colour.mjs')
+  for (const hex of ['#e07a3a', '#000000', '#ffffff', '#3366cc', '#ff0000', '#00ff7f'])
+    assert.equal(hsvToHex(hexToHsv(hex)), hex)
+  assert.deepEqual(hexToHsv('#ff0000'), [0, 1, 1])
+  assert.equal(hsvToHex([120, 1, 1]), '#00ff00')
+  assert.equal(hsvToHex([240, 0.5, 0.5]), '#404080')
+  assert.equal(hsvToHex([360, 1, 1]), '#ff0000')
+})
+
+test('a second glow colour, from the album or the override', () => {
+  const pal = ['#ff0000', '#00ff00', '#3366ff', '#ffff00', '#00ffff']
+  assert.equal(resolveColours(pal, { source: 'album', glow: 0, glow2: 1 }).glow2, '#00ff00')
+  assert.equal(
+    resolveColours(pal, { source: 'album', glow: 0 }).glow2,
+    '#3366ff',
+    'defaults to swatch 3'
+  )
+  const c = resolveColours(pal, { source: 'custom', custom: '#ff0000', custom2: '#0000ff' })
+  assert.equal(c.glow, '#ff0000')
+  assert.notEqual(c.glow2, '#0000ff', 'a dark blue is lifted so it shows')
+  assert.ok(luminance(c.glow2) >= 0.08)
+})
+
+test('colours from settings are checked before they reach the page', async () => {
+  const { safeHex } = await import('../src/shared/colour.mjs')
+  assert.equal(safeHex('#A1b2C3', '#000000'), '#A1b2C3')
+  for (const bad of ['red', '#fff', 'url(x)', '#12345g', '#1234567', null, 5, '#123456; x'])
+    assert.equal(safeHex(bad, '#000000'), '#000000')
+  const c = resolveColours(['javascript:1', '#00ff00'], {
+    source: 'custom',
+    custom: 'red;background:url(//x)',
+    custom2: '#00ff00'
+  })
+  assert.match(c.glow, /^#[0-9a-f]{6}$/)
+  assert.match(c.glow2, /^#[0-9a-f]{6}$/)
+  const a = resolveColours(['bogus', '#00ff00'], { source: 'album', glow: 0, glow2: 1 })
+  assert.match(a.glow, /^#[0-9a-f]{6}$/)
+})

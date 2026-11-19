@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
-import { AlignCenter, Sparkles, Sun, Waves as WavesIcon, Activity, Mic2 } from 'lucide-react'
-import { api } from '../lib/store'
+import { useState } from 'react'
+import { AlignCenter, Sparkles, Sun, Waves as WavesIcon, Activity, Mic2, Power } from 'lucide-react'
+import { api, useDisplays } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
 import { THEMES, VIZ_STYLES, vizPalette } from '../../../shared/viz.mjs'
+import { glowAnimation } from '../../../shared/glow.mjs'
+import ColourWheel from './ColourWheel'
+import { ANIMATION_HINTS, ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
 
 // Fonts that ship with Windows 10/11, so every choice renders.
 const FONTS = [
@@ -60,7 +63,7 @@ function Fold({ k, open: startOpen = false, children }) {
   )
 }
 
-function Seg({ value, options, onChange }) {
+export function Seg({ value, options, onChange }) {
   return (
     <div className="seg small">
       {options.map(([k, label]) => (
@@ -72,19 +75,7 @@ function Seg({ value, options, onChange }) {
   )
 }
 
-function useDisplays() {
-  const [list, setList] = useState([])
-  useEffect(() => {
-    let alive = true
-    api.displays().then((d) => alive && setList(d))
-    return () => {
-      alive = false
-    }
-  }, [])
-  return list
-}
-
-function Toggle({ on, onChange, label }) {
+export function Toggle({ on, onChange, label }) {
   return (
     <button
       role="switch"
@@ -98,7 +89,7 @@ function Toggle({ on, onChange, label }) {
   )
 }
 
-function Slider({ label, value, min, max, step = 1, onChange, unit = '' }) {
+export function Slider({ label, value, min, max, step = 1, onChange, unit = '' }) {
   return (
     <label className="srow">
       <span>{label}</span>
@@ -165,7 +156,7 @@ export default function SettingsPanel({ state, settings, onClose }) {
               className={!album ? 'on' : ''}
               onClick={() => set({ colour: { source: 'custom' } })}
             >
-              Custom
+              Override
             </button>
           </div>
         </div>
@@ -182,6 +173,15 @@ export default function SettingsPanel({ state, settings, onClose }) {
           disabled={!album}
           onChange={(v) => set({ colour: { glow: v } })}
         />
+        {g.gradient === 2 && (
+          <SwatchPick
+            label="Second glow colour"
+            palette={palette}
+            value={c.glow2 ?? 2}
+            disabled={!album}
+            onChange={(v) => set({ colour: { glow2: v } })}
+          />
+        )}
         <SwatchPick
           label="Lyrics"
           palette={palette}
@@ -203,16 +203,7 @@ export default function SettingsPanel({ state, settings, onClose }) {
           disabled={!album}
           onChange={(v) => set({ colour: { secondary: v } })}
         />
-        {!album && (
-          <label className="srow">
-            <span>Custom colour</span>
-            <input
-              type="color"
-              value={c.custom}
-              onChange={(e) => set({ colour: { custom: e.target.value } })}
-            />
-          </label>
-        )}
+        {!album && <OverrideWheels c={c} g={g} set={set} />}
         <Slider
           label="Brightness"
           min={-30}
@@ -257,6 +248,34 @@ export default function SettingsPanel({ state, settings, onClose }) {
             onChange={(v) => set({ glow: { enabled: v } })}
           />
         </div>
+        <div className="srow">
+          <span>Gradient</span>
+          <Seg
+            value={g.gradient === 2 ? 2 : 1}
+            options={GRADIENTS}
+            onChange={(v) => set({ glow: { gradient: v } })}
+          />
+        </div>
+        {g.gradient === 2 && (
+          <Slider
+            label="First colour’s share"
+            min={20}
+            max={80}
+            step={5}
+            value={g.split ?? 60}
+            unit="%"
+            onChange={(v) => set({ glow: { split: v } })}
+          />
+        )}
+        <div className="srow">
+          <span>Animation</span>
+          <Seg
+            value={glowAnimation(g)}
+            options={ANIMATION_OPTIONS}
+            onChange={(v) => set({ glow: { animation: v } })}
+          />
+        </div>
+        <p className="fine">{ANIMATION_HINTS[glowAnimation(g)]}</p>
         <Slider
           label="Thickness"
           min={1}
@@ -282,39 +301,33 @@ export default function SettingsPanel({ state, settings, onClose }) {
           onChange={(v) => set({ glow: { intensity: v } })}
         />
         <div className="srow">
-          <span>Moving light</span>
+          <span>Keep clear of the taskbar</span>
           <Toggle
-            label="Moving light"
-            on={g.motion !== 'still'}
-            onChange={(v) => set({ glow: { motion: v ? 'flow' : 'still' } })}
+            label="Keep the glow clear of the taskbar"
+            on={!!g.taskbar}
+            onChange={(v) => set({ glow: { taskbar: v } })}
           />
         </div>
-        <div className="srow">
-          <span>Pulse with the music</span>
-          <Toggle
-            label="Pulse with the music"
-            on={g.reactToAudio}
-            onChange={(v) => set({ glow: { reactToAudio: v } })}
-          />
-        </div>
-        <p className="fine">Listens to this PC’s sound output, never the microphone.</p>
-        <div className="srow">
-          <span>Displays</span>
-          <div className="seg small">
-            <button
-              className={g.displays === 'all' ? 'on' : ''}
-              onClick={() => set({ glow: { displays: 'all' } })}
-            >
-              All
-            </button>
-            <button
-              className={g.displays === 'primary' ? 'on' : ''}
-              onClick={() => set({ glow: { displays: 'primary' } })}
-            >
-              Main only
-            </button>
-          </div>
-        </div>
+        <p className="fine">The glow runs along the top of the taskbar instead of behind it.</p>
+        <label className="srow">
+          <span>Display</span>
+          <select
+            value={String(g.displays)}
+            onChange={(e) => {
+              const v = e.target.value
+              set({ glow: { displays: v === 'all' || v === 'primary' ? v : Number(v) } })
+            }}
+          >
+            <option value="all">All displays</option>
+            <option value="primary">Main display</option>
+            {displays.length > 1 &&
+              displays.map((d) => (
+                <option key={d.id} value={String(d.id)}>
+                  {d.label}
+                </option>
+              ))}
+          </select>
+        </label>
         <div className="srow">
           <span>When paused</span>
           <div className="seg small">
@@ -512,6 +525,31 @@ export default function SettingsPanel({ state, settings, onClose }) {
       </Fold>
 
       <WidgetSettings settings={settings} set={set} />
+
+      <Fold k="app">
+        <div className="sh">
+          <h3>Glowtide</h3>
+        </div>
+        <div className="srow">
+          <span>Show in taskbar</span>
+          <Toggle
+            label="Show in taskbar"
+            on={settings.showInTaskbar !== false}
+            onChange={(v) => set({ showInTaskbar: v })}
+          />
+        </div>
+        <p className="fine">
+          Off, Glowtide lives in the tray only: click its icon there for quick settings, double-click it
+          for the player.
+        </p>
+        <div className="srow">
+          <span>Quit Glowtide</span>
+          <button className="pill" onClick={() => api.quit()}>
+            <Power size={13} /> Quit
+          </button>
+        </div>
+        <p className="fine">Closing this window keeps Glowtide running in the tray. This stops it.</p>
+      </Fold>
 
       <Fold k="source">
         <div className="sh">
@@ -873,5 +911,29 @@ function WidgetSettings({ settings, set }) {
         <p className="fine">Widgets drop to 20 fps on their own when nothing is playing.</p>
       </Fold>
     </>
+  )
+}
+
+/** "Override album colour": the glow's own colours, one wheel each, with their share of the edge. */
+export function OverrideWheels({ c, g, set }) {
+  const two = g.gradient === 2
+  const split = g.split ?? 60
+  return (
+    <div className="wheels">
+      <ColourWheel
+        label="Primary"
+        note={two ? `${split}%` : null}
+        value={c.custom}
+        onChange={(v) => set({ colour: { custom: v } })}
+      />
+      {two && (
+        <ColourWheel
+          label="Secondary"
+          note={`${100 - split}%`}
+          value={c.custom2 || '#ff5fa2'}
+          onChange={(v) => set({ colour: { custom2: v } })}
+        />
+      )}
+    </div>
   )
 }

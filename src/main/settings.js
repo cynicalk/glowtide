@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { mergeSettings } from '../shared/settingsMerge.mjs'
+import { migrateGlowSettings } from '../shared/glow.mjs'
 
 export const DEFAULT_SETTINGS = {
   source: null, // 'system' | 'spotify' | 'youtube' | 'demo' | null (not chosen yet)
@@ -17,18 +18,22 @@ export const DEFAULT_SETTINGS = {
     secondary: 1,
     brightness: 0,
     saturation: 0,
-    custom: '#5fb4ff',
+    glow2: 2, // the second colour of a two-colour glow
+    custom: '#5fb4ff', // "Override album colour": the glow's first colour
+    custom2: '#ff5fa2', // and its second
     fade: true
   },
   glow: {
     enabled: true,
+    gradient: 2, // 1 | 2 colours round the edge
+    split: 60, // a two-colour glow: the first colour's share of the edge, in percent
+    animation: 'music', // 'default' | 'music' | 'idle' | 'none' (see shared/glow.mjs)
     thickness: 4,
     spread: 40,
     intensity: 70,
-    reactToAudio: true,
-    displays: 'all', // 'all' | 'primary'
-    idle: 'steady', // 'steady' | 'off' when nothing plays
-    motion: 'flow' // 'flow' (light travels around the edge) | 'still'
+    displays: 'all', // 'all' | 'primary' | a display id
+    taskbar: true, // keep the glow clear of the taskbar (it follows the work area's edge)
+    idle: 'steady' // 'steady' | 'off' when nothing plays
   },
   lyrics: {
     overlay: true,
@@ -46,6 +51,7 @@ export const DEFAULT_SETTINGS = {
   awake: false, // keep the screen awake while music plays
   hideForFullscreen: true, // the glow and lyrics overlay hide while another app is full screen
   autoUpdate: true, // check GitHub releases and download updates in the background
+  showInTaskbar: true, // the player has a taskbar button (off: it lives in the tray only)
   fps: 30, // the glow and lyrics overlay: 30 (lighter) or 60 (smoother)
   widgets: {
     fps: 60,
@@ -91,7 +97,8 @@ let current = null
 export function loadSettings() {
   if (current) return current
   try {
-    current = deepMerge(DEFAULT_SETTINGS, JSON.parse(readFileSync(file(), 'utf8')))
+    const saved = migrateGlowSettings(JSON.parse(readFileSync(file(), 'utf8')))
+    current = deepMerge(DEFAULT_SETTINGS, saved)
   } catch {
     current = structuredClone(DEFAULT_SETTINGS)
   }

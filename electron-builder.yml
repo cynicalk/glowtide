@@ -20,12 +20,6 @@ asarUnpack:
 win:
   executableName: Glowtide
   target: nsis
-  # How a signature is made, when there's a certificate (scripts/build-win.mjs picks it up;
-  # without one the build is unsigned). The timestamp keeps the signature valid after the
-  # certificate itself expires.
-  signtoolOptions:
-    signingHashAlgorithms: [sha256]
-    rfc3161TimeStampServer: http://time.certum.pl
 nsis:
   artifactName: Glowtide-${version}-setup.${ext}
   shortcutName: Glowtide

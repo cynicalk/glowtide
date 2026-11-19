@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { AlignCenter, Sparkles, Sun, Waves as WavesIcon, Activity, Mic2, Power } from 'lucide-react'
 import { api, useDisplays } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
-import { THEMES, VIZ_STYLES, vizPalette } from '../../../shared/viz.mjs'
+import { THEMES, vizPalette } from '../../../shared/viz.mjs'
 import { glowAnimation } from '../../../shared/glow.mjs'
 import ColourWheel from './ColourWheel'
 import { ANIMATION_HINTS, ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
@@ -686,128 +686,14 @@ const PLACES = [
   ['window', 'Window']
 ]
 
-/** Desktop widgets (visualizer, clock) and the full-screen view. */
+/** The desktop clock widget and the full-screen view. */
 function WidgetSettings({ settings, set }) {
   const w = settings.widgets
-  const v = w.viz
   const c = w.clock
-  const sv = (patch) => set({ widgets: { viz: patch } })
   const sc = (patch) => set({ widgets: { clock: patch } })
   const themes = ['album', ...Object.keys(THEMES), 'custom']
   return (
     <>
-      <Fold k="viz">
-        <div className="sh">
-          <h3>Desktop visualizer</h3>
-          <Toggle label="Desktop visualizer" on={v.enabled} onChange={(x) => sv({ enabled: x })} />
-        </div>
-        <p className="fine">
-          A live visualizer on your wallpaper, behind every window, showing what’s playing.
-          Ctrl+Alt+M hides and shows the widgets.
-        </p>
-        <div className="srow">
-          <span>Lives</span>
-          <Seg value={v.placement} options={PLACES} onChange={(x) => sv({ placement: x })} />
-        </div>
-        {v.enabled && (
-          <div className="srow">
-            <span>Position</span>
-            <button className="pill" onClick={() => api.widgetEdit('viz')}>
-              Move or resize
-            </button>
-          </div>
-        )}
-        <label className="srow">
-          <span>Style</span>
-          <select value={v.style} onChange={(e) => sv({ style: e.target.value })}>
-            {VIZ_STYLES.map((k) => (
-              <option key={k} value={k}>
-                {k[0].toUpperCase() + k.slice(1)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="sect">Colours</div>
-        <div className="theme-row">
-          {themes.map((k) => (
-            <button
-              key={k}
-              className={`theme-chip ${v.theme === k ? 'on' : ''}`}
-              onClick={() => sv({ theme: k })}
-            >
-              {k !== 'album' && k !== 'custom' && (
-                <i
-                  style={{
-                    background: `linear-gradient(90deg, ${vizPalette(k).join(', ')})`
-                  }}
-                />
-              )}
-              {k === 'album' ? 'Album' : k}
-            </button>
-          ))}
-        </div>
-        {v.theme === 'custom' && (
-          <label className="srow">
-            <span>Accent</span>
-            <input type="color" value={v.accent} onChange={(e) => sv({ accent: e.target.value })} />
-          </label>
-        )}
-        <Slider
-          label="Density"
-          min={16}
-          max={96}
-          step={4}
-          value={v.density}
-          onChange={(x) => sv({ density: x })}
-        />
-        <Slider
-          label="Sensitivity"
-          min={40}
-          max={200}
-          step={10}
-          value={v.sensitivity}
-          unit="%"
-          onChange={(x) => sv({ sensitivity: x })}
-        />
-        <Slider
-          label="Backdrop"
-          min={0}
-          max={90}
-          value={v.backdrop}
-          unit="%"
-          onChange={(x) => sv({ backdrop: x })}
-        />
-        <Slider
-          label="Opacity"
-          min={20}
-          max={100}
-          value={v.opacity}
-          unit="%"
-          onChange={(x) => sv({ opacity: x })}
-        />
-        <div className="srow">
-          <span>Glow</span>
-          <Toggle label="Glow" on={v.glow} onChange={(x) => sv({ glow: x })} />
-        </div>
-        <div className="srow">
-          <span>Now playing</span>
-          <Seg
-            value={v.card}
-            options={[
-              ['compact', 'Compact'],
-              ['centred', 'Centred'],
-              ['cover', 'Cover'],
-              ['text', 'Text'],
-              ['none', 'Off']
-            ]}
-            onChange={(x) => sv({ card: x })}
-          />
-        </div>
-        <div className="srow">
-          <span>Album art glow</span>
-          <Toggle label="Album art glow" on={v.artGlow} onChange={(x) => sv({ artGlow: x })} />
-        </div>
-      </Fold>
       <Fold k="clock">
         <div className="sh">
           <h3>Desktop clock</h3>
@@ -851,6 +737,36 @@ function WidgetSettings({ settings, set }) {
                 onChange={(x) => sc({ colour: x })}
               />
             </div>
+            {c.colour !== 'solid' && (
+              <div className="theme-row">
+                {themes.map((k) => (
+                  <button
+                    key={k}
+                    className={`theme-chip ${(c.theme || 'album') === k ? 'on' : ''}`}
+                    onClick={() => sc({ theme: k })}
+                  >
+                    {k !== 'album' && k !== 'custom' && (
+                      <i
+                        style={{
+                          background: `linear-gradient(90deg, ${vizPalette(k).join(', ')})`
+                        }}
+                      />
+                    )}
+                    {k === 'album' ? 'Album' : k}
+                  </button>
+                ))}
+              </div>
+            )}
+            {c.colour !== 'solid' && c.theme === 'custom' && (
+              <label className="srow">
+                <span>Accent</span>
+                <input
+                  type="color"
+                  value={w.accent}
+                  onChange={(e) => set({ widgets: { accent: e.target.value } })}
+                />
+              </label>
+            )}
             <div className="srow">
               <span>Date</span>
               <Seg

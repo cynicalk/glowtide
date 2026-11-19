@@ -780,8 +780,7 @@ function applyFullscreen() {
 function syncFullscreenWatch() {
   const s = loadSettings()
   const want =
-    s.hideForFullscreen &&
-    (s.glow.enabled || s.lyrics.overlay || s.widgets.viz.enabled || s.widgets.clock.enabled)
+    s.hideForFullscreen && (s.glow.enabled || s.lyrics.overlay || s.widgets.clock.enabled)
   if (want) fullscreen.start()
   else fullscreen.stop()
   applyFullscreen()
@@ -914,11 +913,6 @@ function rebuildTray() {
       },
       { type: 'separator' },
       {
-        label: 'Move or resize the visualizer',
-        enabled: !!s.widgets?.viz.enabled,
-        click: () => widgets?.edit('viz')
-      },
-      {
         label: 'Move or resize the clock',
         enabled: !!s.widgets?.clock.enabled,
         click: () => widgets?.edit('clock')
@@ -944,13 +938,7 @@ function setSettings(patch) {
   const glowKey = (x) => JSON.stringify([x.glow.enabled, x.glow.displays, x.glow.taskbar])
   const prevGlow = glowKey(before)
   const prevLyr = JSON.stringify([before.lyrics.overlay, before.lyrics.display])
-  const placeKey = (x) =>
-    JSON.stringify([
-      x.widgets.viz.enabled,
-      x.widgets.viz.placement,
-      x.widgets.clock.enabled,
-      x.widgets.clock.placement
-    ])
+  const placeKey = (x) => JSON.stringify([x.widgets.clock.enabled, x.widgets.clock.placement])
   const prevWidgets = placeKey(before)
   const next = updateSettings(patch)
   if (placeKey(next) !== prevWidgets) {
@@ -1115,19 +1103,22 @@ function scheduleSnapshot() {
       },
       Number(process.env.GLOWTIDE_SNAPSHOT_MS || 6000) - 1200
     )
-  // GLOWTIDE_EDIT_TEST=1: lift the visualizer, resize it, press Done, and record what happened.
+  // GLOWTIDE_EDIT_TEST=1: lift the clock (turned on for the test), resize it, press Done, and
+  // record what happened.
   if (process.env.GLOWTIDE_EDIT_TEST)
     setTimeout(async () => {
-      const log = { before: loadSettings().widgets.viz.bounds }
-      await widgets.edit('viz')
-      const w1 = widgets.windows().find((w) => w.widgetKind === 'viz')
+      updateSettings({ widgets: { clock: { enabled: true } } })
+      await widgets.sync()
+      const log = { before: loadSettings().widgets.clock.bounds }
+      await widgets.edit('clock')
+      const w1 = widgets.windows().find((w) => w.widgetKind === 'clock')
       log.editPlace = w1?.widgetPlace
       log.editTop = w1?.isAlwaysOnTop()
-      widgets.resize('viz', 640, 340)
+      widgets.resize('clock', 520, 220)
       await new Promise((r) => setTimeout(r, 700))
-      await widgets.done('viz')
-      const w2 = widgets.windows().find((w) => w.widgetKind === 'viz')
-      log.after = loadSettings().widgets.viz.bounds
+      await widgets.done('clock')
+      const w2 = widgets.windows().find((w) => w.widgetKind === 'clock')
+      log.after = loadSettings().widgets.clock.bounds
       log.backPlace = w2?.widgetPlace
       log.wallpaper = w2?.wallpaperResult
       mkdirSync(dir, { recursive: true })

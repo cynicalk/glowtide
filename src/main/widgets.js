@@ -1,4 +1,4 @@
-// Desktop widgets (the visualizer and the clock) and the full-screen view.
+// The desktop clock widget and the full-screen view.
 //
 // A widget lives in one of three places:
 //   wallpaper  re-parented into the desktop wallpaper: behind the icons and every window,
@@ -11,13 +11,13 @@ import { BrowserWindow, screen } from 'electron'
 import { createWallpaper } from './wallpaper'
 
 const DEFAULTS = {
-  viz: { width: 560, height: 300, dx: -40, dy: 40 },
-  clock: { width: 460, height: 180, dx: -40, dy: 360 }
+  clock: { width: 460, height: 180, dx: -40, dy: 40 }
 }
+const KINDS = Object.keys(DEFAULTS)
 
 export function createWidgets({ load, prefs, loadSettings, updateSettings, onWindowsChanged }) {
   const wall = createWallpaper()
-  const wins = { viz: null, clock: null }
+  const wins = { clock: null }
   let stage = null
   let hidden = false
   let coveredDisplay = null // a display another app fills full screen: its widgets pause
@@ -51,7 +51,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
   }
 
   // "edit": lifted off the wallpaper so it can be dragged and resized, then put back.
-  const editing = { viz: false, clock: false }
+  const editing = { clock: false }
 
   async function create(kind, override) {
     const cfg = loadSettings().widgets[kind]
@@ -71,7 +71,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
       alwaysOnTop: place === 'top' || place === 'edit',
       minWidth: 200,
       minHeight: 100,
-      title: kind === 'viz' ? 'Glowtide visualizer' : 'Glowtide clock',
+      title: 'Glowtide clock',
       webPreferences: prefs
     })
     win.widgetKind = kind
@@ -80,7 +80,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
     if (place === 'edit') win.setAlwaysOnTop(true, 'screen-saver')
     win.on('moved', () => remember(kind, win))
     win.on('resized', () => remember(kind, win))
-    load(win, `${kind === 'viz' ? 'widget' : 'clock'}?place=${place}`)
+    load(win, `${kind}?place=${place}`)
     await new Promise((r) => win.once('ready-to-show', r))
     if (place === 'wallpaper') {
       const scale = screen.getDisplayMatching(b).scaleFactor
@@ -119,7 +119,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
   }
 
   function applyHidden() {
-    for (const kind of ['viz', 'clock']) {
+    for (const kind of KINDS) {
       const w = wins[kind]
       if (w && !w.isDestroyed() && !editing[kind]) setShown(w, !shouldHide(kind))
     }
@@ -127,7 +127,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
 
   async function sync() {
     const s = loadSettings().widgets
-    for (const kind of ['viz', 'clock']) {
+    for (const kind of KINDS) {
       if (editing[kind]) continue // being moved: leave it alone until Done
       const want = s[kind].enabled
       const cur = wins[kind]
@@ -143,7 +143,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
 
   // Explorer restarting (or a wallpaper change) replaces the wallpaper's window: re-join it.
   const guard = setInterval(async () => {
-    for (const kind of ['viz', 'clock']) {
+    for (const kind of KINDS) {
       const w = wins[kind]
       if (!w || w.isDestroyed() || w.widgetPlace !== 'wallpaper' || !w.isVisible()) continue
       if ((await wall.check(w)) === 'loose') {
@@ -246,7 +246,7 @@ export function createWidgets({ load, prefs, loadSettings, updateSettings, onWin
     openStage,
     closeStage,
     toggleStage: (d) => (stage && !stage.isDestroyed() ? closeStage() : openStage(d)),
-    windows: () => [wins.viz, wins.clock, stage].filter((w) => w && !w.isDestroyed()),
+    windows: () => [wins.clock, stage].filter((w) => w && !w.isDestroyed()),
     stop() {
       clearInterval(guard)
       wall.stop()

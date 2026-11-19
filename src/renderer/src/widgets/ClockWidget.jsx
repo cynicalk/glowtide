@@ -63,9 +63,9 @@ export default function ClockWidget() {
   const c = settings?.widgets.clock
   const now = useNow(c?.seconds || c?.style === 'analog' ? 1000 : 5000)
   if (!state || !settings) return null
-  const palette = vizPalette(settings.widgets.viz.theme, {
+  const palette = vizPalette(c.theme, {
     palette: state.palette,
-    accent: settings.widgets.viz.accent
+    accent: settings.widgets.accent
   })
   const hh = now.getHours()
   const h = c.h24 ? hh : hh % 12 || 12

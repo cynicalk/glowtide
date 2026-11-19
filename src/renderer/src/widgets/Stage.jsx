@@ -69,7 +69,7 @@ export default function Stage() {
   const t = state.track
   const palette = vizPalette(cfg.theme, {
     palette: state.palette,
-    accent: settings.widgets.viz.accent
+    accent: settings.widgets.accent
   })
   const ring = cfg.style === 'ring'
   return (

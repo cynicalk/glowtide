@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { mergeSettings } from '../shared/settingsMerge.mjs'
-import { migrateGlowSettings } from '../shared/glow.mjs'
+import { migrateSettings } from '../shared/migrate.mjs'
 
 export const DEFAULT_SETTINGS = {
   source: null, // 'system' | 'spotify' | 'youtube' | 'demo' | null (not chosen yet)
@@ -55,24 +55,11 @@ export const DEFAULT_SETTINGS = {
   fps: 30, // the glow and lyrics overlay: 30 (lighter) or 60 (smoother)
   widgets: {
     fps: 60,
-    viz: {
-      enabled: true,
-      placement: 'wallpaper', // 'wallpaper' | 'top' | 'window'
-      bounds: null,
-      style: 'bars', // bars | mirror | blocks | ring | waveform | aurora
-      theme: 'album', // 'album' | a preset | 'custom'
-      accent: '#7c5cff',
-      density: 48,
-      sensitivity: 100,
-      glow: true,
-      backdrop: 0,
-      card: 'compact', // compact | centred | cover | text | none
-      artGlow: true,
-      opacity: 100
-    },
+    accent: '#7c5cff', // the "custom" colour theme's accent (clock and full screen)
     clock: {
       enabled: false,
-      placement: 'wallpaper',
+      placement: 'wallpaper', // 'wallpaper' | 'top' | 'window'
+      theme: 'album', // its colours: 'album' | a preset | 'custom'
       bounds: null,
       style: 'digital', // digital | stacked | minimal | analog | words
       font: 'Segoe UI Variable Display',
@@ -97,7 +84,7 @@ let current = null
 export function loadSettings() {
   if (current) return current
   try {
-    const saved = migrateGlowSettings(JSON.parse(readFileSync(file(), 'utf8')))
+    const saved = migrateSettings(JSON.parse(readFileSync(file(), 'utf8')))
     current = deepMerge(DEFAULT_SETTINGS, saved)
   } catch {
     current = structuredClone(DEFAULT_SETTINGS)

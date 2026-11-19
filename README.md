@@ -38,19 +38,15 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 
 ## Features
 
-- **Desktop visualizer widget**: lives on the wallpaper, behind the icons and every window.
-  It joins the window Explorer draws the wallpaper in, and re-joins if Explorer restarts.
-  It can also float on top or be an ordinary window. Six styles: Bars, Mirror, Blocks, Ring,
-  Waveform and Aurora. Colours come from the album, six presets, or a custom accent swept
-  into a three-stop gradient; a grey cover gets tinted whites instead of an invented colour.
-  It shows a now-playing card in four layouts, an album-art glow, feathered edges, and
-  backdrop, density, sensitivity and opacity options.
-- **Desktop clock widget**: Digital, Stacked, Minimal, Analog and Words, in the theme or
-  album colours, with 24-hour, seconds and date options.
+- **Desktop clock widget**: lives on the wallpaper, behind the icons and every window (it
+  joins the window Explorer draws the wallpaper in, and re-joins if Explorer restarts), or
+  floats on top, or is an ordinary window. Digital, Stacked, Minimal, Analog and Words, in
+  the album's colours, six presets or a custom accent, with 24-hour, seconds and date
+  options.
 - **Full screen** (Ctrl+Alt+F): the cover blurred and drifting as the room light, a sharp
   copy in the middle with the visualizer orbiting it, and a ripple on every bass hit.
-  Space, the arrows, V (visualizer), C (colours) and Esc work. Ctrl+Alt+M hides or shows
-  the widgets.
+  Six visualizer styles (Bars, Mirror, Blocks, Ring, Waveform, Aurora). Space, the arrows,
+  V (visualizer), C (colours) and Esc work. Ctrl+Alt+M hides or shows the clock.
 - Widgets cap their frame rate (30/60) and drop to 20 fps when nothing is playing.
 - **Light on the computer**: the edge glow and the lyrics draw at 30 fps by default (60 is an option in Settings → Lyrics overlay). Everything that moves continuously is moved by the GPU compositor rather than repainted, and the overlay stops all work while it is hidden. Paused, Glowtide uses almost nothing.
 - **Maximise**: the title-bar button or a double-click gives a roomy full-window player; F11 goes full screen.

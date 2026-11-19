@@ -5,6 +5,8 @@ import { Aura, Waves, Beat, Karaoke } from './LyricStyles'
 import { useSwap, useBeatVars, useHandoff, useLinger } from '../lib/motion'
 import { useFrameRateCap } from '../lib/frameRate'
 import { listensToMusic } from '../../../shared/glow.mjs'
+import { Messages } from './Messages'
+import { messagesView } from './messagesView'
 import {
   buildFigures,
   placeLabels,
@@ -378,7 +380,7 @@ export default function LyricsOverlay() {
   const { state, settings, lyrics } = useGlowtide()
   const colours = useColours(state, settings)
   const l = settings?.lyrics
-  const STYLES = ['stack', 'karaoke', 'constellation', 'aura', 'waves', 'beat']
+  const STYLES = ['stack', 'karaoke', 'constellation', 'aura', 'waves', 'beat', 'messages']
   const style = STYLES.includes(l?.style) ? l.style : 'stack'
   // Word-timed lyrics go word by word. Line-timed lyrics show whole lines unless the
   // listener asked for estimated words.
@@ -409,7 +411,9 @@ export default function LyricsOverlay() {
         ? wavesView
         : style === 'karaoke'
           ? karaokeView
-          : stackView,
+          : style === 'messages'
+            ? messagesView
+            : stackView,
     lyrics,
     state?.playback,
     state?.track?.durationMs,
@@ -481,6 +485,7 @@ export default function LyricsOverlay() {
             {style === 'beat' && (
               <Beat win={win && 'cur' in win ? win : null} mode={mode} beatRef={beatRef} />
             )}
+            {style === 'messages' && <Messages view={win?.chat ? win : null} />}
             {style === 'constellation' && (
               <>
                 <Starfield seed={seed} />

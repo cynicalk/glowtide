@@ -1,5 +1,14 @@
 import { useState } from 'react'
-import { AlignCenter, Sparkles, Sun, Waves as WavesIcon, Activity, Mic2, Power } from 'lucide-react'
+import {
+  AlignCenter,
+  Sparkles,
+  Sun,
+  Waves as WavesIcon,
+  Activity,
+  Mic2,
+  Power,
+  MessageCircle
+} from 'lucide-react'
 import { api, useDisplays } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
 import { THEMES, vizPalette } from '../../../shared/viz.mjs'
@@ -29,7 +38,8 @@ const STYLES = [
   ['constellation', 'Stars', Sparkles, 'Each verse fills a real constellation'],
   ['aura', 'Aura', Sun, 'Lyrics over a glowing cloud of the cover’s colours'],
   ['waves', 'Waves', WavesIcon, 'The whole line rides a ripple'],
-  ['beat', 'Beat', Activity, 'Pulses with the music']
+  ['beat', 'Beat', Activity, 'Pulses with the music'],
+  ['messages', 'Messages', MessageCircle, 'The lyrics arrive as text messages, with emojis']
 ]
 
 /**

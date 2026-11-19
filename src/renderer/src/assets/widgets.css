@@ -586,9 +586,9 @@ html[data-route='stage'] body {
 .k-line {
   animation: lyric-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-/* six style tiles fit two rows of three */
+/* seven style tiles: two rows, four and three */
 .styles {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
 }
 
 /* the constellation's line caption: HTML, so it wraps and never runs off a screen of any shape */

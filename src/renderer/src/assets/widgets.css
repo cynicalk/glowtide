@@ -1,11 +1,5 @@
-/* The desktop clock widget and the full-screen view. */
+/* The full-screen view, and styles the lyrics overlay shares with it. */
 
-html[data-route='widget'],
-html[data-route='widget'] body,
-html[data-route='clock'],
-html[data-route='clock'] body {
-  background: transparent;
-}
 html[data-route='stage'] body {
   background: #000;
 }
@@ -13,116 +7,6 @@ html[data-route='stage'] body {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-/* ---------- clock widget ---------- */
-.ck {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  user-select: none;
-}
-.ck.editable {
-  -webkit-app-region: drag;
-}
-.ck-ink {
-  color: #fff;
-}
-.ck.colour-theme .ck-ink {
-  background: linear-gradient(100deg, var(--p1), var(--p2) 55%, var(--p3));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.ck.colour-gradient .ck-ink {
-  background: linear-gradient(100deg, #fff, var(--p2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.ck.glow {
-  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--p2) 55%, transparent))
-    drop-shadow(0 4px 14px rgba(0, 0, 0, 0.5));
-}
-.ck-time {
-  display: flex;
-  align-items: baseline;
-  gap: 1vh;
-  font-size: 52vh;
-  font-weight: 300;
-  line-height: 1;
-  letter-spacing: -0.02em;
-}
-.ck-sm {
-  font-size: 0.4em;
-}
-.ck-ampm {
-  font-size: 0.22em;
-  font-weight: 600;
-  opacity: 0.8;
-}
-.ck-date {
-  margin-top: 2vh;
-  font-size: 9vh;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  opacity: 0.85;
-}
-.ck-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-size: 40vh;
-  font-weight: 800;
-  line-height: 0.86;
-}
-.ck-stacked .ck-date {
-  font-size: 7vh;
-}
-.ck-min {
-  font-size: 18vh;
-  font-weight: 300;
-  letter-spacing: 0.04em;
-}
-.ck-min .ck-date {
-  font-size: 0.6em;
-  letter-spacing: 0.06em;
-  text-transform: none;
-}
-.ck-words {
-  font-size: 17vh;
-  font-weight: 700;
-  line-height: 1.05;
-  text-align: center;
-  max-width: 92vw;
-  text-wrap: balance;
-  letter-spacing: -0.01em;
-}
-.ck-analog {
-  height: 92vh;
-}
-.ck-face {
-  fill: rgba(0, 0, 0, 0.18);
-  stroke: color-mix(in srgb, var(--p2) 60%, #fff);
-  stroke-width: 1;
-}
-.ck-tick {
-  stroke: #fff;
-  opacity: 0.8;
-}
-.ck-hand {
-  stroke: #fff;
-}
-.ck-sec {
-  stroke: var(--p2);
-}
-.ck-pin {
-  fill: var(--p2);
 }
 
 /* ---------- full screen ---------- */
@@ -284,34 +168,6 @@ html[data-route='stage'] body {
   opacity: 0;
 }
 
-/* ---------- settings: widget section ---------- */
-.theme-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.theme-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 10px;
-  background: #0b0a0c;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: capitalize;
-}
-.theme-chip.on {
-  border-color: var(--glow);
-  color: var(--text);
-}
-.theme-chip i {
-  width: 26px;
-  height: 10px;
-  border-radius: 5px;
-}
-
 /* ---------- constellation motion ---------- */
 /* Every continuous motion here moves a whole layer (transform or opacity), which the
    compositor does without repainting a single star. */
@@ -435,69 +291,6 @@ html[data-route='stage'] body {
 .aura-next,
 .wave-next {
   animation: lyric-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.06s both;
-}
-
-/* ---------- widget move / resize ---------- */
-.edit-frame {
-  position: fixed;
-  inset: 3px;
-  border: 2px dashed rgba(255, 255, 255, 0.7);
-  border-radius: 20px;
-  background: rgba(10, 10, 16, 0.28);
-  pointer-events: none;
-  z-index: 5;
-}
-.edit-hint {
-  position: absolute;
-  left: 50%;
-  top: 10px;
-  transform: translateX(-50%);
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 12px;
-  white-space: nowrap;
-}
-.edit-done {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border-radius: 18px;
-  background: #fff;
-  color: #000;
-  font-size: 13px;
-  font-weight: 600;
-  pointer-events: auto;
-  -webkit-app-region: no-drag;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-.edit-grip {
-  position: fixed;
-  right: 4px;
-  bottom: 4px;
-  width: 22px;
-  height: 22px;
-  z-index: 6;
-  cursor: nwse-resize;
-  -webkit-app-region: no-drag;
-  border-right: 3px solid rgba(255, 255, 255, 0.85);
-  border-bottom: 3px solid rgba(255, 255, 255, 0.85);
-  border-bottom-right-radius: 8px;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.ck:hover .edit-grip,
-.edit-grip.show {
-  opacity: 1;
-}
-.ck {
-  overflow: hidden;
 }
 
 /* Only the line being sung: the lines around it are hidden unless asked for. */

@@ -733,7 +733,7 @@ function overlayWindow(bounds, route, { exact = false } = {}) {
 }
 
 // ---------- full-screen apps ----------
-// While another app fills a display, the edge glow, the lyrics overlay and the desktop widgets
+// While another app fills a display, the edge glow and the lyrics overlay
 // on that display hide. A hidden window stops drawing, so a game gets the graphics card back.
 // Displays with nothing full screen keep theirs.
 let fullscreenRect = null // the display being filled, in physical pixels
@@ -758,7 +758,7 @@ function applyFullscreen() {
   for (const w of [...glowWins, lyricsWin]) {
     if (!w || w.isDestroyed() || !w.glowtideReady) continue
     const hide = coveredByFullscreen(w)
-    // Glowtide's pages never throttle (the wallpaper widgets count as covered and would stall),
+    // Glowtide's pages never throttle (an overlay counts as covered and would stall),
     // so a hidden overlay would keep drawing. Throttled while hidden, it stops.
     if (hide && w.isVisible()) {
       w.webContents.setBackgroundThrottling(true)
@@ -769,7 +769,6 @@ function applyFullscreen() {
     }
   }
   const id = filledDisplay()
-  widgets?.setCovered(id)
   if (state.fullscreenApp !== (id !== null)) {
     state.fullscreenApp = id !== null
     broadcast()
@@ -779,8 +778,7 @@ function applyFullscreen() {
 /** The watcher runs only while there's an overlay or widget it could hide. */
 function syncFullscreenWatch() {
   const s = loadSettings()
-  const want =
-    s.hideForFullscreen && (s.glow.enabled || s.lyrics.overlay || s.widgets.clock.enabled)
+  const want = s.hideForFullscreen && (s.glow.enabled || s.lyrics.overlay)
   if (want) fullscreen.start()
   else fullscreen.stop()
   applyFullscreen()
@@ -912,11 +910,6 @@ function rebuildTray() {
         click: () => setSettings({ glow: { enabled: !s.glow.enabled } })
       },
       { type: 'separator' },
-      {
-        label: 'Move or resize the clock',
-        enabled: !!s.widgets?.clock.enabled,
-        click: () => widgets?.edit('clock')
-      },
       { label: 'Full screen (Ctrl+Alt+F)', click: () => widgets?.openStage() },
       { type: 'separator' },
       ...(state.update?.status === 'ready'
@@ -938,14 +931,7 @@ function setSettings(patch) {
   const glowKey = (x) => JSON.stringify([x.glow.enabled, x.glow.displays, x.glow.taskbar])
   const prevGlow = glowKey(before)
   const prevLyr = JSON.stringify([before.lyrics.overlay, before.lyrics.display])
-  const placeKey = (x) => JSON.stringify([x.widgets.clock.enabled, x.widgets.clock.placement])
-  const prevWidgets = placeKey(before)
   const next = updateSettings(patch)
-  if (placeKey(next) !== prevWidgets) {
-    widgets?.sync()
-    syncFullscreenWatch()
-    rebuildTray() // the Move entries follow which widgets are on
-  }
   if (
     glowKey(next) !== prevGlow ||
     JSON.stringify([next.lyrics.overlay, next.lyrics.display]) !== prevLyr
@@ -1039,11 +1025,6 @@ function registerIpc() {
     if (action === 'close') widgets?.closeStage()
     else widgets?.openStage(player && screen.getDisplayMatching(player.getBounds()))
   })
-  handle('widgets:toggle', () => widgets?.toggleHidden())
-  handle('widget:edit', (_, kind) => widgets?.edit(kind))
-  handle('widget:done', (_, kind) => widgets?.done(kind))
-  handle('widget:size', (_, kind) => widgets?.sizeOf(kind))
-  on('widget:resize', (_, kind, w, h) => widgets?.resize(kind, w, h))
   handle('displays', () => {
     const primary = screen.getPrimaryDisplay().id
     return screen.getAllDisplays().map((d, i) => ({
@@ -1103,27 +1084,6 @@ function scheduleSnapshot() {
       },
       Number(process.env.GLOWTIDE_SNAPSHOT_MS || 6000) - 1200
     )
-  // GLOWTIDE_EDIT_TEST=1: lift the clock (turned on for the test), resize it, press Done, and
-  // record what happened.
-  if (process.env.GLOWTIDE_EDIT_TEST)
-    setTimeout(async () => {
-      updateSettings({ widgets: { clock: { enabled: true } } })
-      await widgets.sync()
-      const log = { before: loadSettings().widgets.clock.bounds }
-      await widgets.edit('clock')
-      const w1 = widgets.windows().find((w) => w.widgetKind === 'clock')
-      log.editPlace = w1?.widgetPlace
-      log.editTop = w1?.isAlwaysOnTop()
-      widgets.resize('clock', 520, 220)
-      await new Promise((r) => setTimeout(r, 700))
-      await widgets.done('clock')
-      const w2 = widgets.windows().find((w) => w.widgetKind === 'clock')
-      log.after = loadSettings().widgets.clock.bounds
-      log.backPlace = w2?.widgetPlace
-      log.wallpaper = w2?.wallpaperResult
-      mkdirSync(dir, { recursive: true })
-      writeFileSync(join(dir, 'edit.json'), JSON.stringify(log, null, 1))
-    }, 2500)
   // GLOWTIDE_SKY_PROBE=1: read the constellation's motion transforms twice, 2.5 s apart.
   if (process.env.GLOWTIDE_SKY_PROBE)
     setTimeout(async () => {
@@ -1420,15 +1380,12 @@ else {
     widgets = createWidgets({
       load,
       prefs,
-      loadSettings,
-      updateSettings,
       onWindowsChanged: () => {
         sendSettings()
         broadcast()
         sendLyrics()
       }
     })
-    widgets.sync()
     syncFullscreenWatch()
     tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
     tray.setToolTip('Glowtide')
@@ -1440,9 +1397,8 @@ else {
     } catch {
       /* another app owns the shortcut: the tray and the Lyrics button still work */
     }
-    // Ctrl+Alt+M hides and shows the desktop widgets; Ctrl+Alt+F is the full-screen view.
+    // Ctrl+Alt+F is the full-screen view.
     try {
-      globalShortcut.register('CommandOrControl+Alt+M', () => widgets?.toggleHidden())
       globalShortcut.register('CommandOrControl+Alt+F', () =>
         widgets?.toggleStage(player && screen.getDisplayMatching(player.getBounds()))
       )
@@ -1472,7 +1428,6 @@ else {
     updater.stop()
     fullscreen.stop()
     smtc.stop()
-    widgets?.stop()
   })
   app.on('window-all-closed', () => {
     /* stay in the tray */

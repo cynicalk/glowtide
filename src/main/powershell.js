@@ -1,4 +1,4 @@
-// How Glowtide starts its Windows PowerShell helpers (media sessions, wallpaper).
+// How Glowtide starts its Windows PowerShell helpers (media sessions, full-screen apps).
 import { join } from 'path'
 
 /**

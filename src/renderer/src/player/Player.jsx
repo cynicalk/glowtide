@@ -20,14 +20,14 @@ import {
   X,
   RotateCcw,
   RotateCw,
-  Palette,
-  AudioWaveform,
   Lightbulb,
   Monitor,
-  PanelBottom,
   History,
   MonitorUp,
-  Check
+  Check,
+  Disc3,
+  Expand,
+  ImageIcon
 } from 'lucide-react'
 import { api, fmtTime, useColours, useDisplays, useGlowtide, usePosition } from '../lib/store'
 import { lineIndexAt } from '../../../shared/lyrics.mjs'
@@ -59,6 +59,8 @@ export default function Player() {
   const colours = useColours(state, settings)
   const [panel, setPanel] = useState(null)
   useEffect(() => api.onDebugPanel(setPanel), [])
+  const [lyricsView, toggleLyricsView] = useLyricsView()
+  const [immersiveOn, setImmersive] = useImmersive()
 
   if (!state || !settings) return <div className="player" />
   const fade = settings.colour.fade ? 'fade' : ''
@@ -72,7 +74,7 @@ export default function Player() {
 
   return (
     <div
-      className={`player ${fade} ${state.playerMaximized ? 'max' : ''}`}
+      className={`player ${fade} ${state.playerMaximized ? 'max' : ''} ${settings.hints === false ? 'no-hints' : ''}`}
       style={{
         '--glow': colours.glow,
         '--lyr': colours.lyrics,
@@ -90,43 +92,162 @@ export default function Player() {
         <Connect state={state} settings={settings} onBack={() => api.setSource(null)} />
       )}
       {screen === 'player' && (
-        <NowPlaying state={state} settings={settings} lyrics={lyrics} setPanel={setPanel} />
-      )}
-      {/* Panels belong to the player screen: never let one cover Welcome or Connect Spotify. */}
-      {panel && screen === 'player' && (
-        <Sheet title={PANEL_TITLES[panel]} onClose={() => setPanel(null)}>
-          {panel === 'search' &&
-            (sys ? (
-              <SystemInfo state={state} what="Search" />
-            ) : yt ? (
-              <YtSearch state={state} />
-            ) : (
-              <SearchPanel state={state} />
-            ))}
-          {panel === 'library' &&
-            (sys ? (
-              <SystemInfo state={state} what="Pick music" />
-            ) : yt ? (
-              <YtLibrary state={state} settings={settings} />
-            ) : (
-              <LibraryPanel state={state} />
-            ))}
-          {panel === 'queue' &&
-            (sys ? (
-              <SystemInfo state={state} what="Your queue lives" />
-            ) : yt ? (
-              <YtQueue state={state} />
-            ) : (
-              <QueuePanel state={state} />
-            ))}
-          {(panel === 'devices' || panel === 'apps') &&
-            (sys ? <SystemApps state={state} /> : <DevicesPanel state={state} />)}
-          {panel === 'settings' && (
-            <SettingsPanel state={state} settings={settings} onClose={() => setPanel(null)} />
-          )}
-        </Sheet>
+        <div className="shell">
+          <Sidebar state={state} panel={panel} setPanel={setPanel} />
+          <main className="main">
+            <NowPlaying
+              state={state}
+              settings={settings}
+              lyrics={lyrics}
+              setPanel={setPanel}
+              lyricsView={lyricsView}
+              immersiveOn={immersiveOn}
+              setImmersive={setImmersive}
+            />
+            {/* Pages belong to the player screen: never over Welcome or Connect Spotify. */}
+            {panel && (
+              <Sheet title={PANEL_TITLES[panel]} onClose={() => setPanel(null)}>
+                {panel === 'search' &&
+                  (sys ? (
+                    <SystemInfo state={state} what="Search" />
+                  ) : yt ? (
+                    <YtSearch state={state} />
+                  ) : (
+                    <SearchPanel state={state} />
+                  ))}
+                {panel === 'library' &&
+                  (sys ? (
+                    <SystemInfo state={state} what="Pick music" />
+                  ) : yt ? (
+                    <YtLibrary state={state} settings={settings} />
+                  ) : (
+                    <LibraryPanel state={state} />
+                  ))}
+                {panel === 'queue' &&
+                  (sys ? (
+                    <SystemInfo state={state} what="Your queue lives" />
+                  ) : yt ? (
+                    <YtQueue state={state} />
+                  ) : (
+                    <QueuePanel state={state} />
+                  ))}
+                {(panel === 'devices' || panel === 'apps') &&
+                  (sys ? <SystemApps state={state} /> : <DevicesPanel state={state} />)}
+                {panel === 'settings' && (
+                  <SettingsPanel state={state} settings={settings} onClose={() => setPanel(null)} />
+                )}
+              </Sheet>
+            )}
+          </main>
+          <Rail
+            state={state}
+            settings={settings}
+            lyricsView={lyricsView}
+            toggleLyricsView={() => {
+              setPanel(null)
+              toggleLyricsView()
+            }}
+            immersive={immersiveOn}
+            setImmersive={(v) => {
+              setPanel(null)
+              setImmersive(v)
+            }}
+          />
+        </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Left: where you go. The page being shown is lit; Now playing closes any page. Names show
+ * beside the icons when the window is wide enough.
+ */
+function Sidebar({ state, panel, setPanel }) {
+  const sys = state.source === 'system'
+  const noDevices = state.source === 'youtube' || state.source === 'demo'
+  const items = [
+    [null, 'Now playing', Disc3, 'Now playing · the song and its controls'],
+    ['library', 'Library', Library, 'Library · your playlists and saved music'],
+    ['search', 'Search', Search, 'Search · find a song'],
+    ['queue', 'Queue', ListMusic, 'Queue · what plays next'],
+    sys
+      ? ['apps', 'Apps', MonitorSpeaker, 'Apps · which app Glowtide follows']
+      : ['devices', 'Devices', MonitorSpeaker, 'Devices · where the music plays']
+  ]
+  const item = ([key, label, Icon, tip], disabled = false) => (
+    <button
+      key={label}
+      className={`side-item ${panel === key ? 'on' : ''}`}
+      aria-label={label}
+      aria-current={panel === key ? 'page' : undefined}
+      data-tip={tip}
+      data-tip-pos="right"
+      disabled={disabled}
+      onClick={() => setPanel(key)}
+    >
+      <Icon size={16} />
+      <span className="side-label">{label}</span>
+    </button>
+  )
+  return (
+    <nav className="sidebar" aria-label="Glowtide">
+      {items.map((it) => item(it, (it[0] === 'devices' || it[0] === 'apps') && noDevices))}
+      <span className="side-gap" />
+      {item(['settings', 'Settings', Cog, 'Settings · glow, lyrics, colours and more'])}
+    </nav>
+  )
+}
+
+/** Right: what you see. Lyrics here, lyrics on the desktop, the glow, the cover, full screen. */
+function Rail({ state, settings, lyricsView, toggleLyricsView, immersive, setImmersive }) {
+  const yt = state.source === 'youtube'
+  const overlay = settings.lyrics.overlay
+  return (
+    <aside className="rail" aria-label="View">
+      <button
+        className={`rd ${lyricsView && !yt ? 'on' : ''}`}
+        aria-label="Lyrics in this window"
+        aria-pressed={lyricsView && !yt}
+        data-tip="Lyrics · show them in this window"
+        data-tip-pos="left"
+        disabled={yt}
+        onClick={toggleLyricsView}
+      >
+        <MicVocal size={16} />
+      </button>
+      <button
+        className={`rd ${overlay ? 'on' : ''}`}
+        aria-label="Lyrics on the desktop"
+        aria-pressed={overlay}
+        data-tip={`Desktop lyrics · over everything on your screen (${overlay ? 'on' : 'off'})`}
+        data-tip-pos="left"
+        onClick={() => api.setSettings({ lyrics: { overlay: !overlay } })}
+      >
+        <MonitorUp size={16} />
+      </button>
+      <GlowPanel settings={settings} />
+      <button
+        className={`rd ${immersive && !yt ? 'on' : ''}`}
+        aria-label="Fill the window with the cover"
+        aria-pressed={immersive && !yt}
+        data-tip="Cover · fill this window with it"
+        data-tip-pos="left"
+        disabled={yt || !state.track?.cover}
+        onClick={() => setImmersive(!immersive)}
+      >
+        <ImageIcon size={16} />
+      </button>
+      <button
+        className="rd"
+        aria-label="Full screen"
+        data-tip="Full screen · cover and visualizer (Ctrl+Alt+F)"
+        data-tip-pos="left"
+        onClick={() => api.stage('open')}
+      >
+        <Expand size={16} />
+      </button>
+    </aside>
   )
 }
 
@@ -225,13 +346,11 @@ function Skip15({ back }) {
   )
 }
 
-function NowPlaying({ state, settings, lyrics, setPanel }) {
+function NowPlaying({ state, settings, lyrics, setPanel, lyricsView, immersiveOn, setImmersive }) {
   const { track, playback } = state
   const pos = usePosition(playback, track?.durationMs, 250)
   const [drag, setDrag] = useState(null)
   const [artBig, setArtBig] = useState(false)
-  const [lyricsView, toggleLyricsView] = useLyricsView()
-  const [immersiveOn, setImmersive] = useImmersive()
   const playing = !!playback?.isPlaying
   const repeatNext = { off: 'context', context: 'track', track: 'off' }[playback?.repeat || 'off']
   const synced = state.lyricsStatus === 'synced' && lyrics.length > 0
@@ -239,7 +358,6 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
   // Free Spotify: Spotify won't take remote control, so Glowtide follows along instead.
   const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
   const sys = state.source === 'system'
-  const noDevices = yt || state.source === 'demo'
   // "Any app": each app decides which controls it accepts from outside.
   const can = (action) => (followOnly ? false : sys ? !!state.caps?.[action] : true)
   const noControls =
@@ -361,7 +479,7 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
               <button
                 className={`rd ${playback?.shuffle ? 'on' : ''}`}
                 aria-label="Shuffle"
-                data-tip={playback?.shuffle ? 'Shuffle on' : 'Shuffle'}
+                data-tip={playback?.shuffle ? 'Shuffle · on' : 'Shuffle · play in any order'}
                 disabled={!can('shuffle')}
                 onClick={() => api.control('shuffle', !playback?.shuffle)}
               >
@@ -369,17 +487,8 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
               </button>
               <button
                 className="rd"
-                aria-label="Back 15 seconds"
-                data-tip="Back 15"
-                disabled={!canSkip}
-                onClick={() => skip(-SKIP_MS)}
-              >
-                <Skip15 back />
-              </button>
-              <button
-                className="rd"
                 aria-label="Previous"
-                data-tip="Previous"
+                data-tip="Previous · the song before"
                 disabled={!can('previous')}
                 onClick={() => api.control('previous')}
               >
@@ -397,28 +506,21 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
               <button
                 className="rd"
                 aria-label="Next"
-                data-tip="Skip"
+                data-tip="Next · skip to the next song"
                 disabled={!can('next')}
                 onClick={() => api.control('next')}
               >
                 <SkipForward size={16} />
               </button>
               <button
-                className="rd"
-                aria-label="Forward 15 seconds"
-                data-tip="Forward 15"
-                disabled={!canSkip}
-                onClick={() => skip(SKIP_MS)}
-              >
-                <Skip15 />
-              </button>
-              <button
                 className={`rd ${playback?.repeat && playback.repeat !== 'off' ? 'on' : ''}`}
                 aria-label="Repeat"
                 data-tip={
-                  { off: 'Repeat', context: 'Repeat all', track: 'Repeat one' }[
-                    playback?.repeat || 'off'
-                  ]
+                  {
+                    off: 'Repeat · off',
+                    context: 'Repeat · the whole list',
+                    track: 'Repeat · this song'
+                  }[playback?.repeat || 'off']
                 }
                 disabled={!can('repeat')}
                 onClick={() => api.control('repeat', repeatNext)}
@@ -439,29 +541,10 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
             )}
 
             <div className="lyric-row">
-              {!yt && (
-                <button
-                  className={`pill ${open ? 'on' : ''}`}
-                  aria-pressed={open}
-                  data-tip={open ? 'Hide lyrics' : 'Show lyrics here'}
-                  onClick={toggleLyricsView}
-                >
-                  <MicVocal size={13} /> Lyrics
-                </button>
-              )}
-              <button
-                className={`rd ${settings.lyrics.overlay ? 'on' : ''}`}
-                aria-label="Lyrics on the desktop"
-                aria-pressed={settings.lyrics.overlay}
-                data-tip={settings.lyrics.overlay ? 'Desktop lyrics on' : 'Desktop lyrics off'}
-                onClick={() => api.setSettings({ lyrics: { overlay: !settings.lyrics.overlay } })}
-              >
-                <MonitorUp size={15} />
-              </button>
               {synced && (
                 <div
                   className={`sync-xp ${state.lyricsOffsetMs ? 'moved' : ''}`}
-                  title="Lyrics early or late? Nudge them; Glowtide remembers it for this song. Double-click to reset."
+                  data-tip="Sync · lyrics early or late? Nudge them"
                 >
                   <span className="rd sync-icon" aria-hidden="true">
                     <History size={15} />
@@ -507,53 +590,41 @@ function NowPlaying({ state, settings, lyrics, setPanel }) {
       </div>
 
       <div className="dock">
-        <button
-          className={`rd ${state.liked ? 'on' : ''}`}
-          aria-label={state.liked ? 'Remove from liked songs' : 'Save to liked songs'}
-          data-tip={state.liked ? 'Liked' : 'Like'}
-          disabled={state.source !== 'spotify' || state.liked == null}
-          onClick={() => api.control('like', !state.liked)}
-        >
-          <Heart size={15} fill={state.liked ? 'currentColor' : 'none'} />
-        </button>
-        <button
-          className="rd"
-          aria-label="Queue"
-          data-tip="Queue"
-          onClick={() => setPanel('queue')}
-        >
-          <ListMusic size={15} />
-        </button>
-        <button
-          className="rd"
-          aria-label="Search"
-          data-tip="Search"
-          onClick={() => setPanel('search')}
-        >
-          <Search size={15} />
-        </button>
-        <GlowQuick settings={settings} />
-        <button className="pill" onClick={() => setPanel('settings')}>
-          <Cog size={13} /> Settings
-        </button>
-        <DisplayQuick settings={settings} />
-        <button
-          className="rd"
-          aria-label="Devices"
-          data-tip={sys ? 'Follow which app' : 'Devices'}
-          disabled={noDevices}
-          onClick={() => setPanel(sys ? 'apps' : 'devices')}
-        >
-          <MonitorSpeaker size={15} />
-        </button>
-        <button
-          className="rd"
-          aria-label="Library"
-          data-tip="Library"
-          onClick={() => setPanel('library')}
-        >
-          <Library size={15} />
-        </button>
+        <div className="dock-group">
+          <button
+            className="rd"
+            aria-label="Back 15 seconds"
+            data-tip="Back 15 seconds"
+            disabled={!canSkip}
+            onClick={() => skip(-SKIP_MS)}
+          >
+            <Skip15 back />
+          </button>
+          <button
+            className={`rd ${state.liked ? 'on' : ''}`}
+            aria-label={state.liked ? 'Remove from liked songs' : 'Save to liked songs'}
+            data-tip={
+              state.source !== 'spotify'
+                ? 'Like · with Spotify connected'
+                : state.liked
+                  ? 'Liked · click to remove'
+                  : 'Like · save to your liked songs'
+            }
+            disabled={state.source !== 'spotify' || state.liked == null}
+            onClick={() => api.control('like', !state.liked)}
+          >
+            <Heart size={15} fill={state.liked ? 'currentColor' : 'none'} />
+          </button>
+          <button
+            className="rd"
+            aria-label="Forward 15 seconds"
+            data-tip="Forward 15 seconds"
+            disabled={!canSkip}
+            onClick={() => skip(SKIP_MS)}
+          >
+            <Skip15 />
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -628,12 +699,12 @@ function PlayerLyrics({ lines, synced, note, playback, durationMs, offsetMs }) {
 }
 
 /**
- * A dock button that opens a small panel above the dock while the pointer is over it (or it
- * has keyboard focus), the way the Mac player's toolbar opens into its choices.
+ * A button that opens a small panel while the pointer is over it (or it has keyboard
+ * focus): above the dock, or (side) to the left of the rail.
  */
-function Quick({ icon, label, on, onClick, children, wide }) {
+function Quick({ icon, label, on, onClick, children, wide, side }) {
   return (
-    <div className={`qx ${wide ? 'wide' : ''}`}>
+    <div className={`qx ${wide ? 'wide' : ''} ${side ? 'side' : ''}`}>
       <button
         className={`rd ${on ? 'on' : ''}`}
         aria-label={label}
@@ -664,63 +735,11 @@ function QSeg({ value, options, onChange }) {
   )
 }
 
-/** Gradient, animation and glow brightness, each a click away in the dock. */
-function GlowQuick({ settings }) {
-  const g = settings.glow
-  const set = (patch) => api.setSettings({ glow: patch })
-  const anim = glowAnimation(g)
-  return (
-    <>
-      <Quick icon={<Palette size={15} />} label="Gradient">
-        <QSeg
-          value={g.gradient === 2 ? 2 : 1}
-          options={GRADIENTS}
-          onChange={(v) => set({ gradient: v })}
-        />
-      </Quick>
-      <Quick icon={<AudioWaveform size={15} />} label="Animation" wide>
-        <QSeg value={anim} options={ANIMATION_OPTIONS} onChange={(v) => set({ animation: v })} />
-      </Quick>
-      <Quick
-        icon={<Lightbulb size={15} />}
-        label={g.enabled ? 'Edge glow' : 'Edge glow (off)'}
-        on={g.enabled}
-        onClick={() => set({ enabled: !g.enabled })}
-      >
-        <div className="qslide">
-          <button
-            className="rd sm ghost"
-            aria-label="Dimmer"
-            onClick={() => set({ intensity: Math.max(10, g.intensity - 10) })}
-          >
-            −
-          </button>
-          <input
-            type="range"
-            min={10}
-            max={100}
-            step={5}
-            value={g.intensity}
-            aria-label="Glow brightness"
-            style={{ '--p': `${((g.intensity - 10) / 90) * 100}%` }}
-            onChange={(e) => set({ intensity: Number(e.target.value), enabled: true })}
-          />
-          <button
-            className="rd sm ghost"
-            aria-label="Brighter"
-            onClick={() => set({ intensity: Math.min(100, g.intensity + 10), enabled: true })}
-          >
-            +
-          </button>
-        </div>
-        <span className="qx-note">Click the bulb to turn the glow {g.enabled ? 'off' : 'on'}.</span>
-      </Quick>
-    </>
-  )
-}
-
-/** Which display glows, and whether the glow keeps clear of the taskbar. */
-function DisplayQuick({ settings }) {
+/**
+ * The glow button on the rail: a click turns the glow on or off; resting the pointer on it
+ * opens every glow choice in one panel.
+ */
+function GlowPanel({ settings }) {
   const displays = useDisplays()
   const g = settings.glow
   const set = (patch) => api.setSettings({ glow: patch })
@@ -730,33 +749,58 @@ function DisplayQuick({ settings }) {
     ...(displays.length > 1 ? displays.map((d) => [d.id, d.label]) : [])
   ]
   return (
-    <>
-      <Quick icon={<Monitor size={15} />} label="Display" wide>
-        <div className="qlist">
-          {choices.map(([k, text]) => (
-            <button
-              key={k}
-              className={String(g.displays) === String(k) ? 'on' : ''}
-              onClick={() => set({ displays: k })}
-            >
-              <Monitor size={13} /> <span>{text}</span>
-              {String(g.displays) === String(k) && <Check size={13} />}
-            </button>
-          ))}
-        </div>
-      </Quick>
-      <Quick icon={<PanelBottom size={15} />} label="Taskbar" on={!!g.taskbar}>
-        <QSeg
-          value={g.taskbar ? 'on' : 'off'}
-          options={[
-            ['off', 'Behind'],
-            ['on', 'Clear of it']
-          ]}
-          onChange={(v) => set({ taskbar: v === 'on' })}
+    <Quick
+      icon={<Lightbulb size={16} />}
+      label="Edge glow"
+      on={g.enabled}
+      onClick={() => set({ enabled: !g.enabled })}
+      side
+    >
+      <span className="qx-note">Click the bulb to turn the glow {g.enabled ? 'off' : 'on'}.</span>
+      <QSeg
+        value={g.gradient === 2 ? 2 : 1}
+        options={GRADIENTS}
+        onChange={(v) => set({ gradient: v })}
+      />
+      <QSeg
+        value={glowAnimation(g)}
+        options={ANIMATION_OPTIONS}
+        onChange={(v) => set({ animation: v })}
+      />
+      <div className="qslide">
+        <span className="qx-note">Brightness</span>
+        <input
+          type="range"
+          min={10}
+          max={100}
+          step={5}
+          value={g.intensity}
+          aria-label="Glow brightness"
+          style={{ '--p': `${((g.intensity - 10) / 90) * 100}%` }}
+          onChange={(e) => set({ intensity: Number(e.target.value), enabled: true })}
         />
-        <span className="qx-note">Where the glow runs along the taskbar.</span>
-      </Quick>
-    </>
+      </div>
+      <QSeg
+        value={g.taskbar ? 'on' : 'off'}
+        options={[
+          ['on', 'Clear of the taskbar'],
+          ['off', 'Behind it']
+        ]}
+        onChange={(v) => set({ taskbar: v === 'on' })}
+      />
+      <div className="qlist">
+        {choices.map(([k, text]) => (
+          <button
+            key={k}
+            className={String(g.displays) === String(k) ? 'on' : ''}
+            onClick={() => set({ displays: k })}
+          >
+            <Monitor size={13} /> <span>{text}</span>
+            {String(g.displays) === String(k) && <Check size={13} />}
+          </button>
+        ))}
+      </div>
+    </Quick>
   )
 }
 
@@ -771,7 +815,13 @@ function Sheet({ title, onClose, children }) {
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <span>{title}</span>
-          <button className="rd sm" aria-label="Close" onClick={onClose}>
+          <button
+            className="rd sm"
+            aria-label="Back to now playing"
+            data-tip="Back to now playing"
+            data-tip-pos="left"
+            onClick={onClose}
+          >
             <X size={14} />
           </button>
         </div>

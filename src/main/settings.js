@@ -52,24 +52,11 @@ export const DEFAULT_SETTINGS = {
   hideForFullscreen: true, // the glow and lyrics overlay hide while another app is full screen
   autoUpdate: true, // check GitHub releases and download updates in the background
   showInTaskbar: true, // the player has a taskbar button (off: it lives in the tray only)
+  hints: true, // a short description when the pointer rests on a button
   fps: 30, // the glow and lyrics overlay: 30 (lighter) or 60 (smoother)
   widgets: {
     fps: 60,
-    accent: '#7c5cff', // the "custom" colour theme's accent (clock and full screen)
-    clock: {
-      enabled: false,
-      placement: 'wallpaper', // 'wallpaper' | 'top' | 'window'
-      theme: 'album', // its colours: 'album' | a preset | 'custom'
-      bounds: null,
-      style: 'digital', // digital | stacked | minimal | analog | words
-      font: 'Segoe UI Variable Display',
-      h24: false,
-      seconds: false,
-      date: 'long', // long | short | none
-      colour: 'theme', // theme | solid | gradient
-      glow: true,
-      opacity: 100
-    },
+    accent: '#7c5cff', // the full-screen view's "custom" colour theme
     stage: { style: 'ring', theme: 'album' }
   }
 }

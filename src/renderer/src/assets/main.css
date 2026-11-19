@@ -2239,7 +2239,7 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 /* A wide window: the Mac layout, a card with the cover and controls on the left and the
    lyrics running down the right. */
-@media (min-width: 720px) {
+@media (min-width: 900px) {
   .np.lyrics-open .np-main {
     justify-content: center;
     padding: 6px 28px 0;
@@ -2811,4 +2811,184 @@ html[data-route='quick'] body {
   .mw {
     animation: none;
   }
+}
+
+/* ---------- the layout: where you go (left), the song (middle), what you see (right) ---------- */
+.shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+/* the cover's colour washes the whole window, sidebar and rail included */
+.shell .backdrop {
+  position: fixed;
+}
+.sidebar {
+  flex: none;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 7px 12px;
+  position: relative;
+  z-index: 4;
+  background: rgba(10, 9, 12, 0.45);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
+}
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 11px;
+  border-radius: 12px;
+  color: #cfc8c2;
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.side-item svg {
+  flex: none;
+}
+.side-item:hover:not(:disabled) {
+  background: var(--pill-hover);
+  color: var(--text);
+}
+.side-item.on {
+  background: color-mix(in srgb, var(--glow) 20%, var(--pill));
+  color: var(--text);
+}
+.side-label {
+  display: none;
+}
+.side-gap {
+  flex: 1;
+}
+@media (min-width: 760px) {
+  .sidebar {
+    width: 168px;
+    padding: 8px 10px 14px;
+  }
+  .side-label {
+    display: inline;
+  }
+}
+.main {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.rail {
+  flex: none;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  position: relative;
+  z-index: 4;
+  background: rgba(10, 9, 12, 0.45);
+  border-left: 1px solid rgba(255, 255, 255, 0.04);
+}
+.rail .rd {
+  width: 34px;
+  height: 34px;
+}
+/* the glow panel opens to the left of the rail */
+.qx.side {
+  position: relative;
+}
+.qx.side .qx-pop {
+  left: auto;
+  right: calc(100% + 2px);
+  top: -10px;
+  bottom: auto;
+  padding: 0 8px 0 0;
+  transform: translateX(6px);
+}
+.qx.side:hover .qx-pop,
+.qx.side:focus-within .qx-pop {
+  transform: none;
+}
+.qx.side .qslide {
+  width: 100%;
+}
+/* the grouped dock under the controls */
+.dock-group {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 18px;
+  background: rgba(21, 18, 24, 0.7);
+}
+.dock .dock-group .rd {
+  width: 30px;
+  height: 30px;
+}
+/* library, search, queue and settings open as pages in the middle */
+.main .sheet-wrap {
+  inset: 0;
+  background: none;
+  align-items: stretch;
+  animation: none;
+}
+.main .sheet {
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--bg);
+  animation: fadein 0.15s;
+}
+.player.max .main .sheet {
+  max-width: 760px;
+}
+/* settings: a row of tabs, each showing its sections open */
+.set-tabs {
+  position: sticky;
+  top: -4px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0 10px;
+  background: var(--bg);
+}
+.fold.static > .sh {
+  cursor: default;
+}
+.fold.static > .sh h3::before {
+  display: none;
+}
+
+/* ---------- hints: a short description beside the button the pointer rests on ---------- */
+[data-tip-pos='right']::after {
+  left: calc(100% + 10px);
+  right: auto;
+  top: 50%;
+  bottom: auto;
+  transform: translate(-4px, -50%);
+}
+[data-tip-pos='right']:hover:not(:disabled)::after,
+[data-tip-pos='right']:focus-visible::after {
+  transform: translate(0, -50%);
+}
+[data-tip-pos='left']::after {
+  right: calc(100% + 10px);
+  left: auto;
+  top: 50%;
+  bottom: auto;
+  transform: translate(4px, -50%);
+}
+[data-tip-pos='left']:hover:not(:disabled)::after,
+[data-tip-pos='left']:focus-visible::after {
+  transform: translate(0, -50%);
+}
+.player.no-hints [data-tip]::after {
+  display: none;
 }

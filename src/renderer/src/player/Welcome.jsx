@@ -18,7 +18,7 @@ export default function Welcome({ setPanel }) {
           <AudioLines size={22} />
           <div>
             <div className="t">
-              Any app <span className="badge">Free · no setup</span>
+              Any app <span className="badge">Recommended · no setup</span>
             </div>
             <div className="s">
               Follows what’s playing in Spotify (free or Premium), YouTube Music in your browser,
@@ -45,7 +45,9 @@ export default function Welcome({ setPanel }) {
           <div>
             <div className="t">Spotify</div>
             <div className="s">
-              Premium: full control from Glowtide. Free: Glowtide follows what Spotify is playing.
+              Adds Spotify search and your library. Needs your own Spotify developer app, which
+              Spotify now limits to Premium accounts and can leave “access pending”. To simply
+              follow Spotify, choose Any app.
             </div>
           </div>
           <ChevronRight size={16} />

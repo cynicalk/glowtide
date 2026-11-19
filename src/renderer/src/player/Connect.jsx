@@ -29,6 +29,16 @@ export default function Connect({ state, settings, onBack }) {
         <h1>Connect Spotify</h1>
         <p>Glowtide follows Spotify on this PC and lights up your screen with the song.</p>
       </div>
+      <div className="heads-up">
+        <p>
+          Spotify now only gives developer apps to <b>Premium</b> accounts, and a new app can sit at
+          “access pending” until Spotify approves it. If that happens, use <b>Any app</b>: it
+          follows the Spotify app on this PC, free or Premium, with nothing to set up.
+        </p>
+        <button className="pill on" onClick={() => api.setSource('system')}>
+          Use Any app instead
+        </button>
+      </div>
       <ol className="steps">
         <li>
           <span>Create an app on the Spotify developer dashboard. Choose “Web API”.</span>

@@ -1,6 +1,6 @@
 {
   "name": "glowtide",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "A music companion for Windows: album-coloured edge glow, kinetic lyrics and desktop visualizers for Spotify, YouTube Music and any app",
   "main": "./out/main/index.js",
   "author": "Glowtide",

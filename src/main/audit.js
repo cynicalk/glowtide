@@ -355,6 +355,9 @@ export async function runAudit(c, dir) {
     await wait(2500)
     check('messages in the player lyrics view', await has(c.player, '.pl-msgs .msg'))
     // smooth, not stiff: over 8 s of song, no message ever jumps; each one glides
+    // the overlay steps its animations at its own frame rate: measured at 60, like the player
+    const fps0 = loadSettings().fps
+    await set({ fps: 60 }, 800)
     for (const [where, w] of [
       ['player', c.player],
       ['overlay', c.lyricsWin]
@@ -366,6 +369,7 @@ export async function runAudit(c, dir) {
         m
       )
     }
+    await set({ fps: fps0 }, 500)
     await click('.rail [aria-label="Lyrics in this window"]')
   })
 

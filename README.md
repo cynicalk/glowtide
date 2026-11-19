@@ -186,8 +186,34 @@ To release: `npm run build:win`, then attach `Glowtide-<version>-setup.exe`, its
 This source repository is private, so installed copies can't read its releases. They update from whichever full release is marked latest; without `latest.yml` they
 can't see it.
 
-The installer is unsigned. To sign it, set `CSC_LINK` (a .pfx path or base64) and
-`CSC_KEY_PASSWORD` before `build:win`; electron-builder picks them up.
+### Signing
+
+Releases up to 1.0.7 are unsigned, so Windows SmartScreen warns about them ("Unknown
+publisher"). `build:win` signs the installer, the app and its uninstaller as soon as a
+certificate is set up, and fails if the installer comes out unsigned (`scripts/build-win.mjs`):
+
+- **A certificate in the Windows store** (a USB token, or Certum's SimplySign app, which shows
+  its cloud key as a smart card): `$env:GLOWTIDE_SIGN_SHA1="<thumbprint>"`. Find the thumbprint
+  with `Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert`.
+- **A .pfx file**: `$env:CSC_LINK="C:\path\cert.pfx"` and `$env:CSC_KEY_PASSWORD`.
+
+Signatures are SHA-256 and timestamped (`http://time.certum.pl`, set in
+`electron-builder.yml`), so they stay valid after the certificate expires.
+
+Once a signed release is out, installed copies take an update only if it's signed by the
+same publisher name (`publisherName` in `app-update.yml`). Every later release must be
+signed, and a renewed certificate must carry the same name. Unsigned copies (1.0.7 and
+earlier) update to the first signed release normally.
+
+Getting a certificate (late 2026): Azure Artifact Signing (about $10 a month) issues to
+individual developers only in the US and Canada. Elsewhere, an individual (OV) code-signing
+certificate comes from a certificate authority such as Certum, Sectigo or SSL.com; the key lives
+on a token or in the CA's cloud, never in a file, and since March 2026 a certificate lasts at
+most 460 days. A standard certificate removes "Unknown publisher" at once; SmartScreen's
+"not commonly downloaded" warning fades as signed downloads build reputation.
+
+`GLOWTIDE_BUILD_OUT="C:\somewhere"` builds there instead of `dist/` (a test build beside a
+released one).
 
 PowerShell variables used for debugging. They work only in a development run (`npm run dev`
 or `npx electron .` after `npm run build`); a packaged copy ignores every one of them.

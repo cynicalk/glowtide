@@ -2689,8 +2689,12 @@ html[data-route='quick'] body {
 }
 .cover.moving img,
 .stage-cover.moving img,
-.immersive-art.moving img {
+.np.immersive .immersive-art.moving img {
   animation-play-state: running;
+}
+/* the full-window cover waits invisible until it's opened: no layer, no motion till then */
+.np:not(.immersive) .immersive-art img {
+  will-change: auto;
 }
 @keyframes art-drift {
   0% {

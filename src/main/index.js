@@ -201,8 +201,11 @@ function coverExists(url) {
     coverChecks.set(
       url,
       fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(6000) })
-        .then((r) => r.ok)
-        .catch(() => false)
+        .then((r) => r.ok) // 404: no larger one, remembered
+        .catch(() => {
+          coverChecks.delete(url) // offline or slow: ask again next time
+          return false
+        })
     )
   }
   return coverChecks.get(url)
@@ -214,7 +217,9 @@ function sharpenCover(track) {
   if (!big) return
   coverExists(big).then((ok) => {
     if (!ok || state.track?.id !== track.id || state.track.cover !== track.cover) return
-    state.track = { ...state.track, cover: big }
+    // the blurred backgrounds keep the list size: a 1500 px image is ~9 MB once decoded, in
+    // every window that shows it, and blurring throws that detail away
+    state.track = { ...state.track, cover: big, coverSoft: track.cover }
     broadcast()
   })
 }
@@ -762,6 +767,7 @@ const glyphFor = (k) => (glyphs[k] ||= glyph(k))
 let thumbKey = ''
 function syncThumbar() {
   if (!player || player.isDestroyed() || !player.isVisible()) return
+  if (!loadSettings().showInTaskbar) return // no taskbar button to put them under
   const playing = !!state.playback?.isPlaying
   const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
   const can = (a) =>
@@ -1143,9 +1149,11 @@ function registerIpc() {
     broadcast()
   })
   // Tap-to-sync: the lines you timed ([{ t, text }]) saved for the song playing now.
-  handle('lyrics:saveTimed', (_, lines) => {
+  handle('lyrics:saveTimed', (_, lines, trackId) => {
     const track = state.track
-    if (!track || !Array.isArray(lines) || !lines.length || lines.length > 2000) return false
+    // the song changed as Save was pressed: these taps belong to the one before
+    if (!track || track.id !== trackId) return false
+    if (!Array.isArray(lines) || !lines.length || lines.length > 2000) return false
     const clean = lines
       .filter((l) => l && Number.isFinite(l.t) && l.t >= 0 && typeof l.text === 'string')
       .map((l) => ({ t: Math.round(l.t), text: l.text.slice(0, 500) }))

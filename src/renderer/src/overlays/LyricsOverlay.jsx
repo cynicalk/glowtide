@@ -449,7 +449,7 @@ export default function LyricsOverlay() {
       <Backdrop
         kind={l.backdrop || 'dim'}
         strength={l.dim}
-        cover={state.track?.cover}
+        cover={state.track?.coverSoft || state.track?.cover}
         on={active}
       />
       <div className={`lyr-stage ${active ? 'show' : ''}`}>

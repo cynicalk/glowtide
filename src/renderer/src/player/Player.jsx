@@ -371,6 +371,7 @@ function NowPlaying({
     setSyncFor(track?.id)
     setSyncing(false)
   }
+  const endSync = useCallback(() => setSyncing(false), [])
   const playing = !!playback?.isPlaying
   const repeatNext = { off: 'context', context: 'track', track: 'off' }[playback?.repeat || 'off']
   const synced = state.lyricsStatus === 'synced' && lyrics.length > 0
@@ -407,7 +408,7 @@ function NowPlaying({
     <div
       className={`np ${artBig && !open && !immersive ? 'art-big' : ''} ${open ? 'lyrics-open' : ''} ${immersive ? 'immersive' : ''}`}
     >
-      {track?.cover && <img className="backdrop" src={track.cover} alt="" />}
+      {track?.cover && <img className="backdrop" src={track.coverSoft || track.cover} alt="" />}
       <div className="art-tint" />
       {track?.cover && !yt && !open && (
         <div
@@ -596,6 +597,7 @@ function NowPlaying({
             {track && <div className="status">{lyricNote}</div>}
             {open && track && !syncing && (
               <LyricTools
+                key={track.id}
                 plain={state.lyricsStatus === 'plain' && lyrics.length > 0}
                 mine={state.lyricsSource === 'Timed by you'}
                 onTime={() => setSyncing(true)}
@@ -621,8 +623,10 @@ function NowPlaying({
                 synced={synced}
                 plain={state.lyricsStatus === 'plain' && lyrics.length > 0}
                 syncing={syncing}
-                endSync={() => setSyncing(false)}
+                endSync={endSync}
                 canSeek={can('seek')}
+                pageOpen={pageOpen}
+                trackId={track?.id}
                 note={track ? LYRIC_STATUS[state.lyricsStatus] : 'Nothing playing'}
                 playback={playback}
                 durationMs={track?.durationMs}
@@ -708,6 +712,8 @@ function PlayerLyrics({
   syncing,
   endSync,
   canSeek,
+  pageOpen,
+  trackId,
   note,
   playback,
   durationMs,
@@ -726,7 +732,16 @@ function PlayerLyrics({
     })
   }, [idx])
   if (syncing && (plain || synced))
-    return <TapSync lines={lines} playback={playback} canSeek={canSeek} onClose={endSync} />
+    return (
+      <TapSync
+        lines={lines}
+        playback={playback}
+        trackId={trackId}
+        canSeek={canSeek}
+        paused={pageOpen}
+        onClose={endSync}
+      />
+    )
   if (!synced && plain)
     return <PlainLyrics lines={lines} playback={playback} durationMs={durationMs} />
   if (!synced)
@@ -777,7 +792,13 @@ function LyricTools({ plain, mine, onTime }) {
     return (
       <div className="lyric-tools">
         <span>Remove your timing for this song?</span>
-        <button className="pill" onClick={() => api.removeTimedLyrics()}>
+        <button
+          className="pill"
+          onClick={() => {
+            setAsking(false)
+            api.removeTimedLyrics()
+          }}
+        >
           Remove
         </button>
         <button className="pill" onClick={() => setAsking(false)}>
@@ -808,7 +829,7 @@ function LyricTools({ plain, mine, onTime }) {
  * starts. Backspace takes the last tap back, Esc leaves. Once every line has its time, Save
  * keeps it on this PC for the song, and the desktop overlay can show it.
  */
-function TapSync({ lines, playback, canSeek, onClose }) {
+function TapSync({ lines, playback, trackId, canSeek, paused, onClose }) {
   const targets = useMemo(() => tapTargets(lines), [lines])
   const [times, setTimes] = useState([])
   const [error, setError] = useState('')
@@ -821,7 +842,15 @@ function TapSync({ lines, playback, canSeek, onClose }) {
   )
   useEffect(() => {
     const key = (e) => {
-      if (e.repeat) return
+      // a page over the lyrics, or typing somewhere: the keys are not taps
+      const t = e.target
+      if (
+        e.repeat ||
+        paused ||
+        t?.isContentEditable ||
+        /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName)
+      )
+        return
       if (e.key === ' ' || e.key === 'Enter') doTap()
       else if (e.key === 'Backspace') setTimes(undoTap)
       else if (e.key === 'Escape') onClose()
@@ -831,7 +860,7 @@ function TapSync({ lines, playback, canSeek, onClose }) {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-  }, [doTap, onClose])
+  }, [doTap, onClose, paused])
   // the next line to tap stays in the middle
   useEffect(() => {
     const box = list.current
@@ -849,7 +878,7 @@ function TapSync({ lines, playback, canSeek, onClose }) {
   }
   const save = async () => {
     setSaving(true)
-    const ok = await api.saveTimedLyrics(timedLines(lines, times))
+    const ok = await api.saveTimedLyrics(timedLines(lines, times), trackId)
     setSaving(false)
     if (ok) onClose()
     else setError("Couldn't save the timing")

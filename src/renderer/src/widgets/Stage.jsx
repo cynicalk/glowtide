@@ -77,7 +77,7 @@ export default function Stage() {
       className={`stage ${idle ? 'idle' : ''}`}
       style={{ '--p1': palette[0], '--p2': palette[1], '--p3': palette[2] }}
     >
-      {t?.cover && <img className="stage-bg" src={t.cover} alt="" />}
+      {t?.cover && <img className="stage-bg" src={t.coverSoft || t.cover} alt="" />}
       <div className="stage-shade" />
       <div className={`stage-viz ${ring ? 'ring' : 'under'}`}>
         <Visualizer

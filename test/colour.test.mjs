@@ -134,3 +134,20 @@ test('colours from settings are checked before they reach the page', async () =>
   const a = resolveColours(['bogus', '#00ff00'], { source: 'album', glow: 0, glow2: 1 })
   assert.match(a.glow, /^#[0-9a-f]{6}$/)
 })
+
+test('your own lyric colours replace the album ones exactly; bad ones fall back', async () => {
+  const { resolveColours } = await import('../src/shared/colour.mjs')
+  const base = { glow: 0, lyrics: 1, highlight: 2, source: 'album' }
+  const auto = resolveColours(null, base)
+  const own = resolveColours(null, {
+    ...base,
+    lyricsOwn: true,
+    sung: '#112233',
+    unsung: '#445566',
+    next: 'not a colour'
+  })
+  assert.equal(own.lyrics, '#112233')
+  assert.equal(own.secondary, '#445566')
+  assert.equal(own.highlight, auto.highlight)
+  assert.equal(own.glow, auto.glow, 'the glow is not affected')
+})

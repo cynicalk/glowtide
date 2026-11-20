@@ -206,5 +206,11 @@ export function resolveColours(palette, settings) {
   lyrics = readableOnDark(lyrics)
   highlight = readableOnDark(highlight, 0.12)
   secondary = readableOnDark(secondary, 0.14)
+  // your own lyric colours, exactly as chosen (Settings → Colours → Lyric colours)
+  if (settings.lyricsOwn) {
+    lyrics = safeHex(settings.sung, lyrics)
+    secondary = safeHex(settings.unsung, secondary)
+    highlight = safeHex(settings.next, highlight)
+  }
   return { glow, glow2, lyrics, highlight, secondary, highlightText: textOn(highlight) }
 }

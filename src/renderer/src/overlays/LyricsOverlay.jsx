@@ -6,6 +6,7 @@ import { useSwap, useBeatVars, useHandoff, useLinger } from '../lib/motion'
 import { useFrameRateCap } from '../lib/frameRate'
 import { listensToMusic } from '../../../shared/glow.mjs'
 import { Messages } from './Messages'
+import { FlowBackground } from '../lib/Backgrounds'
 import { messagesView } from './messagesView'
 import {
   buildFigures,
@@ -112,9 +113,15 @@ function Clock({ now, serif }) {
 }
 
 /** Blurred album art with film grain behind everything, like a lock screen wallpaper. */
-function Backdrop({ kind, strength, cover, on }) {
+function Backdrop({ kind, strength, cover, on, colours }) {
   if (kind === 'none') return null
   const opacity = on ? strength / 100 : 0
+  if (kind === 'flow')
+    return (
+      <div className="backdrop-flow" style={{ opacity }}>
+        {on && <FlowBackground colours={colours} />}
+      </div>
+    )
   if (kind === 'cover' && cover)
     return (
       <div className="backdrop-art" style={{ opacity }}>
@@ -443,6 +450,7 @@ export default function LyricsOverlay() {
         '--hi-text': colours.highlightText,
         '--sec': colours.secondary,
         '--big': `calc(min(15vh, 11vw) * ${scale})`,
+        '--space': (l.spacing || 100) / 100,
         fontFamily: `'${l.font}', 'Segoe UI', sans-serif`
       }}
     >
@@ -451,6 +459,7 @@ export default function LyricsOverlay() {
         strength={l.dim}
         cover={state.track?.coverSoft || state.track?.cover}
         on={active}
+        colours={colours}
       />
       <div className={`lyr-stage ${active ? 'show' : ''}`}>
         {live && (

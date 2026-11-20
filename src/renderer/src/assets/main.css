@@ -850,7 +850,7 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 .w {
   font-weight: 800;
-  line-height: 1.04;
+  line-height: calc(1.04 * var(--space, 1));
   letter-spacing: -0.02em;
   color: var(--lyr);
   white-space: nowrap;
@@ -927,7 +927,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   margin-top: 3px;
   font-size: 12px;
   color: var(--muted);
-  line-height: 1.45;
+  line-height: calc(1.45 * var(--space, 1));
 }
 .choice > svg:first-child {
   color: var(--glow);
@@ -1062,7 +1062,7 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 .words.lines .w.cur {
   font-size: var(--line);
-  line-height: 1.02;
+  line-height: calc(1.02 * var(--space, 1));
 }
 .words.lines .w.prev,
 .words.lines .w.next {
@@ -1227,7 +1227,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   left: 0;
   bottom: -0.24em; /* the point is the text's baseline, as it was in the SVG */
   font-size: calc(var(--wpx) / 0.69 * var(--u));
-  line-height: 1;
+  line-height: calc(1 * var(--space, 1));
   font-weight: 700;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -1374,7 +1374,7 @@ input[type='range']:hover::-webkit-slider-thumb,
 .nc-desc {
   margin-top: 10px;
   font-size: clamp(12px, 0.95vw, 16px);
-  line-height: 1.5;
+  line-height: calc(1.5 * var(--space, 1));
   opacity: 0.75;
 }
 @keyframes cardin {
@@ -1504,7 +1504,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   position: relative;
   font-size: calc(var(--big) * var(--k));
   font-weight: 800;
-  line-height: 1.05;
+  line-height: calc(1.05 * var(--space, 1));
   letter-spacing: -0.02em;
   color: #fff;
   text-align: center;
@@ -1617,7 +1617,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   letter-spacing: -0.02em;
   text-align: center;
   max-width: min(84vw, 1500px);
-  line-height: 1.25;
+  line-height: calc(1.25 * var(--space, 1));
 }
 .wave-line span {
   display: inline-block;
@@ -1690,7 +1690,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   text-align: center;
   max-width: min(80vw, 1400px);
   text-wrap: balance;
-  line-height: 1.02;
+  line-height: calc(1.02 * var(--space, 1));
   transform: scale(calc(1 + var(--pulse) * 0.11));
   text-shadow:
     0 0 22px var(--glow),
@@ -2207,7 +2207,7 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 .pl-line,
 .pl-gap {
-  padding: 6px 2px;
+  padding: calc(6px * var(--space, 1)) 2px;
   font-size: 16px;
   font-weight: 600;
   line-height: 1.3;
@@ -3445,4 +3445,152 @@ html[data-route='mini'] #root {
 .pick-list,
 .cmd-list {
   scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+/* ---------- flowing colours (lib/Backgrounds.jsx) ---------- */
+@property --f1 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #6a5cff;
+}
+@property --f2 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ff5fa2;
+}
+@property --f3 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #ffb35f;
+}
+@property --f4 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #5fb4ff;
+}
+.flow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #0b0a0e;
+  pointer-events: none;
+  transition:
+    --f1 1.6s ease,
+    --f2 1.6s ease,
+    --f3 1.6s ease,
+    --f4 1.6s ease;
+}
+.flow i {
+  position: absolute;
+  width: 78vmax;
+  height: 78vmax;
+  border-radius: 50%;
+  opacity: 0.55;
+  will-change: transform;
+  animation: flow-a 31s ease-in-out infinite alternate;
+}
+.flow i:nth-child(1) {
+  left: -24vmax;
+  top: -30vmax;
+  background: radial-gradient(circle, var(--f1) 0, transparent 62%);
+}
+.flow i:nth-child(2) {
+  right: -30vmax;
+  top: -14vmax;
+  background: radial-gradient(circle, var(--f2) 0, transparent 62%);
+  animation-name: flow-b;
+  animation-duration: 37s;
+}
+.flow i:nth-child(3) {
+  left: 4vmax;
+  bottom: -40vmax;
+  background: radial-gradient(circle, var(--f3) 0, transparent 62%);
+  animation-name: flow-c;
+  animation-duration: 29s;
+}
+.flow i:nth-child(4) {
+  right: -16vmax;
+  bottom: -26vmax;
+  opacity: 0.42;
+  background: radial-gradient(circle, var(--f4) 0, transparent 62%);
+  animation-name: flow-d;
+  animation-duration: 43s;
+}
+@keyframes flow-a {
+  to {
+    transform: translate(22vmax, 16vmax) scale(1.18);
+  }
+}
+@keyframes flow-b {
+  to {
+    transform: translate(-20vmax, 22vmax) scale(0.9);
+  }
+}
+@keyframes flow-c {
+  to {
+    transform: translate(18vmax, -24vmax) scale(1.12);
+  }
+}
+@keyframes flow-d {
+  to {
+    transform: translate(-24vmax, -12vmax) scale(1.22);
+  }
+}
+.still .flow i {
+  animation: none;
+}
+/* behind the player: where the blurred cover goes, under the tint that keeps text readable */
+.np-wall {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.np-wall.flow {
+  opacity: 0.85;
+}
+img.wall,
+video.wall {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.wall-box {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #0b0a0e;
+}
+.wall-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(8, 7, 10, 0.45), rgba(8, 7, 10, 0.62));
+}
+.stage-wall {
+  position: absolute;
+  inset: 0;
+}
+.backdrop-flow {
+  position: fixed;
+  inset: 0;
+  transition: opacity 0.6s;
+}
+.colour-well {
+  width: 44px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+.fine.warn {
+  color: #ff9b8a;
+}
+
+/* your picture or video fills the whole window, sidebar and rail included, as the flow does */
+.wall-box.np-wall {
+  position: fixed;
 }

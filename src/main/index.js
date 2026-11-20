@@ -1,6 +1,8 @@
 import {
   app,
   BrowserWindow,
+  protocol,
+  net,
   clipboard,
   globalShortcut,
   powerSaveBlocker,
@@ -14,9 +16,20 @@ import {
   session,
   shell
 } from 'electron'
-import { basename, join } from 'path'
+import { basename, extname, join } from 'path'
+import { pathToFileURL } from 'url'
+import { copyFile } from 'fs/promises'
 import os from 'os'
-import { writeFileSync, mkdirSync, rmSync, appendFileSync, statSync, cpSync, existsSync } from 'fs'
+import {
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+  appendFileSync,
+  statSync,
+  cpSync,
+  existsSync,
+  readdirSync
+} from 'fs'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { loadSettings, updateSettings } from './settings'
@@ -50,6 +63,14 @@ const DEV = !app.isPackaged
 // Up to 1.0.10 the app had another name. Its folder and its start-with-Windows entry are
 // found by these, so an update keeps everything you set up.
 const EARLIER = { folder: 'Lumn', loginItem: 'xyz.trylumn.windows' }
+
+// Your background picture or video is served to Glowtide's pages from the settings folder
+// as glowtide-bg://bg/<file> (registered before Electron starts, as schemes must be).
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'glowtide-bg', privileges: { standard: true, secure: true, stream: true } }
+])
+const BG_FILE = /^bg-\d+\.(jpe?g|png|webp|gif|mp4|webm)$/
+const bgDir = () => join(app.getPath('userData'), 'background')
 
 // before anything reads a setting or Electron starts (see moveFromEarlierName)
 if (!DEV) moveFromEarlierName()
@@ -1447,6 +1468,40 @@ function registerIpc() {
     loadLyrics(track)
     return true
   })
+  // Your own background: a picture or a video, copied into the settings folder (the old one
+  // is removed), so it still shows if the original moves.
+  handle('background:pick', async () => {
+    const r = await dialog.showOpenDialog(player, {
+      title: 'Choose a picture or a video',
+      properties: ['openFile'],
+      filters: [
+        {
+          name: 'Pictures and videos',
+          extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'webm']
+        }
+      ]
+    })
+    const src = !r.canceled && r.filePaths[0]
+    if (!src) return null
+    const ext = extname(src).slice(1).toLowerCase()
+    const video = ext === 'mp4' || ext === 'webm'
+    if (!/^(jpe?g|png|webp|gif|mp4|webm)$/.test(ext))
+      return { error: 'Choose a picture (JPG, PNG, WebP, GIF) or a video (MP4, WebM).' }
+    if (statSync(src).size > (video ? 500 : 40) * 1024 * 1024)
+      return { error: video ? 'That video is over 500 MB.' : 'That picture is over 40 MB.' }
+    const version = (loadSettings().background?.version || 0) + 1
+    const name = `bg-${version}.${ext}`
+    try {
+      mkdirSync(bgDir(), { recursive: true })
+      await copyFile(src, join(bgDir(), name))
+      for (const f of readdirSync(bgDir()))
+        if (f !== name) rmSync(join(bgDir(), f), { force: true })
+    } catch (e) {
+      return { error: `Couldn't copy it (${e.message})` }
+    }
+    setSettings({ background: { kind: video ? 'video' : 'image', file: name, version } })
+    return { ok: true }
+  })
   handle('lyrics:removeTimed', () => {
     if (!state.track) return
     removeMyLrc(state.track)
@@ -1925,6 +1980,14 @@ else {
     hardenSession(session.defaultSession, () =>
       desktopCapturer.getSources({ types: ['screen'] }).then((sources) => sources[0])
     )
+
+    // only the one background file Glowtide copied, never any other path
+    protocol.handle('glowtide-bg', (req) => {
+      const u = new URL(req.url)
+      const name = decodeURIComponent(u.pathname.slice(1))
+      if (u.host !== 'bg' || !BG_FILE.test(name)) return new Response('Not found', { status: 404 })
+      return net.fetch(pathToFileURL(join(bgDir(), name)).toString(), { headers: req.headers })
+    })
 
     loadAmllIndex() // warm the word-timed lyrics index so the first song doesn't wait
     registerIpc()

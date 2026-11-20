@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlignCenter,
   Sparkles,
@@ -277,6 +277,9 @@ export default function SettingsPanel({ state, settings, onClose }) {
         </Fold>
       )}
 
+      {tab === 'colours' && <LyricColours c={settings.colour} set={set} />}
+      {tab === 'colours' && <BackgroundSettings bg={settings.background} set={set} />}
+
       {tab === 'glow' && (
         <Fold k="glow">
           <div className="sh">
@@ -423,6 +426,15 @@ export default function SettingsPanel({ state, settings, onClose }) {
             unit="%"
             onChange={(v) => set({ lyrics: { size: v } })}
           />
+          <Slider
+            label="Line spacing"
+            min={70}
+            max={200}
+            step={5}
+            value={l.spacing || 100}
+            unit="%"
+            onChange={(v) => set({ lyrics: { spacing: v } })}
+          />
           <div className="srow">
             <span>Backdrop</span>
             <Seg
@@ -430,7 +442,8 @@ export default function SettingsPanel({ state, settings, onClose }) {
               options={[
                 ['none', 'None'],
                 ['dim', 'Dim'],
-                ['cover', 'Album art']
+                ['cover', 'Album art'],
+                ['flow', 'Flowing']
               ]}
               onChange={(v) => set({ lyrics: { backdrop: v } })}
             />
@@ -820,6 +833,124 @@ function Shortcuts({ settings, set, taken }) {
       <p className="fine">
         In the player: Space plays or pauses, Ctrl+← → skip songs, Shift+← → jump 15 s, [ and ]
         nudge the lyrics (Shift for 0.5 s), L likes.
+      </p>
+    </Fold>
+  )
+}
+
+/** Lyrics in your own three colours instead of the cover's. */
+function LyricColours({ c, set }) {
+  return (
+    <Fold k="lyriccolours">
+      <div className="sh">
+        <h3>Lyric colours</h3>
+        <Toggle
+          label="Your own lyric colours"
+          on={!!c.lyricsOwn}
+          onChange={(v) => set({ colour: { lyricsOwn: v } })}
+        />
+      </div>
+      {c.lyricsOwn &&
+        [
+          ['sung', 'Words being sung'],
+          ['unsung', 'The other words'],
+          ['next', 'Highlight']
+        ].map(([k, label]) => (
+          <div className="srow" key={k}>
+            <span>{label}</span>
+            <ColourInput value={c[k]} onChange={(v) => set({ colour: { [k]: v } })} />
+          </div>
+        ))}
+      <p className="fine">
+        Off, the lyrics take their colours from the album art. The highlight is the next word’s
+        block and the karaoke sweep.
+      </p>
+    </Fold>
+  )
+}
+
+/** A colour well that saves once you stop moving, not on every step of a drag. */
+function ColourInput({ value, onChange }) {
+  const [v, setV] = useState(value)
+  const [prev, setPrev] = useState(value)
+  if (value !== prev) {
+    setPrev(value)
+    setV(value)
+  }
+  useEffect(() => {
+    if (v === value) return
+    const id = setTimeout(() => onChange(v), 200)
+    return () => clearTimeout(id)
+  }, [v, value, onChange])
+  return (
+    <input type="color" className="colour-well" value={v} onChange={(e) => setV(e.target.value)} />
+  )
+}
+
+/** Behind the player: the cover, flowing colours, or your own picture or video. */
+function BackgroundSettings({ bg, set }) {
+  const [err, setErr] = useState('')
+  const own = bg.kind === 'image' || bg.kind === 'video'
+  const pick = async () => {
+    setErr('')
+    const r = await api.pickBackground()
+    if (r?.error) setErr(r.error)
+  }
+  return (
+    <Fold k="background">
+      <div className="sh">
+        <h3>Background</h3>
+      </div>
+      <div className="srow">
+        <span>Behind the player</span>
+        <Seg
+          value={own ? 'own' : bg.kind}
+          options={[
+            ['cover', 'Cover'],
+            ['flow', 'Flowing'],
+            ['own', 'Picture or video']
+          ]}
+          onChange={(v) => {
+            if (v !== 'own') return set({ background: { kind: v } })
+            if (bg.file)
+              set({ background: { kind: /\.(mp4|webm)$/.test(bg.file) ? 'video' : 'image' } })
+            else pick()
+          }}
+        />
+      </div>
+      {own && (
+        <>
+          <div className="srow">
+            <span>{bg.kind === 'video' ? 'Your video' : 'Your picture'}</span>
+            <button className="pill" onClick={pick}>
+              Choose another…
+            </button>
+          </div>
+          <Slider
+            label="Strength"
+            min={10}
+            max={100}
+            value={bg.opacity}
+            unit="%"
+            onChange={(v) => set({ background: { opacity: v } })}
+          />
+        </>
+      )}
+      {bg.kind !== 'cover' && (
+        <div className="srow">
+          <span>In the full-screen view too</span>
+          <Toggle
+            label="Use this background in the full-screen view"
+            on={!!bg.fullscreen}
+            onChange={(v) => set({ background: { fullscreen: v } })}
+          />
+        </div>
+      )}
+      {err && <p className="fine warn">{err}</p>}
+      <p className="fine">
+        Flowing: soft blobs of the cover’s colours drifting past each other. A picture or a video
+        (MP4 or WebM, silent and looping, like a live wallpaper) is copied into Glowtide’s settings
+        folder; a video pauses whenever it can’t be seen.
       </p>
     </Fold>
   )

@@ -34,6 +34,7 @@ import { api, fmtTime, useColours, useDisplays, useGlowtide, usePosition } from 
 import { lineIndexAt } from '../../../shared/lyrics.mjs'
 import { tapTargets, tap, undoTap, timedLines } from '../../../shared/tapsync.mjs'
 import { Messages } from '../overlays/Messages'
+import { Wallpaper } from '../lib/Backgrounds'
 import { messagesView } from '../overlays/messagesView'
 import { glowAnimation } from '../../../shared/glow.mjs'
 import { ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
@@ -82,7 +83,8 @@ export default function Player() {
         '--glow': colours.glow,
         '--lyr': colours.lyrics,
         '--hi': colours.highlight,
-        '--hi-text': colours.highlightText
+        '--hi-text': colours.highlightText,
+        '--space': (settings.lyrics.spacing || 100) / 100
       }}
     >
       <TitleBar
@@ -363,6 +365,8 @@ function NowPlaying({
   pageOpen
 }) {
   const { track, playback } = state
+  const colours = useColours(state, settings)
+  const bg = settings.background
   const pos = usePosition(playback, track?.durationMs, 250)
   const [drag, setDrag] = useState(null)
   const [artBig, setArtBig] = useState(false)
@@ -417,7 +421,11 @@ function NowPlaying({
     <div
       className={`np ${artBig && !open && !immersive ? 'art-big' : ''} ${open ? 'lyrics-open' : ''} ${immersive ? 'immersive' : ''}`}
     >
-      {track?.cover && <img className="backdrop" src={track.coverSoft || track.cover} alt="" />}
+      {bg?.kind && bg.kind !== 'cover' ? (
+        <Wallpaper bg={bg} colours={colours} className="np-wall" />
+      ) : (
+        track?.cover && <img className="backdrop" src={track.coverSoft || track.cover} alt="" />
+      )}
       <div className="art-tint" />
       {track?.cover && !yt && !open && (
         <div

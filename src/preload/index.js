@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('glowtide', {
   exportTimedLyrics: () => ipcRenderer.invoke('lyrics:exportTimed'),
   lyricsCandidates: (q) => ipcRenderer.invoke('lyrics:candidates', q),
   chooseLyrics: (id) => ipcRenderer.invoke('lyrics:choose', id),
+  pickBackground: () => ipcRenderer.invoke('background:pick'),
   connect: () => ipcRenderer.invoke('auth:connect'),
   disconnect: () => ipcRenderer.invoke('auth:disconnect'),
   googleConnect: () => ipcRenderer.invoke('google:connect'),

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react'
-import { api, useGlowtide } from '../lib/store'
+import { api, useColours, useGlowtide } from '../lib/store'
 import Visualizer from '../viz/Visualizer'
+import { Wallpaper } from '../lib/Backgrounds'
 import { vizPalette, VIZ_STYLES, THEMES } from '../../../shared/viz.mjs'
 
 const COLOURS = ['album', ...Object.keys(THEMES)]
@@ -17,6 +18,7 @@ export default function Stage() {
   const [ripples, setRipples] = useState([])
   const lastRipple = useRef(0)
   const cfg = settings?.widgets.stage
+  const colours = useColours(state, settings)
   const playing = !!state?.playback?.isPlaying
 
   // Controls fade away once the mouse rests.
@@ -77,7 +79,11 @@ export default function Stage() {
       className={`stage ${idle ? 'idle' : ''}`}
       style={{ '--p1': palette[0], '--p2': palette[1], '--p3': palette[2] }}
     >
-      {t?.cover && <img className="stage-bg" src={t.coverSoft || t.cover} alt="" />}
+      {settings.background?.fullscreen && settings.background.kind !== 'cover' ? (
+        <Wallpaper bg={settings.background} colours={colours} className="stage-wall" />
+      ) : (
+        t?.cover && <img className="stage-bg" src={t.coverSoft || t.cover} alt="" />
+      )}
       <div className="stage-shade" />
       <div className={`stage-viz ${ring ? 'ring' : 'under'}`}>
         <Visualizer

@@ -13,6 +13,9 @@ files:
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  # the repo's media, docs and GitHub files are not part of the app
+  - '!{media,docs,.github}/**'
+  - '!{CONTRIBUTING.md,.gitattributes}'
 extraResources:
   - THIRD_PARTY_NOTICES.md
 asarUnpack:

@@ -395,7 +395,16 @@ function NowPlaying({
   const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
   const sys = state.source === 'system'
   // "Any app": each app decides which controls it accepts from outside.
-  const can = (action) => (followOnly ? false : sys ? !!state.caps?.[action] : true)
+  // Any app following Spotify's app, with Spotify connected: its Web API covers what the app
+  // turns down (seeking, above all)
+  const can = (action) =>
+    followOnly
+      ? false
+      : sys
+        ? !!state.caps?.[action] ||
+          (!!state.spotifyBridge &&
+            ['play', 'pause', 'next', 'previous', 'seek', 'shuffle', 'repeat'].includes(action))
+        : true
   const noControls =
     sys &&
     state.track &&

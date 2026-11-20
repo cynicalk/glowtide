@@ -197,6 +197,7 @@ function all() {
 function broadcast() {
   const stageOn = widgets?.stageDisplay() ?? null
   state.lyricsOverStage = stageOn !== null && !!lyricsWin && lyricsDisplayId === stageOn
+  state.spotifyBridge = spotifyBridge()
   for (const w of all()) w.webContents.send('state', state)
   syncAwake()
   syncThumbar()
@@ -517,6 +518,7 @@ function onSystemMessage(m) {
       .map((id) => ({ id, label: appLabel(id) }))
     return broadcast()
   }
+  if (m.type === 'ack') return onSystemAck(m)
   if (m.type === 'error') {
     state.error = m.message
     return broadcast()
@@ -589,6 +591,43 @@ async function withDevice(run) {
   }
 }
 
+// "Any app" following Spotify's own app, with Spotify connected here: whatever the app turns
+// down from Windows' media controls (Spotify ignores seeks there) goes through the Web API.
+const BRIDGED = new Set(['play', 'pause', 'next', 'previous', 'seek', 'shuffle', 'repeat'])
+function spotifyBridge() {
+  return (
+    state.source === 'system' &&
+    appLabel(state.systemApp?.id || '') === 'Spotify' &&
+    spotifyAuth.isConnected() &&
+    !!loadSettings().clientId
+  )
+}
+
+let sysPending = null // the last command sent to the followed app, until it answers
+let errorTimer = null
+
+/** A short-lived message under the controls (it clears itself). */
+function flashError(msg) {
+  state.error = msg
+  broadcast()
+  clearTimeout(errorTimer)
+  errorTimer = setTimeout(() => {
+    if (state.error !== msg) return
+    state.error = null
+    broadcast()
+  }, 5000)
+}
+
+/** The followed app's answer to a command: a refusal is retried through Spotify, or said. */
+function onSystemAck(m) {
+  const p = sysPending
+  if (!p || p.action !== m.cmd) return
+  sysPending = null
+  if (m.ok) return
+  if (spotifyBridge() && BRIDGED.has(p.action)) return void spotifyControl(p.action, p.arg)
+  flashError(`${state.systemApp?.label || 'The app'} didn't accept that from outside.`)
+}
+
 async function control(action, arg) {
   if (state.source === 'system') {
     const c = state.caps || {}
@@ -603,11 +642,15 @@ async function control(action, arg) {
     }
     if (!(action in allowed))
       return { error: `Use ${state.systemApp?.label || 'the app'} for that.` }
-    if (!allowed[action])
+    if (!allowed[action]) {
+      // Spotify's own app turns some of these down from Windows; its Web API takes them
+      if (spotifyBridge() && BRIDGED.has(action)) return spotifyControl(action, arg)
       return { error: `${state.systemApp?.label || 'This app'} doesn't allow that from outside.` }
+    }
     // one plain value at most: a seek position, on/off, or a repeat mode
     if (arg !== undefined && !/^[\w.-]{1,32}$/.test(String(arg))) return { error: 'Bad value.' }
     smtc.send(`${action}${arg !== undefined ? ` ${arg}` : ''}`)
+    sysPending = { action, arg }
     if (state.playback && (action === 'play' || action === 'pause')) {
       state.playback = { ...state.playback, isPlaying: action === 'play', at: Date.now() }
       broadcast()
@@ -646,7 +689,11 @@ async function control(action, arg) {
     broadcast()
     return { ok: true }
   }
-  // Spotify
+  return spotifyControl(action, arg)
+}
+
+/** Playback commands through Spotify's Web API (Spotify, and its app followed by Any app). */
+async function spotifyControl(action, arg) {
   if (state.spotifyPlan === 'free' && action !== 'like') {
     return {
       error: 'Free Spotify accounts can only be followed, not controlled. Use Spotify to play.'
@@ -851,7 +898,9 @@ function syncThumbar() {
   const playing = !!state.playback?.isPlaying
   const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
   const can = (a) =>
-    !!state.track && !followOnly && (state.source !== 'system' || !!state.caps?.[a])
+    !!state.track &&
+    !followOnly &&
+    (state.source !== 'system' || !!state.caps?.[a] || (state.spotifyBridge && BRIDGED.has(a)))
   const key = JSON.stringify([playing, can('previous'), can('play'), can('pause'), can('next')])
   if (key === thumbKey) return
   thumbKey = key

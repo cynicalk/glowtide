@@ -18,7 +18,13 @@ export default function MiniPlayer() {
   const playing = !!pb?.isPlaying
   const sys = state.source === 'system'
   const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
-  const can = (a) => !!t && !followOnly && (!sys || !!state.caps?.[a])
+  const can = (a) =>
+    !!t &&
+    !followOnly &&
+    (!sys ||
+      !!state.caps?.[a] ||
+      (!!state.spotifyBridge &&
+        ['play', 'pause', 'next', 'previous', 'seek', 'shuffle', 'repeat'].includes(a)))
   return (
     <div className="mini" style={{ '--glow': colours?.glow || '#7c5cff' }}>
       <button

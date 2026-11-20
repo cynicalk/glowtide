@@ -6,7 +6,7 @@ import { parseCommand } from '../../../shared/commands.mjs'
 const REPEAT_NEXT = { off: 'context', context: 'track', track: 'off' }
 
 /**
- * The command bar (Ctrl+Alt+Space): type a command ("next", "volume 40", "seek 1:30") or a
+ * The command bar (Ctrl+Alt+G): type a command ("next", "volume 40", "seek 1:30") or a
  * song. Spotify searches as you type; YouTube Music on Enter (each search spends daily
  * quota). ↑ ↓ choose, Enter runs, Esc closes.
  */

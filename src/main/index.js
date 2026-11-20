@@ -1120,7 +1120,7 @@ function placeQuick(show) {
   }
 }
 
-// ---------- the command bar (Ctrl+Alt+Space): type a song or a command ----------
+// ---------- the command bar (Ctrl+Alt+G): type a song or a command ----------
 const COMMAND = { width: 620, height: 460 }
 
 function toggleCommand() {
@@ -1621,6 +1621,14 @@ function scheduleSnapshot() {
           get quickWin() {
             return quickWin
           },
+          get commandWin() {
+            return commandWin
+          },
+          get miniWin() {
+            return miniWin
+          },
+          toggleCommand,
+          shortcutRegistered: (acc) => globalShortcut.isRegistered(acc),
           get widgets() {
             return widgets
           },
@@ -2006,7 +2014,7 @@ else {
     syncFullscreenWatch()
     tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
     tray.setToolTip('Glowtide')
-    // Ctrl+Alt+Space (command bar), Ctrl+Alt+L (lyrics), Ctrl+Alt+F (full screen), and any
+    // Ctrl+Alt+G (command bar), Ctrl+Alt+L (lyrics), Ctrl+Alt+F (full screen), and any
     // you add in Settings → App → Shortcuts
     registerShortcuts()
     if (DEV && process.env.GLOWTIDE_COMMAND) setTimeout(toggleCommand, 1500)

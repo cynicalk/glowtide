@@ -1,4 +1,4 @@
-// The command bar (Ctrl+Alt+Space): what a typed line means. Pure: no Electron, no DOM.
+// The command bar (Ctrl+Alt+G): what a typed line means. Pure: no Electron, no DOM.
 //
 //   "next", "pause", "shuffle"…     a command
 //   "volume 40", "seek 1:30"         a command with a value

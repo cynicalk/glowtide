@@ -1,7 +1,7 @@
 // Global shortcuts you can set (Settings → App → Shortcuts). Pure: no Electron.
 
 export const SHORTCUTS = [
-  { id: 'command', label: 'Command bar', def: 'CommandOrControl+Alt+Space' },
+  { id: 'command', label: 'Command bar', def: 'CommandOrControl+Alt+G' },
   { id: 'lyrics', label: 'Desktop lyrics on or off', def: 'CommandOrControl+Alt+L' },
   { id: 'fullscreen', label: 'Full-screen view', def: 'CommandOrControl+Alt+F' },
   { id: 'playPause', label: 'Play or pause', def: '' },
@@ -71,7 +71,7 @@ export function validAccelerator(acc) {
   return parts.some((p) => p !== 'Shift') || BARE_OK.test(key)
 }
 
-/** "CommandOrControl+Alt+Space" → "Ctrl+Alt+Space", for showing. */
+/** "CommandOrControl+Alt+G" → "Ctrl+Alt+G", for showing. */
 export const prettyAccelerator = (acc) =>
   String(acc || '')
     .replace('CommandOrControl', 'Ctrl')

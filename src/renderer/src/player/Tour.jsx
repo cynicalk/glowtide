@@ -30,7 +30,7 @@ export default function Tour({ settings }) {
     {
       icon: <Command size={22} />,
       title: 'Quick to reach',
-      body: 'Ctrl+Alt+Space opens the command bar: type a song, or “next”, “volume 40”, “share”. Click the tray icon for quick settings, or turn on the mini player by the clock.',
+      body: 'Ctrl+Alt+G opens the command bar: type a song, or “next”, “volume 40”, “share”. Click the tray icon for quick settings, or turn on the mini player by the clock.',
       extra: (
         <div className="tour-row">
           <span>Mini player by the clock</span>

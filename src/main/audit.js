@@ -62,6 +62,8 @@ export async function runAudit(c, dir) {
     await wait(ms)
   }
   const s0 = JSON.parse(JSON.stringify(loadSettings()))
+  // the first-run tour would sit over the player; the audit starts past it
+  await set({ tourDone: true }, 600)
 
   // ---------- the player: sidebar pages ----------
   await step('sidebar pages', async () => {
@@ -244,7 +246,7 @@ export async function runAudit(c, dir) {
     check('like is only for Spotify', like === 'disabled', like)
     await p(`document.querySelector('[aria-label="Lyrics later"]')?.click()`)
     await wait(400)
-    check('lyrics sync +', state.lyricsOffsetMs === 250, state.lyricsOffsetMs)
+    check('lyrics sync + 50 ms', state.lyricsOffsetMs === 50, state.lyricsOffsetMs)
     await p(`document.querySelector('[aria-label="Lyrics earlier"]')?.click()`)
     await wait(400)
     check('lyrics sync -', state.lyricsOffsetMs === 0, state.lyricsOffsetMs)
@@ -401,6 +403,75 @@ export async function runAudit(c, dir) {
       'desktop clock is gone',
       !loadSettings().widgets.clock && !(await has(c.player, '[aria-label="Desktop clock"]'))
     )
+  })
+
+  // ---------- 1.0.12: command bar, shortcuts, mini player, backgrounds, picker ----------
+  await step('new features', async () => {
+    c.toggleCommand()
+    await wait(1800)
+    const cw = c.commandWin
+    check('command bar opens', cw?.isVisible() && (await has(cw, '.cmd-field input')))
+    const typed = await js(
+      cw,
+      `(async () => { const i = document.querySelector('.cmd-field input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, 'next'); i.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 300)); return document.querySelector('.cmd-row.on .cmd-title')?.textContent || '' })()`
+    )
+    check('command bar: "next" is the command', typed === 'Next song', typed)
+    const before = state.track?.id
+    await js(
+      cw,
+      `document.querySelector('.cmd-field input').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`
+    )
+    await wait(1500)
+    check('command bar: Enter runs it (next song)', state.track?.id !== before, [
+      before,
+      state.track?.id
+    ])
+    check('command bar closes after a command', !cw?.isVisible())
+
+    check('shortcut: Ctrl+Alt+G registered', c.shortcutRegistered('CommandOrControl+Alt+G'))
+    await set({ shortcuts: { next: 'CommandOrControl+Alt+Shift+F9' } }, 600)
+    check('shortcut: a new one registers', c.shortcutRegistered('CommandOrControl+Alt+Shift+F9'))
+    await set({ shortcuts: { next: '' } }, 600)
+    check('shortcut: removed again', !c.shortcutRegistered('CommandOrControl+Alt+Shift+F9'))
+
+    await set({ mini: { enabled: true } }, 2500)
+    check('mini player shows', !!c.miniWin && c.miniWin.isVisible())
+    const mt = await js(c.miniWin, `document.querySelector('.mini-title')?.textContent || ''`)
+    check('mini player: the song', mt === state.track?.name, mt)
+    await set({ mini: { enabled: false } }, 800)
+    check('mini player goes', !c.miniWin)
+
+    await set({ background: { kind: 'flow' } }, 900)
+    check('background: flowing colours', await has(c.player, '.np-wall.flow i'))
+    await set({ background: { kind: 'cover' } }, 600)
+    check('background: back to the cover', await has(c.player, 'img.backdrop'))
+    await set({ lyrics: { backdrop: 'flow', style: 'stack' } }, 1500)
+    check('desktop lyrics: flowing backdrop', await has(c.lyricsWin, '.backdrop-flow .flow'))
+    await set({ colour: { lyricsOwn: true, sung: '#123456' } }, 900)
+    const lyr = await js(
+      c.lyricsWin,
+      `document.querySelector('.lyr').style.getPropertyValue('--lyr')`
+    )
+    check('lyric colours: your own', lyr === '#123456', lyr)
+    await set({ colour: { lyricsOwn: false }, lyrics: { spacing: 150 } }, 900)
+    const sp = await js(
+      c.lyricsWin,
+      `document.querySelector('.lyr').style.getPropertyValue('--space')`
+    )
+    check('line spacing reaches the lyrics', sp === '1.5', sp)
+
+    // the version picker opens and lists (needs the network: LRCLIB)
+    await click('.rail [aria-label="Lyrics in this window"]')
+    await wait(800)
+    await p(
+      `[...document.querySelectorAll('.lyric-tools .pill')].find((b) => b.textContent === 'Wrong lyrics?')?.click()`
+    )
+    await wait(1200)
+    check('Wrong lyrics? opens the picker', await has(c.player, '.pl-lyrics.picker'))
+    await p(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))`)
+    await wait(300)
+    check('the picker closes on Esc', !(await has(c.player, '.pl-lyrics.picker')))
+    await click('.rail [aria-label="Lyrics in this window"]')
   })
 
   // put the settings back as they were

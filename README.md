@@ -245,6 +245,12 @@ or `npx electron .` after `npm run build`); a packaged copy ignores every one of
   at 2.5 s, and `$env:GLOWTIDE_HOVER="<selector>"` rests the pointer on that element of the player
   (or the tray panel, with `GLOWTIDE_HOVER_IN=quick`) so hover states show. `state.json` also
   records each glow window's bounds.
+- **The demo video**: `$env:VITE_SHOWCASE=1; npx electron-vite build`, then a run with
+  `GLOWTIDE_RECORD=1`, `GLOWTIDE_DEMO=1`, `GLOWTIDE_PROFILE` and `GLOWTIDE_SNAPSHOT=<folder>` draws
+  six scenes offscreen into `<folder>/frames` (nothing appears on screen), and
+  `npx electron scripts/make-demo.cjs <folder> demo.mp4` adds captions and a soundtrack written in
+  code (no third-party music). Build again without `VITE_SHOWCASE` afterwards: only that build
+  contains the demo's pretend desktop.
 - `$env:GLOWTIDE_COMMAND=1` (with `GLOWTIDE_SNAPSHOT`) opens the command bar and keeps it open to
   photograph it; `GLOWTIDE_PROBE_IN` also takes `command` and `mini`.
 - `$env:GLOWTIDE_PLAIN_TEST=1` (with `GLOWTIDE_DEMO`) serves the demo's lyrics untimed, to see the

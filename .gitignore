@@ -10,3 +10,6 @@ out
 .env.*
 *.pem
 *.key
+
+# demo videos and other large media: published with releases, not kept in git
+media/

@@ -1613,6 +1613,40 @@ function scheduleSnapshot() {
   if (panel) setTimeout(() => player?.webContents.send('debug:panel', panel), 2500)
   if (process.env.GLOWTIDE_MAXIMIZE) setTimeout(() => player?.maximize(), 1200)
   if (process.env.GLOWTIDE_STAGE) setTimeout(() => widgets?.openStage(), 2000)
+  // GLOWTIDE_RECORD=1 (with GLOWTIDE_SNAPSHOT, GLOWTIDE_DEMO): the demo video's frames, see record.js.
+  if (process.env.GLOWTIDE_RECORD)
+    setTimeout(async () => {
+      const { runRecord } = await import('./record')
+      runRecord(
+        {
+          get player() {
+            return player
+          },
+          get lyricsWin() {
+            return lyricsWin
+          },
+          get glowWins() {
+            return glowWins
+          },
+          get miniWin() {
+            return miniWin
+          },
+          get lyrics() {
+            return lyricsLines
+          },
+          state,
+          prefs,
+          load,
+          setSettings,
+          loadSettings,
+          quit: () => {
+            quitting = true
+            app.quit()
+          }
+        },
+        dir
+      )
+    }, 2500)
   // GLOWTIDE_AUDIT=1 (with GLOWTIDE_SNAPSHOT for the folder, GLOWTIDE_DEMO, GLOWTIDE_UNFOCUS): see audit.js.
   if (process.env.GLOWTIDE_AUDIT)
     setTimeout(async () => {

@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  crashReporter,
   protocol,
   net,
   clipboard,
@@ -16,8 +17,9 @@ import {
   session,
   shell
 } from 'electron'
-import { basename, extname, join } from 'path'
+import { basename, dirname, extname, join } from 'path'
 import { pathToFileURL } from 'url'
+import { spawn, spawnSync } from 'child_process'
 import { copyFile } from 'fs/promises'
 import os from 'os'
 import {
@@ -781,11 +783,17 @@ function setSource(src) {
 }
 
 // ---------- windows ----------
+let windowErrors = 0 // errors inside Glowtide's windows logged this session (capped)
 function load(win, route) {
   // If a window's page crashes, log it and bring the page back rather than leaving a blank
   // window or a hole where the overlay was.
   if (!win.glowtideGuarded) {
     win.glowtideGuarded = true
+    win.webContents.on('console-message', (e, lvl, msg) => {
+      const level = e?.level ?? lvl
+      if ((level === 'error' || level === 3) && windowErrors++ < 30)
+        logError(`page ${route}`, String(e?.message ?? msg).slice(0, 600))
+    })
     win.webContents.on('render-process-gone', (_e, d) => {
       logError(`renderer ${route}`, `${d.reason} (exit code ${d.exitCode})`)
       if (d.reason !== 'clean-exit' && !win.isDestroyed()) setTimeout(() => load(win, route), 1000)
@@ -850,11 +858,63 @@ function moveFromEarlierName() {
 const startedAtLogin = process.argv.includes('--hidden')
 
 /** Start with Windows (installed copies only), in the tray. */
+const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'
+const APP_ID = 'io.github.cynicalk.glowtide'
+
 function syncLoginItem() {
   if (!app.isPackaged) return
-  app.setLoginItemSettings({ openAtLogin: !!loadSettings().startWithWindows, args: ['--hidden'] })
+  const on = !!loadSettings().startWithWindows
+  app.setLoginItemSettings({ openAtLogin: on, args: ['--hidden'] })
   // the entry the earlier name made points at a program that is gone after the update
   app.setLoginItemSettings({ openAtLogin: false, name: EARLIER.loginItem })
+  if (!on) return
+  // something on some PCs clears the entry Electron writes: check it's there, and write it
+  // ourselves if it isn't (the same value Electron would write)
+  const q = spawnSync('reg', ['query', RUN_KEY, '/v', APP_ID], { windowsHide: true })
+  if (q.status === 0) return
+  logError('start with Windows', 'the startup entry was missing; written directly')
+  spawn(
+    'reg',
+    ['add', RUN_KEY, '/v', APP_ID, '/t', 'REG_SZ', '/d', `"${process.execPath}" --hidden`, '/f'],
+    { windowsHide: true, stdio: 'ignore' }
+  ).on('error', () => {})
+}
+
+// The install entry (Settings → Apps) kept the name, version and uninstaller path the app
+// had before it was renamed, and so pointed at an uninstaller that is gone: put right here.
+const INSTALL_GUID = 'b1d96d64-9d86-5e79-89dc-9bc029dbb81e'
+function repairInstallEntry() {
+  if (!app.isPackaged) return
+  const dir = dirname(process.execPath)
+  const uninstaller = join(dir, `Uninstall ${app.getName()}.exe`)
+  if (!existsSync(uninstaller)) return // not an installed copy (a portable or unpacked build)
+  const key = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${INSTALL_GUID}`
+  const q = spawnSync('reg', ['query', key, '/v', 'UninstallString'], {
+    windowsHide: true,
+    encoding: 'utf8'
+  })
+  if (q.status === 0 && q.stdout.includes(uninstaller) && q.stdout.length) {
+    const v = spawnSync('reg', ['query', key, '/v', 'DisplayVersion'], {
+      windowsHide: true,
+      encoding: 'utf8'
+    })
+    if (v.stdout?.includes(app.getVersion())) return // already right
+  }
+  const set = (k, name, value) =>
+    spawnSync('reg', ['add', k, '/v', name, '/t', 'REG_SZ', '/d', value, '/f'], {
+      windowsHide: true
+    })
+  set(key, 'DisplayName', app.getName())
+  set(key, 'DisplayVersion', app.getVersion())
+  set(key, 'Publisher', 'cynicalk')
+  set(key, 'DisplayIcon', `${process.execPath},0`)
+  set(key, 'InstallLocation', dir)
+  set(key, 'UninstallString', `"${uninstaller}" /currentuser`)
+  set(key, 'QuietUninstallString', `"${uninstaller}" /currentuser /S`)
+  // where the installer looks for the existing install on the next update
+  const own = `HKCU\\Software\\${INSTALL_GUID}`
+  set(own, 'InstallLocation', dir)
+  set(own, 'ShortcutName', app.getName())
 }
 
 // ---------- taskbar buttons: previous, play/pause, next under the taskbar preview ----------
@@ -2045,6 +2105,11 @@ function scheduleSnapshot() {
 // GLOWTIDE_PROFILE=<dir>: a separate settings folder and single-instance lock, so a test run
 // never touches the user's settings or closes the Glowtide they have open.
 if (DEV && process.env.GLOWTIDE_PROFILE) app.setPath('userData', process.env.GLOWTIDE_PROFILE)
+// A crash leaves a minidump in the settings folder (Crashpad), on this PC only: never sent.
+// (After the test-profile switch, so a test run's dumps stay in the test profile.)
+if (DEV && process.env.GLOWTIDE_PROFILE)
+  app.setPath('crashDumps', join(process.env.GLOWTIDE_PROFILE, 'Crashpad'))
+crashReporter.start({ uploadToServer: false })
 
 hardenContents()
 
@@ -2093,6 +2158,7 @@ else {
     loadAmllIndex() // warm the word-timed lyrics index so the first song doesn't wait
     registerIpc()
     syncLoginItem()
+    setTimeout(repairInstallEntry, 4000) // off the start-up path
     createPlayer()
     syncOverlays()
     widgets = createWidgets({

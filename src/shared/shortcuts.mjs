@@ -58,9 +58,10 @@ export function acceleratorFrom(e) {
 }
 
 /**
- * Whether an accelerator is one Glowtide will register: known modifiers, one key, and a
- * modifier other than Shift unless the key is a function or media key (a bare letter would
- * take that letter away from every other app).
+ * Whether an accelerator is one Glowtide will register. A global shortcut takes its keys
+ * away from every other app, so it must be a combination apps don't use for themselves:
+ * two or more of Ctrl / Alt / Shift (Ctrl+Alt+K), anything with Win, or a function or media
+ * key. One modifier and a key (Ctrl+L, Ctrl+←, Alt+F) is every app's own shortcut.
  */
 export function validAccelerator(acc) {
   if (typeof acc !== 'string' || acc.length > 60) return false
@@ -68,7 +69,7 @@ export function validAccelerator(acc) {
   const key = parts.pop()
   if (!KEY.test(key)) return false
   if (new Set(parts).size !== parts.length || parts.some((p) => !MODS.includes(p))) return false
-  return parts.some((p) => p !== 'Shift') || BARE_OK.test(key)
+  return parts.length >= 2 || parts.includes('Super') || BARE_OK.test(key)
 }
 
 /** "CommandOrControl+Alt+G" → "Ctrl+Alt+G", for showing. */

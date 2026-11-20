@@ -94,9 +94,30 @@ test('shortcuts: key presses become accelerators', () => {
 })
 
 test('shortcuts: only safe ones are accepted', () => {
-  for (const ok of ['CommandOrControl+Alt+L', 'Alt+Right', 'F9', 'MediaPlayPause', 'Super+Shift+N'])
+  for (const ok of [
+    'CommandOrControl+Alt+L',
+    'CommandOrControl+Shift+Right',
+    'Alt+Shift+N',
+    'Super+N',
+    'F9',
+    'MediaPlayPause'
+  ])
     assert.equal(validAccelerator(ok), true, ok)
-  for (const bad of ['K', 'Shift+K', 'Alt+Alt+K', 'Hyper+K', 'Ctrl+K', '', null, 'Alt+'])
+  // one modifier and a key is every app's own shortcut: never taken globally
+  for (const bad of [
+    'K',
+    'Shift+K',
+    'CommandOrControl+L',
+    'CommandOrControl+Space',
+    'CommandOrControl+Right',
+    'Alt+Right',
+    'Alt+Alt+K',
+    'Hyper+K',
+    'Ctrl+K',
+    '',
+    null,
+    'Alt+'
+  ])
     assert.equal(validAccelerator(bad), false, String(bad))
   for (const def of Object.values(DEFAULT_SHORTCUTS)) assert.ok(!def || validAccelerator(def))
   assert.equal(prettyAccelerator('CommandOrControl+Super+X'), 'Ctrl+Win+X')

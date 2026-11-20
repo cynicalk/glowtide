@@ -799,7 +799,10 @@ function Shortcuts({ settings, set, taken }) {
     }
     const acc = acceleratorFrom(e)
     if (!acc) return // only modifiers so far
-    if (!validAccelerator(acc)) return setHint('Hold Ctrl, Alt or Win with the key')
+    if (!validAccelerator(acc))
+      return setHint(
+        'Use two of Ctrl, Alt and Shift, or Win, with the key (Ctrl+Alt+K): one is every app’s own'
+      )
     const clash = SHORTCUTS.find((s) => s.id !== id && cur[s.id] === acc)
     if (clash) return setHint(`Already used for “${clash.label}”`)
     set({ shortcuts: { [id]: acc } })

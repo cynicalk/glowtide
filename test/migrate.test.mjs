@@ -45,3 +45,24 @@ test('merged into the defaults, nothing of the visualizer or the clock is left',
   )
   assert.deepEqual(out, { widgets: { fps: 60, accent: '#7c5cff', stage: { style: 'bars' } } })
 })
+
+test('shortcuts that took an app\u2019s own keys are cleared; good ones stay', () => {
+  const s = migrateSettings({
+    shortcuts: {
+      command: 'CommandOrControl+Alt+G',
+      playPause: 'CommandOrControl+Space',
+      next: 'CommandOrControl+Right',
+      like: 'CommandOrControl+L',
+      mini: ''
+    }
+  })
+  assert.deepEqual(s.shortcuts, {
+    command: 'CommandOrControl+Alt+G',
+    playPause: '',
+    next: '',
+    like: '',
+    mini: ''
+  })
+  const fine = { shortcuts: { command: 'CommandOrControl+Alt+G' } }
+  assert.equal(migrateSettings(fine), fine, 'nothing to clear: the same object back')
+})

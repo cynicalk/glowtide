@@ -702,6 +702,47 @@ export default function SettingsPanel({ state, settings, onClose }) {
       )}
 
       {tab === 'app' && (
+        <Fold k="mini">
+          <div className="sh">
+            <h3>Mini player</h3>
+          </div>
+          <div className="srow">
+            <span>Beside the tray</span>
+            <Toggle
+              label="A small player above the taskbar, by the clock"
+              on={!!settings.mini?.enabled}
+              onChange={(v) => set({ mini: { enabled: v } })}
+            />
+          </div>
+          {settings.mini?.enabled && (
+            <div className="srow">
+              <span>Extra buttons</span>
+              <div className="seg small">
+                {[
+                  ['like', 'Like'],
+                  ['shuffle', 'Shuffle'],
+                  ['repeat', 'Repeat']
+                ].map(([k, label]) => (
+                  <button
+                    key={k}
+                    className={settings.mini[k] ? 'on' : ''}
+                    aria-pressed={!!settings.mini[k]}
+                    onClick={() => set({ mini: { [k]: !settings.mini[k] } })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="fine">
+            The cover, the song and previous / play / next, just above the taskbar on your main
+            display. Click the cover for the player. It hides while nothing plays and while a game
+            or video fills the screen.
+          </p>
+        </Fold>
+      )}
+      {tab === 'app' && (
         <Shortcuts settings={settings} set={set} taken={state.shortcutsTaken || []} />
       )}
       {tab === 'app' && <Updates update={state.update} settings={settings} set={set} />}

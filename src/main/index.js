@@ -178,6 +178,7 @@ function broadcast() {
   for (const w of all()) w.webContents.send('state', state)
   syncAwake()
   syncThumbar()
+  syncMini()
 }
 
 // Keep the display on while music plays, if asked.
@@ -984,6 +985,7 @@ function applyFullscreen() {
       w.showInactive()
     }
   }
+  syncMini()
   const id = filledDisplay()
   if (state.fullscreenApp !== (id !== null)) {
     state.fullscreenApp = id !== null
@@ -994,7 +996,7 @@ function applyFullscreen() {
 /** The watcher runs only while there's an overlay or widget it could hide. */
 function syncFullscreenWatch() {
   const s = loadSettings()
-  const want = s.hideForFullscreen && (s.glow.enabled || s.lyrics.overlay)
+  const want = s.hideForFullscreen && (s.glow.enabled || s.lyrics.overlay || s.mini?.enabled)
   if (want) fullscreen.start()
   else fullscreen.stop()
   applyFullscreen()
@@ -1149,6 +1151,85 @@ function showCommand() {
   commandWin.focus()
 }
 
+// ---------- the mini player beside the tray (Settings → App → Mini player) ----------
+const MINI_H = 56
+let miniPlace = ''
+
+/** Wide enough for the song and the buttons chosen. */
+function miniSize() {
+  const m = loadSettings().mini || {}
+  const extra = ['like', 'shuffle', 'repeat'].filter((k) => m[k]).length
+  return { width: 300 + 34 * extra, height: MINI_H }
+}
+
+/** Just above the taskbar (or below a top taskbar), at the clock's end, on the main display. */
+function placeMini() {
+  if (!miniWin || miniWin.isDestroyed()) return
+  const d = screen.getPrimaryDisplay()
+  const wa = d.workArea
+  const { width, height } = miniSize()
+  const top = wa.y > d.bounds.y // the taskbar is at the top
+  const b = {
+    x: Math.round(wa.x + wa.width - width - 12),
+    y: Math.round(top ? wa.y + 10 : wa.y + wa.height - height - 10),
+    width,
+    height
+  }
+  const key = JSON.stringify(b)
+  if (key === miniPlace) return
+  miniPlace = key
+  miniWin.setBounds(b)
+}
+
+/** Shown while it's on and a song is loaded, hidden while a full-screen app covers it. */
+function syncMini() {
+  const m = loadSettings().mini || {}
+  if (!m.enabled) {
+    if (miniWin && !miniWin.isDestroyed()) miniWin.destroy()
+    miniWin = null
+    miniPlace = ''
+    return
+  }
+  if (!miniWin || miniWin.isDestroyed()) {
+    miniWin = new BrowserWindow({
+      ...miniSize(),
+      show: false,
+      frame: false,
+      transparent: true,
+      backgroundColor: '#00000000',
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      focusable: false, // a click never takes focus from the app you're in
+      hasShadow: false,
+      title: 'Glowtide mini player',
+      icon,
+      webPreferences: { ...prefs }
+    })
+    miniWin.setAlwaysOnTop(true, 'pop-up-menu')
+    miniWin.on('closed', () => {
+      miniWin = null
+      miniPlace = ''
+    })
+    load(miniWin, 'mini')
+    miniWin.once('ready-to-show', () => {
+      miniWin.glowtideReady = true
+      syncMini()
+    })
+    return
+  }
+  if (!miniWin.glowtideReady) return
+  placeMini()
+  const want = !!state.track && !coveredByFullscreen(miniWin)
+  if (want && !miniWin.isVisible()) {
+    miniWin.webContents.send('state', state)
+    miniWin.showInactive()
+  } else if (!want && miniWin.isVisible()) miniWin.hide()
+}
+
 // ---------- global shortcuts (Settings → App → Shortcuts) ----------
 const SHORTCUT_ACTIONS = {
   command: () => toggleCommand(),
@@ -1264,6 +1345,10 @@ function setSettings(patch) {
     syncThumbar()
   }
   if (next.startWithWindows !== before.startWithWindows) syncLoginItem()
+  if (JSON.stringify(next.mini) !== JSON.stringify(before.mini)) {
+    syncFullscreenWatch()
+    syncMini()
+  }
   if (JSON.stringify(next.shortcuts) !== JSON.stringify(before.shortcuts)) {
     registerShortcuts()
     broadcast()
@@ -1850,7 +1935,11 @@ else {
     })
     rebuildTray()
     for (const ev of ['display-added', 'display-removed', 'display-metrics-changed'])
-      screen.on(ev, () => syncOverlays())
+      screen.on(ev, () => {
+        syncOverlays()
+        miniPlace = ''
+        syncMini()
+      })
     poll()
     scheduleSnapshot()
     state.update = { ...updater.state }

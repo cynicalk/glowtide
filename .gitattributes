@@ -1,0 +1,5 @@
+# One line ending everywhere (Prettier writes LF), so a checkout on Windows never shows
+# every file as changed.
+* text=auto eol=lf
+*.png binary
+*.ico binary

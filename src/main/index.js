@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   globalShortcut,
   powerSaveBlocker,
   Menu,
@@ -33,6 +34,8 @@ import { createDemo } from './demo'
 import { extractPalette } from '../shared/colour.mjs'
 import { glowBounds, pickDisplays } from '../shared/glow.mjs'
 import { largerCover } from '../shared/cover.mjs'
+import { shareText } from '../shared/share.mjs'
+import { SHORTCUTS, validAccelerator } from '../shared/shortcuts.mjs'
 import { parseYouTubeTitle, YT_ERRORS } from '../shared/youtube.mjs'
 import { appLabel, systemTrack, repeatFromSmtc } from '../shared/media.mjs'
 import { createSmtc } from './smtc'
@@ -109,6 +112,8 @@ let player = null
 let lyricsWin = null
 let glowWins = []
 let quickWin = null // the tray's quick settings panel
+let commandWin = null // the command bar
+let miniWin = null // the mini player beside the tray
 let tray = null
 let widgets = null
 let quitting = false
@@ -156,10 +161,16 @@ let ytErrorVideo = null
 
 function all() {
   // The tray panel only while it's open: hidden, it would redraw for nothing every second.
-  const quick = quickWin && !quickWin.isDestroyed() && quickWin.isVisible() ? quickWin : null
-  return [player, lyricsWin, quick, ...glowWins, ...(widgets ? widgets.windows() : [])].filter(
-    (w) => w && !w.isDestroyed()
-  )
+  const shown = (w) => (w && !w.isDestroyed() && w.isVisible() ? w : null)
+  return [
+    player,
+    lyricsWin,
+    shown(quickWin),
+    shown(commandWin),
+    miniWin,
+    ...glowWins,
+    ...(widgets ? widgets.windows() : [])
+  ].filter((w) => w && !w.isDestroyed())
 }
 function broadcast() {
   const stageOn = widgets?.stageDisplay() ?? null
@@ -1084,6 +1095,95 @@ function placeQuick(show) {
   }
 }
 
+// ---------- the command bar (Ctrl+Alt+Space): type a song or a command ----------
+const COMMAND = { width: 620, height: 460 }
+
+function toggleCommand() {
+  if (commandWin && !commandWin.isDestroyed() && commandWin.isVisible()) return commandWin.hide()
+  if (!commandWin || commandWin.isDestroyed()) {
+    commandWin = new BrowserWindow({
+      ...COMMAND,
+      show: false,
+      frame: false,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      backgroundColor: '#141116',
+      title: 'Glowtide',
+      icon,
+      webPreferences: { ...prefs, backgroundThrottling: true }
+    })
+    commandWin.on('blur', () => {
+      if (DEV && process.env.GLOWTIDE_COMMAND) return // a test run keeps it open to photograph it
+      commandWin?.hide()
+    })
+    commandWin.on('close', (e) => {
+      if (!quitting) {
+        e.preventDefault()
+        commandWin.hide()
+      }
+    })
+    commandWin.on('closed', () => (commandWin = null))
+    load(commandWin, 'command')
+    commandWin.once('ready-to-show', () => showCommand())
+    return
+  }
+  showCommand()
+}
+
+/** Centred near the top of the display the pointer is on, cleared and ready to type. */
+function showCommand() {
+  const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  commandWin.setBounds({
+    x: Math.round(wa.x + (wa.width - COMMAND.width) / 2),
+    y: Math.round(wa.y + wa.height * 0.14),
+    ...COMMAND
+  })
+  commandWin.webContents.send('state', state)
+  commandWin.webContents.send('settings', loadSettings())
+  commandWin.webContents.send('command:open')
+  commandWin.show()
+  commandWin.focus()
+}
+
+// ---------- global shortcuts (Settings → App → Shortcuts) ----------
+const SHORTCUT_ACTIONS = {
+  command: () => toggleCommand(),
+  lyrics: () => setSettings({ lyrics: { overlay: !loadSettings().lyrics.overlay } }),
+  fullscreen: () => widgets?.toggleStage(player && screen.getDisplayMatching(player.getBounds())),
+  playPause: () => control(state.playback?.isPlaying ? 'pause' : 'play'),
+  next: () => control('next'),
+  previous: () => control('previous'),
+  like: () => state.liked != null && control('like', !state.liked),
+  mini: () => setSettings({ mini: { enabled: !loadSettings().mini.enabled } })
+}
+let shortcutsKey = ''
+
+/** Registers the shortcuts you set; any another app already owns are listed in state. */
+function registerShortcuts() {
+  const set = loadSettings().shortcuts || {}
+  const key = JSON.stringify(set)
+  if (key === shortcutsKey) return
+  shortcutsKey = key
+  globalShortcut.unregisterAll()
+  const taken = []
+  for (const { id } of SHORTCUTS) {
+    const acc = set[id]
+    if (!acc || !validAccelerator(acc)) continue
+    let ok
+    try {
+      ok = globalShortcut.register(acc, () => SHORTCUT_ACTIONS[id]())
+    } catch {
+      ok = false
+    }
+    if (!ok) taken.push(id)
+  }
+  state.shortcutsTaken = taken
+}
+
 function rebuildTray() {
   if (!tray) return
   const s = loadSettings()
@@ -1115,7 +1215,13 @@ function rebuildTray() {
         click: () => setSettings({ glow: { enabled: !s.glow.enabled } })
       },
       { type: 'separator' },
-      { label: 'Full screen (Ctrl+Alt+F)', click: () => widgets?.openStage() },
+      { label: 'Full screen', click: () => widgets?.openStage() },
+      { label: 'Command bar', click: () => toggleCommand() },
+      {
+        label: 'Copy song and link',
+        enabled: !!state.track,
+        click: () => copyShare()
+      },
       { type: 'separator' },
       ...(state.update?.status === 'ready'
         ? [{ label: `Restart to update to ${state.update.version}`, click: installUpdate }]
@@ -1123,6 +1229,14 @@ function rebuildTray() {
       { label: 'Quit Glowtide', click: () => ((quitting = true), app.quit()) }
     ])
   )
+}
+
+/** The song playing, and its link where there is one, copied to the clipboard. */
+function copyShare() {
+  const s = shareText(state.track, state.source)
+  if (!s) return null
+  clipboard.writeText(s.text)
+  return s.text
 }
 
 function installUpdate() {
@@ -1150,6 +1264,10 @@ function setSettings(patch) {
     syncThumbar()
   }
   if (next.startWithWindows !== before.startWithWindows) syncLoginItem()
+  if (JSON.stringify(next.shortcuts) !== JSON.stringify(before.shortcuts)) {
+    registerShortcuts()
+    broadcast()
+  }
   sendSettings()
   syncAwake()
   return next
@@ -1174,6 +1292,15 @@ function registerIpc() {
     player?.focus()
   })
   handle('quick:close', () => quickWin?.hide())
+  handle('command:close', () => commandWin?.hide())
+  handle('share', () => copyShare())
+  // while a shortcut is being recorded, Glowtide's own are off so the keys reach the page
+  handle('shortcuts:recording', (_, on) => {
+    if (on) {
+      globalShortcut.unregisterAll()
+      shortcutsKey = ''
+    } else registerShortcuts()
+  })
   handle('settings:set', (_, patch) => setSettings(patch))
   handle('control', (_, action, arg) => control(action, arg))
   handle('query', (_, kind, arg) => query(kind, arg))
@@ -1370,7 +1497,15 @@ function scheduleSnapshot() {
       async () => {
         const where = process.env.GLOWTIDE_PROBE_IN
         const win =
-          where === 'player' ? player : where === 'stage' ? widgets?.windows()[0] : lyricsWin
+          where === 'player'
+            ? player
+            : where === 'stage'
+              ? widgets?.windows()[0]
+              : where === 'command'
+                ? commandWin
+                : where === 'mini'
+                  ? miniWin
+                  : lyricsWin
         const out = await win?.webContents
           .executeJavaScript(process.env.GLOWTIDE_PROBE_JS, true)
           .catch((e) => `ERR ${e.message}`)
@@ -1583,6 +1718,8 @@ function scheduleSnapshot() {
         ['player', player],
         ['lyrics', lyricsWin],
         ['quick', quickWin],
+        ['command', commandWin],
+        ['mini', miniWin],
         ...glowWins.map((w, i) => [`glow${i}`, w]),
         ...(widgets ? widgets.windows() : []).map((w) => [w.widgetKind || 'stage', w])
       ]
@@ -1699,22 +1836,10 @@ else {
     syncFullscreenWatch()
     tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
     tray.setToolTip('Glowtide')
-    // Ctrl+Alt+L turns the lyrics overlay on and off from anywhere.
-    try {
-      globalShortcut.register('CommandOrControl+Alt+L', () =>
-        setSettings({ lyrics: { overlay: !loadSettings().lyrics.overlay } })
-      )
-    } catch {
-      /* another app owns the shortcut: the tray and the Lyrics button still work */
-    }
-    // Ctrl+Alt+F is the full-screen view.
-    try {
-      globalShortcut.register('CommandOrControl+Alt+F', () =>
-        widgets?.toggleStage(player && screen.getDisplayMatching(player.getBounds()))
-      )
-    } catch {
-      /* taken by another app: the settings buttons still work */
-    }
+    // Ctrl+Alt+Space (command bar), Ctrl+Alt+L (lyrics), Ctrl+Alt+F (full screen), and any
+    // you add in Settings → App → Shortcuts
+    registerShortcuts()
+    if (DEV && process.env.GLOWTIDE_COMMAND) setTimeout(toggleCommand, 1500)
     // A click opens the quick settings panel by the tray icon (as Glowtide's menu-bar panel does
     // on a Mac); a double-click opens the player. The right-click menu is unchanged.
     tray.on('click', () => toggleQuick())

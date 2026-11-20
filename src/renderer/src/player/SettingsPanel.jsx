@@ -12,6 +12,12 @@ import {
 import { api, useDisplays } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
 import { glowAnimation } from '../../../shared/glow.mjs'
+import {
+  SHORTCUTS,
+  acceleratorFrom,
+  validAccelerator,
+  prettyAccelerator
+} from '../../../shared/shortcuts.mjs'
 import ColourWheel from './ColourWheel'
 import { ANIMATION_HINTS, ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
 
@@ -695,6 +701,9 @@ export default function SettingsPanel({ state, settings, onClose }) {
         </Fold>
       )}
 
+      {tab === 'app' && (
+        <Shortcuts settings={settings} set={set} taken={state.shortcutsTaken || []} />
+      )}
       {tab === 'app' && <Updates update={state.update} settings={settings} set={set} />}
     </div>
   )
@@ -709,6 +718,72 @@ const UPDATE_TEXT = {
 }
 
 /** The version, whether a newer one is on the way, and the switch for automatic checks. */
+/**
+ * Global shortcuts: click one, press the keys (with Ctrl, Alt or Win). Backspace removes it,
+ * Esc keeps it. Glowtide's own shortcuts are off while recording, so they can be re-set.
+ */
+function Shortcuts({ settings, set, taken }) {
+  const [rec, setRec] = useState(null)
+  const [hint, setHint] = useState('')
+  const cur = settings.shortcuts || {}
+  const stop = () => {
+    setRec(null)
+    api.recordingShortcut(false)
+  }
+  const press = (id, e) => {
+    if (rec !== id) return
+    e.preventDefault()
+    if (e.key === 'Escape') return stop()
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      set({ shortcuts: { [id]: '' } })
+      return stop()
+    }
+    const acc = acceleratorFrom(e)
+    if (!acc) return // only modifiers so far
+    if (!validAccelerator(acc)) return setHint('Hold Ctrl, Alt or Win with the key')
+    const clash = SHORTCUTS.find((s) => s.id !== id && cur[s.id] === acc)
+    if (clash) return setHint(`Already used for “${clash.label}”`)
+    set({ shortcuts: { [id]: acc } })
+    setHint('')
+    stop()
+  }
+  return (
+    <Fold k="shortcuts">
+      <div className="sh">
+        <h3>Shortcuts</h3>
+      </div>
+      {SHORTCUTS.map((s) => (
+        <div className="srow" key={s.id}>
+          <span>{s.label}</span>
+          <span className="keys">
+            {taken.includes(s.id) && <span className="key-taken">another app has it</span>}
+            <button
+              className={`pill keycap ${rec === s.id ? 'on' : ''}`}
+              onClick={() => {
+                setHint('')
+                setRec(s.id)
+                api.recordingShortcut(true)
+              }}
+              onKeyDown={(e) => press(s.id, e)}
+              onBlur={() => rec === s.id && stop()}
+            >
+              {rec === s.id ? 'Press keys…' : cur[s.id] ? prettyAccelerator(cur[s.id]) : 'None'}
+            </button>
+          </span>
+        </div>
+      ))}
+      <p className="fine">
+        {hint ||
+          'Click one and press the keys; Backspace removes it, Esc keeps it. They work from any app.'}
+      </p>
+      <p className="fine">
+        In the player: Space plays or pauses, Ctrl+← → skip songs, Shift+← → jump 15 s, [ and ]
+        nudge the lyrics (Shift for 0.5 s), L likes.
+      </p>
+    </Fold>
+  )
+}
+
 function Updates({ update, settings, set }) {
   const u = update || { status: 'idle' }
   const status =

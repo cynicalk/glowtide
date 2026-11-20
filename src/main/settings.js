@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { mergeSettings } from '../shared/settingsMerge.mjs'
 import { migrateSettings } from '../shared/migrate.mjs'
+import { DEFAULT_SHORTCUTS } from '../shared/shortcuts.mjs'
 
 export const DEFAULT_SETTINGS = {
   source: null, // 'system' | 'spotify' | 'youtube' | 'demo' | null (not chosen yet)
@@ -21,7 +22,11 @@ export const DEFAULT_SETTINGS = {
     glow2: 2, // the second colour of a two-colour glow
     custom: '#5fb4ff', // "Override album colour": the glow's first colour
     custom2: '#ff5fa2', // and its second
-    fade: true
+    fade: true,
+    lyricsOwn: false, // the lyrics in your own colours instead of the cover's
+    sung: '#ffffff', // the word or line being sung
+    unsung: '#b9b2bb', // the rest of the words
+    next: '#ffd166' // the highlight (the next word's block, the karaoke sweep)
   },
   glow: {
     enabled: true,
@@ -39,7 +44,8 @@ export const DEFAULT_SETTINGS = {
     overlay: true,
     style: 'stack', // 'stack' | 'constellation'
     size: 100,
-    backdrop: 'dim', // 'none' | 'dim' | 'cover' (blurred album art)
+    backdrop: 'dim', // 'none' | 'dim' | 'cover' (blurred album art) | 'flow' (flowing colours)
+    spacing: 100, // space between lines, in percent
     dim: 35, // backdrop strength
     showClock: true,
     context: false, // show the previous and next line around the current one
@@ -56,6 +62,13 @@ export const DEFAULT_SETTINGS = {
   hints: true, // a short description when the pointer rests on a button
   reduceMotion: false, // Glowtide's own switch: covers and messages hold still (Windows' is ignored)
   fps: 30, // the glow and lyrics overlay: 30 (lighter) or 60 (smoother)
+  shortcuts: DEFAULT_SHORTCUTS, // global shortcuts, Electron accelerators ('' = none)
+  // the mini player beside the tray: on or off, and which extra buttons it shows
+  mini: { enabled: false, like: false, shuffle: false, repeat: false },
+  // behind the player (and the full-screen view, if asked): the blurred cover, flowing
+  // colours, or your own picture or video (copied into the settings folder)
+  background: { kind: 'cover', opacity: 70, fullscreen: false, file: '', version: 0 },
+  tourDone: false, // the first-run tour was seen (or skipped)
   widgets: {
     fps: 60,
     accent: '#7c5cff', // the full-screen view's "custom" colour theme

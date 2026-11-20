@@ -27,7 +27,8 @@ import {
   Check,
   Disc3,
   Expand,
-  ImageIcon
+  ImageIcon,
+  Share2
 } from 'lucide-react'
 import { api, fmtTime, useColours, useDisplays, useGlowtide, usePosition } from '../lib/store'
 import { lineIndexAt } from '../../../shared/lyrics.mjs'
@@ -62,6 +63,7 @@ export default function Player() {
   useEffect(() => api.onDebugPanel(setPanel), [])
   const [lyricsView, toggleLyricsView] = useLyricsView()
   const [immersiveOn, setImmersive] = useImmersive()
+  usePlayerKeys(state)
 
   if (!state || !settings) return <div className="player" />
   const fade = settings.colour.fade ? 'fade' : ''
@@ -565,7 +567,7 @@ function NowPlaying({
               {synced && (
                 <div
                   className={`sync-xp ${state.lyricsOffsetMs ? 'moved' : ''}`}
-                  data-tip="Sync · nudge the lyrics earlier or later (double-click resets)"
+                  data-tip="Sync · 50 ms a click, Shift for 0.5 s, [ and ] keys too (double-click resets)"
                 >
                   <span className="rd sync-icon" aria-hidden="true">
                     <History size={15} />
@@ -574,7 +576,7 @@ function NowPlaying({
                     <button
                       className="rd sm ghost"
                       aria-label="Lyrics earlier"
-                      onClick={() => api.nudgeLyrics(-250)}
+                      onClick={(e) => api.nudgeLyrics(e.shiftKey ? -500 : -50)}
                     >
                       −
                     </button>
@@ -586,7 +588,7 @@ function NowPlaying({
                     <button
                       className="rd sm ghost"
                       aria-label="Lyrics later"
-                      onClick={() => api.nudgeLyrics(250)}
+                      onClick={(e) => api.nudgeLyrics(e.shiftKey ? 500 : 50)}
                     >
                       +
                     </button>
@@ -663,6 +665,7 @@ function NowPlaying({
           >
             <Heart size={15} fill={state.liked ? 'currentColor' : 'none'} />
           </button>
+          <ShareButton disabled={!track} />
           <button
             className="rd"
             aria-label="Forward 15 seconds"
@@ -686,6 +689,63 @@ function PlayerMessages({ lines, playback, durationMs, offsetMs, track, bare }) 
   const pos = usePosition(playback, durationMs, 80) + (offsetMs || 0)
   const view = <Messages view={messagesView(lines, pos)} track={track} />
   return bare ? view : <div className="np-msgs">{view}</div>
+}
+
+/** Copies the song and its link (Spotify, YouTube Music) to paste anywhere. */
+function ShareButton({ disabled }) {
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const id = setTimeout(() => setCopied(false), 1600)
+    return () => clearTimeout(id)
+  }, [copied])
+  return (
+    <button
+      className={`rd ${copied ? 'on' : ''}`}
+      aria-label="Copy the song and its link"
+      data-tip={copied ? 'Copied' : 'Share · copy the song and its link'}
+      disabled={disabled}
+      onClick={async () => setCopied(!!(await api.share()))}
+    >
+      {copied ? <Check size={15} /> : <Share2 size={15} />}
+    </button>
+  )
+}
+
+/**
+ * Keys in the player: Space play/pause, Ctrl+← → previous/next, Shift+← → 15 s back or
+ * forward, [ ] lyrics 50 ms earlier/later (Shift: 0.5 s), L like. Not while typing, and not
+ * when something else (tap-to-sync, a focused button) has the key.
+ */
+function usePlayerKeys(state) {
+  const live = useRef(state)
+  useEffect(() => {
+    live.current = state
+  })
+  useEffect(() => {
+    const k = (e) => {
+      const s = live.current
+      const t = e.target
+      if (!s || e.defaultPrevented || e.repeat || e.altKey || e.metaKey) return
+      if (document.querySelector('.pl-lyrics.tap')) return // tap-to-sync has the keys
+      if (t?.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t?.tagName)) return
+      const pb = s.playback
+      const pos = pb ? (pb.isPlaying ? pb.progressMs + (Date.now() - pb.at) : pb.progressMs) : 0
+      if (e.key === ' ' && !e.ctrlKey) api.control(pb?.isPlaying ? 'pause' : 'play')
+      else if (e.key === 'ArrowRight' && e.ctrlKey) api.control('next')
+      else if (e.key === 'ArrowLeft' && e.ctrlKey) api.control('previous')
+      else if (e.key === 'ArrowRight' && e.shiftKey) api.control('seek', pos + SKIP_MS)
+      else if (e.key === 'ArrowLeft' && e.shiftKey) api.control('seek', Math.max(0, pos - SKIP_MS))
+      else if (e.code === 'BracketLeft' && !e.ctrlKey) api.nudgeLyrics(e.shiftKey ? -500 : -50)
+      else if (e.code === 'BracketRight' && !e.ctrlKey) api.nudgeLyrics(e.shiftKey ? 500 : 50)
+      else if (e.key.toLowerCase() === 'l' && !e.ctrlKey && s.liked != null)
+        api.control('like', !s.liked)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [])
 }
 
 /** Esc shrinks the full-window cover back (while it's open). */

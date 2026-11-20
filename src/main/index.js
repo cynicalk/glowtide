@@ -24,7 +24,8 @@ import { REDIRECT_URI } from './oauth'
 import { createSpotify, createSpotifyAuth, slimTrack } from './spotify'
 import { createGoogleAuth, createYouTube } from './youtube'
 import { startYtHost, YT_HOST_ORIGIN } from './ytHost'
-import { fetchLyrics, myLyrics } from './lyricsSource'
+import { fetchLyrics, myLyrics, lyricsCandidates } from './lyricsSource'
+import { choose as chooseLyrics } from './lyricChoice'
 import { saveMyLrc, removeMyLrc, myLrc } from './myLyrics'
 import { toLrc } from '../shared/tapsync.mjs'
 import { loadAmllIndex } from './amll'
@@ -307,6 +308,7 @@ function applyLyrics(l) {
   state.lyricsStatus = l.status
   state.lyricsTiming = l.timing || null
   state.lyricsSource = l.source || null
+  state.lyricsChosen = l.chosen || null
   lyricsLines = l.lines
   sendLyrics()
   broadcast()
@@ -1422,6 +1424,26 @@ function registerIpc() {
     // the taps were made against the song itself: no nudge on top of them
     state.lyricsOffsetMs = 0
     saveOffset(track, 0)
+    loadLyrics(track)
+    return true
+  })
+  // Wrong lyrics? The versions LRCLIB has (for the song, or what you typed), and your pick.
+  handle('lyrics:candidates', async (_, q) => {
+    if (!state.track) return []
+    try {
+      return await lyricsCandidates(state.track, typeof q === 'string' ? q : '')
+    } catch (e) {
+      return { error: `Couldn't reach LRCLIB (${e.message})` }
+    }
+  })
+  handle('lyrics:choose', (_, id) => {
+    const track = state.track
+    if (!track) return false
+    chooseLyrics(track, Number.isInteger(id) ? id : null)
+    state.lyricsOffsetMs = 0 // a different file has its own timing
+    saveOffset(track, 0)
+    state.lyricsStatus = 'loading'
+    broadcast()
     loadLyrics(track)
     return true
   })

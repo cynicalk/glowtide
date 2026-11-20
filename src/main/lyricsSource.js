@@ -14,6 +14,7 @@ import {
 } from '../shared/lyrics.mjs'
 import { amllLyrics } from './amll'
 import { myLrc } from './myLyrics'
+import { chosenId } from './lyricChoice'
 
 const UA = 'Glowtide for Windows/0.1.0'
 const cache = new Map()
@@ -62,18 +63,74 @@ async function fromLrclib(track, toleranceS) {
       : list.filter((x) => x.syncedLyrics)
     hit = near[0] || hit || list.find((x) => x.instrumental || x.plainLyrics) || null
   }
+  return fromRecord(hit, track)
+}
+
+/** An LRCLIB record as Glowtide's lyrics (source names where they came from). */
+function fromRecord(hit, track, source = 'LRCLIB') {
   if (!hit) return { status: 'none', lines: [] }
-  if (hit.instrumental) return { status: 'instrumental', lines: [] }
+  if (hit.instrumental) return { status: 'instrumental', lines: [], source }
   // the text, untimed: the player shows it to read along; nothing times it
-  if (!hit.syncedLyrics) return { status: 'plain', lines: plainLines(hit.plainLyrics) }
+  if (!hit.syncedLyrics) return { status: 'plain', lines: plainLines(hit.plainLyrics), source }
   if (hasWordTags(hit.syncedLyrics)) {
     const lines = enhancedLrcLines(hit.syncedLyrics, track.durationMs)
-    if (lines.length) return { status: 'synced', timing: 'word', source: 'LRCLIB', lines }
+    if (lines.length) return { status: 'synced', timing: 'word', source, lines }
   }
   const lines = estimateWordTiming(parseLrc(hit.syncedLyrics), track.durationMs)
   return lines.length
-    ? { status: 'synced', timing: 'line', source: 'LRCLIB', lines }
+    ? { status: 'synced', timing: 'line', source, lines }
     : { status: 'none', lines: [] }
+}
+
+/**
+ * Versions of a song's lyrics on LRCLIB, to pick from: the song's own title and artist, or
+ * what you typed. Timed ones first, then the closest in length.
+ * [{ id, title, artist, album, durationS, synced, plain, instrumental }]
+ */
+export async function lyricsCandidates(track, typed) {
+  const q = String(typed || '')
+    .trim()
+    .slice(0, 200)
+  const params = q
+    ? new URLSearchParams({ q })
+    : new URLSearchParams({
+        track_name: cleanTitle(track?.name || ''),
+        artist_name: track?.artist || ''
+      })
+  const list = (await get(`https://lrclib.net/api/search?${params}`)) || []
+  const durS = Math.round((track?.durationMs || 0) / 1000)
+  // how far a version's length is from the song's; no length, or a few seconds (stray
+  // fragments), ranks last
+  const off = (x) => (x.durationS >= 15 ? Math.abs(x.durationS - durS) : 1e6)
+  return list
+    .filter((x) => Number.isInteger(x?.id))
+    .map((x) => ({
+      id: x.id,
+      title: String(x.trackName || x.name || ''),
+      artist: String(x.artistName || ''),
+      album: String(x.albumName || ''),
+      durationS: Math.round(x.duration || 0),
+      synced: !!x.syncedLyrics,
+      plain: !!x.plainLyrics,
+      instrumental: !!x.instrumental
+    }))
+    .sort((a, b) => Number(b.synced) - Number(a.synced) || (durS ? off(a) - off(b) : 0))
+    .slice(0, 25)
+}
+
+const picked = new Map() // LRCLIB id -> record, so a pick isn't fetched again
+
+/** The version you picked for this song, or null (none picked, or LRCLIB unreachable). */
+async function chosenLyrics(track) {
+  const id = chosenId(track)
+  if (!id) return null
+  try {
+    if (!picked.has(id)) picked.set(id, await get(`https://lrclib.net/api/get/${id}`))
+    const r = fromRecord(picked.get(id), track, 'LRCLIB · your pick')
+    return { ...r, chosen: id }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -94,6 +151,9 @@ export async function fetchLyrics(track, { toleranceS = 4, spotifyId } = {}) {
   // yours first, and never cached: a new timing shows at once
   const mine = myLyrics(track)
   if (mine) return mine
+  // then the version you picked, if you picked one
+  const pick = await chosenLyrics(track)
+  if (pick) return pick
   if (cache.has(track.id)) return cache.get(track.id)
   let result = null
   try {

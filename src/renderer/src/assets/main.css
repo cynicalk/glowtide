@@ -3360,3 +3360,89 @@ html[data-route='mini'] #root {
 .mb.big:hover:not(:disabled) {
   background: #fff;
 }
+
+/* ---------- Wrong lyrics? the version picker (in the lyrics view) ---------- */
+.pl-lyrics.picker {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-mask-image: none;
+  mask-image: none;
+  text-align: left;
+}
+.pick-search {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pick-search .field {
+  flex: 1;
+  min-width: 0;
+}
+.pick-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pick-row:hover:not(:disabled),
+.pick-row.on {
+  background: rgba(255, 255, 255, 0.07);
+}
+.pick-t {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pick-title,
+.pick-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pick-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.pick-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+.pick-meta {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pick-kind.synced {
+  color: color-mix(in srgb, var(--glow) 70%, white);
+}
+.pick-len.match {
+  color: var(--text);
+}
+
+.pick-list,
+.cmd-list {
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}

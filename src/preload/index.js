@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('glowtide', {
   saveTimedLyrics: (lines, trackId) => ipcRenderer.invoke('lyrics:saveTimed', lines, trackId),
   removeTimedLyrics: () => ipcRenderer.invoke('lyrics:removeTimed'),
   exportTimedLyrics: () => ipcRenderer.invoke('lyrics:exportTimed'),
+  lyricsCandidates: (q) => ipcRenderer.invoke('lyrics:candidates', q),
+  chooseLyrics: (id) => ipcRenderer.invoke('lyrics:choose', id),
   connect: () => ipcRenderer.invoke('auth:connect'),
   disconnect: () => ipcRenderer.invoke('auth:disconnect'),
   googleConnect: () => ipcRenderer.invoke('google:connect'),

@@ -374,6 +374,13 @@ function NowPlaying({
     setSyncing(false)
   }
   const endSync = useCallback(() => setSyncing(false), [])
+  const [picking, setPicking] = useState(false)
+  const [pickFor, setPickFor] = useState(track?.id)
+  if (pickFor !== track?.id) {
+    setPickFor(track?.id)
+    setPicking(false)
+  }
+  const endPick = useCallback(() => setPicking(false), [])
   const playing = !!playback?.isPlaying
   const repeatNext = { off: 'context', context: 'track', track: 'off' }[playback?.repeat || 'off']
   const synced = state.lyricsStatus === 'synced' && lyrics.length > 0
@@ -597,12 +604,13 @@ function NowPlaying({
               )}
             </div>
             {track && <div className="status">{lyricNote}</div>}
-            {open && track && !syncing && (
+            {open && track && !syncing && !picking && (
               <LyricTools
                 key={track.id}
                 plain={state.lyricsStatus === 'plain' && lyrics.length > 0}
                 mine={state.lyricsSource === 'Timed by you'}
                 onTime={() => setSyncing(true)}
+                onPick={() => setPicking(true)}
               />
             )}
             {state.error && <div className="error">{state.error}</div>}
@@ -626,6 +634,10 @@ function NowPlaying({
                 plain={state.lyricsStatus === 'plain' && lyrics.length > 0}
                 syncing={syncing}
                 endSync={endSync}
+                picking={picking}
+                endPick={endPick}
+                track={track}
+                chosen={state.lyricsChosen}
                 canSeek={can('seek')}
                 pageOpen={pageOpen}
                 trackId={track?.id}
@@ -771,6 +783,10 @@ function PlayerLyrics({
   plain,
   syncing,
   endSync,
+  picking,
+  endPick,
+  track,
+  chosen,
   canSeek,
   pageOpen,
   trackId,
@@ -791,6 +807,7 @@ function PlayerLyrics({
       behavior: 'smooth'
     })
   }, [idx])
+  if (picking) return <VersionPicker track={track} chosen={chosen} onClose={endPick} />
   if (syncing && (plain || synced))
     return (
       <TapSync
@@ -836,18 +853,24 @@ function PlayerLyrics({
  * Under the lyrics status: for untimed lyrics, a way to time them; for lyrics you timed,
  * re-time, export or remove them (removing asks first).
  */
-function LyricTools({ plain, mine, onTime }) {
+function LyricTools({ plain, mine, onTime, onPick }) {
   const [asking, setAsking] = useState(false)
   const [saved, setSaved] = useState('')
+  const wrong = (
+    <button className="pill" onClick={onPick} data-tip="Pick another version of the lyrics">
+      Wrong lyrics?
+    </button>
+  )
   if (plain)
     return (
       <div className="lyric-tools">
         <button className="pill" onClick={onTime}>
           Time these lyrics
         </button>
+        {wrong}
       </div>
     )
-  if (!mine) return null
+  if (!mine) return <div className="lyric-tools">{wrong}</div>
   if (asking)
     return (
       <div className="lyric-tools">
@@ -880,6 +903,103 @@ function LyricTools({ plain, mine, onTime }) {
       <button className="pill" onClick={() => setAsking(true)}>
         Remove
       </button>
+    </div>
+  )
+}
+
+/**
+ * Wrong lyrics? The versions LRCLIB has for the song (or for what you search), timed ones
+ * first and closest in length. A pick is remembered for the song; Automatic forgets it.
+ */
+function VersionPicker({ track, chosen, onClose }) {
+  const [q, setQ] = useState('')
+  const [list, setList] = useState(undefined)
+  const [busy, setBusy] = useState(false)
+  const search = useCallback(async (text) => {
+    setList(undefined)
+    setList(await api.lyricsCandidates(text))
+  }, [])
+  useEffect(() => {
+    let live = true
+    api.lyricsCandidates('').then((r) => live && setList(r))
+    return () => {
+      live = false
+    }
+  }, [])
+  useEffect(() => {
+    const k = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
+  const pick = async (id) => {
+    setBusy(true)
+    await api.chooseLyrics(id)
+    setBusy(false)
+    onClose()
+  }
+  const songS = Math.round((track?.durationMs || 0) / 1000)
+  return (
+    <div className="pl-lyrics picker">
+      <div className="tap-head">
+        <div className="tap-title">Pick the right lyrics</div>
+        <div className="tap-sub">
+          Versions on LRCLIB · timed ones first, then the closest in length
+        </div>
+        <div className="pick-search">
+          <input
+            className="field"
+            autoFocus
+            placeholder={`Search, e.g. ${track?.name || 'a title'} ${track?.artist || ''}`.trim()}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && search(q)}
+          />
+          <button className="pill" onClick={() => search(q)}>
+            Search
+          </button>
+        </div>
+        <div className="tap-actions">
+          {chosen && (
+            <button className="pill" disabled={busy} onClick={() => pick(null)}>
+              Automatic
+            </button>
+          )}
+          <button className="pill" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+      <div className="pick-list">
+        {list === undefined && <div className="muted pad">Looking on LRCLIB…</div>}
+        {list?.error && <div className="error">{list.error}</div>}
+        {Array.isArray(list) && !list.length && (
+          <div className="muted pad">Nothing on LRCLIB for that. Try other words.</div>
+        )}
+        {Array.isArray(list) &&
+          list.map((c) => (
+            <button
+              key={c.id}
+              className={`pick-row ${c.id === chosen ? 'on' : ''}`}
+              disabled={busy}
+              onClick={() => pick(c.id)}
+            >
+              <span className="pick-t">
+                <span className="pick-title">{c.title}</span>
+                <span className="pick-sub">{[c.artist, c.album].filter(Boolean).join(' · ')}</span>
+              </span>
+              <span className="pick-meta">
+                <span className={`pick-kind ${c.synced ? 'synced' : ''}`}>
+                  {c.instrumental ? 'Instrumental' : c.synced ? 'Timed' : 'Text only'}
+                </span>
+                <span
+                  className={`pick-len ${songS && Math.abs(c.durationS - songS) <= 3 ? 'match' : ''}`}
+                >
+                  {fmtTime(c.durationS * 1000)}
+                </span>
+              </span>
+            </button>
+          ))}
+      </div>
     </div>
   )
 }

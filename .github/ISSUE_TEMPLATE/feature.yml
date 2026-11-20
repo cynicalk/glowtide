@@ -1,0 +1,16 @@
+name: Feature idea
+description: Something you'd like Glowtide to do
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What would you like, and when would you use it?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters to you
+      description: What do you do today without it? (optional)

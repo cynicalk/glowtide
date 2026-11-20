@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in Glowtide doesn't work as it should
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Glowtide version
+      description: Settings → App → Updates
+      placeholder: 1.0.14
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Music source
+      options:
+        - Any app
+        - Spotify
+        - YouTube Music
+        - Demo
+    validations:
+      required: true
+  - type: input
+    id: player
+    attributes:
+      label: The app or site playing the music
+      placeholder: Spotify desktop, YouTube Music in Chrome, foobar2000…
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. Please describe songs by title and artist rather than pasting lyrics.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Anything from %APPDATA%\Glowtide\glowtide.log around that time (optional).
+      render: text
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2

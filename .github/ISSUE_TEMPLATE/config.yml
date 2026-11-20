@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Download Glowtide
+    url: https://github.com/cynicalk/glowtide-releases/releases/latest
+    about: The latest installer and release notes.

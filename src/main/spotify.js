@@ -83,8 +83,6 @@ export function createSpotify(auth) {
     return data
   }
 
-  const ids = (arr) => arr.join(',')
-
   return {
     call,
     me: () => call('GET', '/me'),
@@ -105,17 +103,42 @@ export function createSpotify(auth) {
       call('PUT', '/me/player', { body: { device_ids: [deviceId], play } }),
     queue: () => call('GET', '/me/player/queue'),
     addToQueue: (uri) => call('POST', '/me/player/queue', { query: { uri } }),
+    // Since March 2026, Development Mode apps (every Client ID made in the dashboard) get at
+    // most 10 results per type; asking for more is refused as "Invalid limit".
     search: (q) =>
-      call('GET', '/search', { query: { q, type: 'track,album,playlist', limit: 20 } }),
+      call('GET', '/search', { query: { q, type: 'track,album,playlist', limit: 10 } }),
     likedTracks: (offset = 0) => call('GET', '/me/tracks', { query: { limit: 50, offset } }),
     playlists: (offset = 0) => call('GET', '/me/playlists', { query: { limit: 50, offset } }),
+    // /items replaced /tracks in 2026, and only lists playlists you own or collaborate on;
+    // anyone else's (Spotify's own mixes included) answers 403. Playing it still works.
     playlistTracks: (id, offset = 0) =>
-      call('GET', `/playlists/${encodeURIComponent(id)}/tracks`, { query: { limit: 100, offset } }),
+      call('GET', `/playlists/${encodeURIComponent(id)}/items`, {
+        query: { limit: 50, offset, additional_types: 'track,episode' }
+      }).catch((e) => {
+        if (e.status === 403)
+          throw new SpotifyError(
+            403,
+            'Spotify only lets apps list the songs in playlists you made or collaborate on. Play still plays this one.',
+            'NOT_YOURS'
+          )
+        throw e
+      }),
     albumTracks: (id) =>
       call('GET', `/albums/${encodeURIComponent(id)}/tracks`, { query: { limit: 50 } }),
     recent: () => call('GET', '/me/player/recently-played', { query: { limit: 30 } }),
-    isLiked: (id) => call('GET', '/me/tracks/contains', { query: { ids: id } }),
-    setLiked: (id, on) => call(on ? 'PUT' : 'DELETE', '/me/tracks', { query: { ids: ids([id]) } })
+    // Your Library, since 2026: one endpoint for every kind of item, addressed by URI.
+    isLiked: (id) =>
+      call('GET', '/me/library/contains', { query: { uris: `spotify:track:${id}` } }),
+    setLiked: (id, on) =>
+      call(on ? 'PUT' : 'DELETE', '/me/library', { query: { uris: `spotify:track:${id}` } }).catch(
+        (e) => {
+          // the reference takes the URIs as a query; the migration guide shows a JSON body
+          if (e.status !== 400) throw e
+          return call(on ? 'PUT' : 'DELETE', '/me/library', {
+            body: { uris: [`spotify:track:${id}`] }
+          })
+        }
+      )
   }
 }
 

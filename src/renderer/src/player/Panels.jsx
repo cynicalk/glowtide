@@ -218,9 +218,11 @@ function PlaylistView({ playlist, state, onBack }) {
         </button>
       </div>
       {d === undefined && <Loading />}
-      {d?.error && <Problem msg={d.error} />}
+      {/* not your playlist: a note, not an error (Play above still works) */}
+      {d?.error && d.reason === 'NOT_YOURS' && <div className="muted pad">{d.error}</div>}
+      {d?.error && d.reason !== 'NOT_YOURS' && <Problem msg={d.error} />}
       {d?.items
-        ?.map((x) => x.track || x.item)
+        ?.map((x) => x.item || x.track) // item since 2026; track before
         .filter((t) => t?.uri)
         .map((t, i) => (
           <Row

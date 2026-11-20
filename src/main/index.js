@@ -674,7 +674,7 @@ async function query(kind, arg) {
     if (kind === 'recent') return await s.recent()
     if (kind === 'me') return await s.me()
   } catch (e) {
-    return { error: e.message }
+    return { error: e.message, reason: e.reason }
   }
   return null
 }

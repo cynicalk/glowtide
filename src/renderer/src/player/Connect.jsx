@@ -85,8 +85,8 @@ export default function Connect({ state, settings, onBack }) {
         {busy ? 'Waiting for Spotify…' : 'Connect Spotify'}
       </button>
       <p className="fine">
-        Free accounts work too: Glowtide follows what Spotify plays. Controlling Spotify from Glowtide needs
-        Premium. Sign-in happens on Spotify’s own page in your browser.
+        Free accounts work too: Glowtide follows what Spotify plays. Controlling Spotify from
+        Glowtide needs Premium. Sign-in happens on Spotify’s own page in your browser.
       </p>
       <button className="link" onClick={onBack}>
         Back

@@ -13,9 +13,9 @@ import {
   session,
   shell
 } from 'electron'
-import { join } from 'path'
+import { basename, join } from 'path'
 import os from 'os'
-import { writeFileSync, mkdirSync, rmSync, appendFileSync, statSync } from 'fs'
+import { writeFileSync, mkdirSync, rmSync, appendFileSync, statSync, cpSync, existsSync } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { loadSettings, updateSettings } from './settings'
@@ -43,6 +43,12 @@ import { hardenContents, hardenSession, isSafeExternal, trustedSender } from './
 // The GLOWTIDE_* test hooks (snapshots, probes, separate profiles) only work in a development
 // run. A packaged copy ignores them all, so nothing in the environment can steer it.
 const DEV = !app.isPackaged
+// Up to 1.0.10 the app had another name. Its folder and its start-with-Windows entry are
+// found by these, so an update keeps everything you set up.
+const EARLIER = { folder: 'Lumn', loginItem: 'xyz.trylumn.windows' }
+
+// before anything reads a setting or Electron starts (see moveFromEarlierName)
+if (!DEV) moveFromEarlierName()
 
 // A main-process error is written to glowtide.log in the settings folder rather than shown as
 // Electron's raw "A JavaScript error occurred" dialog. The log is kept under 1 MB.
@@ -470,7 +476,9 @@ function onSystemMessage(m) {
   if (m.type === 'sessions') {
     // Glowtide's own session (its YouTube player) is not "another app" to follow.
     state.systemApps = (m.apps || [])
-      .filter((id) => (DEV && process.env.GLOWTIDE_SYS_TEST) || id !== 'io.github.cynicalk.glowtide')
+      .filter(
+        (id) => (DEV && process.env.GLOWTIDE_SYS_TEST) || id !== 'io.github.cynicalk.glowtide'
+      )
       .map((id) => ({ id, label: appLabel(id) }))
     return broadcast()
   }
@@ -722,12 +730,49 @@ const prefs = {
   backgroundThrottling: false
 }
 
+/**
+ * The first start under the new name brings the earlier folder's contents across: settings,
+ * sign-ins (with the key that decrypts them, in "Local State"), lyric nudges, lyrics you
+ * timed and remembered windows. Caches are left behind. It runs before Electron starts
+ * (the key must be in place first) and never overwrites: once settings exist, it's done.
+ */
+function moveFromEarlierName() {
+  try {
+    const to = app.getPath('userData')
+    const from = join(app.getPath('appData'), EARLIER.folder)
+    if (from.toLowerCase() === to.toLowerCase()) return
+    if (existsSync(join(to, 'settings.json')) || !existsSync(join(from, 'settings.json'))) return
+    const skip = new Set([
+      'Cache',
+      'Code Cache',
+      'GPUCache',
+      'GrShaderCache',
+      'ShaderCache',
+      'DawnGraphiteCache',
+      'DawnWebGPUCache',
+      'blob_storage',
+      'Crashpad',
+      'lockfile'
+    ])
+    cpSync(from, to, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+      filter: (src) => src === from || !skip.has(basename(src))
+    })
+  } catch (e) {
+    logError('moving settings from the earlier name', e)
+  }
+}
+
 const startedAtLogin = process.argv.includes('--hidden')
 
 /** Start with Windows (installed copies only), in the tray. */
 function syncLoginItem() {
   if (!app.isPackaged) return
   app.setLoginItemSettings({ openAtLogin: !!loadSettings().startWithWindows, args: ['--hidden'] })
+  // the entry the earlier name made points at a program that is gone after the update
+  app.setLoginItemSettings({ openAtLogin: false, name: EARLIER.loginItem })
 }
 
 // ---------- taskbar buttons: previous, play/pause, next under the taskbar preview ----------

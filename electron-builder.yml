@@ -21,6 +21,9 @@ win:
   executableName: Glowtide
   target: nsis
 nsis:
+  # The install entry the app has always had (from before it was renamed): the installer
+  # finds the earlier install by it and replaces it, rather than installing a second copy.
+  guid: b1d96d64-9d86-5e79-89dc-9bc029dbb81e
   artifactName: Glowtide-${version}-setup.${ext}
   shortcutName: Glowtide
   uninstallDisplayName: Glowtide

@@ -34,8 +34,8 @@ export default function Welcome({ setPanel }) {
               YouTube Music <span className="badge">Free</span>
             </div>
             <div className="s">
-              Plays inside Glowtide. Paste any link, or sign in with Google for your playlists and liked
-              music.
+              Plays inside Glowtide. Paste any link, or sign in with Google for your playlists and
+              liked music.
             </div>
           </div>
           <ChevronRight size={16} />

@@ -580,8 +580,8 @@ export default function SettingsPanel({ state, settings, onClose }) {
             />
           </div>
           <p className="fine">
-            Glowtide starts in the tray when you sign in, with the glow and lyrics ready and the window
-            closed.
+            Glowtide starts in the tray when you sign in, with the glow and lyrics ready and the
+            window closed.
           </p>
           <div className="srow">
             <span>Button hints</span>
@@ -613,8 +613,8 @@ export default function SettingsPanel({ state, settings, onClose }) {
             />
           </div>
           <p className="fine">
-            Off, Glowtide lives in the tray only: click its icon there for quick settings, double-click
-            it for the player.
+            Off, Glowtide lives in the tray only: click its icon there for quick settings,
+            double-click it for the player.
           </p>
           <div className="srow">
             <span>Quit Glowtide</span>
@@ -622,7 +622,9 @@ export default function SettingsPanel({ state, settings, onClose }) {
               <Power size={13} /> Quit
             </button>
           </div>
-          <p className="fine">Closing this window keeps Glowtide running in the tray. This stops it.</p>
+          <p className="fine">
+            Closing this window keeps Glowtide running in the tray. This stops it.
+          </p>
         </Fold>
       )}
 

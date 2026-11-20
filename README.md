@@ -26,13 +26,13 @@ SHA-512 in the release's `latest.yml` before it runs.
 
 ## Music sources
 
-|                           | Costs          | Playback                                                                                                               | Library                                                                                            |
-| ------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+|                           | Costs          | Playback                                                                                                               | Library                                                                                                |
+| ------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | **Any app** (recommended) | Free, no setup | Whatever is playing: Spotify (free or Premium), YouTube Music or YouTube in a browser, Apple Music, TIDAL, foobar2000… | Lives in that app. Glowtide follows it and sends play/pause/skip/seek where the app allows             |
-| **YouTube Music**         | Free           | YouTube's official embedded player, inside Glowtide                                                                        | Paste any link with no account. Sign in with Google for your playlists, liked music and search     |
-| **Spotify Premium**       | Premium        | Spotify app, controlled from Glowtide                                                                                      | Liked songs, playlists, recent, search, queue, devices                                             |
+| **YouTube Music**         | Free           | YouTube's official embedded player, inside Glowtide                                                                    | Paste any link with no account. Sign in with Google for your playlists, liked music and search         |
+| **Spotify Premium**       | Premium        | Spotify app, controlled from Glowtide                                                                                  | Liked songs, playlists, recent, search, queue, devices                                                 |
 | **Spotify Free**          | Free           | Spotify app                                                                                                            | Glowtide _follows_ what plays: glow, lyrics and colours work, but Spotify doesn't allow remote control |
-| **Demo**                  | Free           | Built-in tracks                                                                                                        | Preview every style with no account                                                                |
+| **Demo**                  | Free           | Built-in tracks                                                                                                        | Preview every style with no account                                                                    |
 
 Switch sources from the Welcome screen, Settings → Music source, or the tray icon.
 
@@ -245,6 +245,16 @@ resources/     smtc.ps1: the Windows media-session helper; fullscreen.ps1: spots
 src/preload/   window.glowtide bridge
 src/renderer/  React: #/player, #/glow, #/lyrics
 ```
+
+## Licence
+
+[MIT](LICENSE). Third-party code and data keep their own licences
+([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
+
+Lyrics are fetched while a song plays, from LRCLIB and the AMLL TTML DB, and kept only in
+memory or in your own settings folder (lyrics you time yourself). None are stored in this
+repository; they belong to their songwriters and publishers. Spotify, YouTube and YouTube
+Music are trademarks of their owners, and Glowtide is not affiliated with them.
 
 ## Credits
 

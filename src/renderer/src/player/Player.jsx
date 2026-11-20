@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Heart,
   ListMusic,
@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { api, fmtTime, useColours, useDisplays, useGlowtide, usePosition } from '../lib/store'
 import { lineIndexAt } from '../../../shared/lyrics.mjs'
+import { tapTargets, tap, undoTap, timedLines } from '../../../shared/tapsync.mjs'
 import { Messages } from '../overlays/Messages'
 import { messagesView } from '../overlays/messagesView'
 import { glowAnimation } from '../../../shared/glow.mjs'
@@ -363,6 +364,13 @@ function NowPlaying({
   const pos = usePosition(playback, track?.durationMs, 250)
   const [drag, setDrag] = useState(null)
   const [artBig, setArtBig] = useState(false)
+  // Tap-to-sync in the lyrics view; a new song ends it.
+  const [syncing, setSyncing] = useState(false)
+  const [syncFor, setSyncFor] = useState(track?.id)
+  if (syncFor !== track?.id) {
+    setSyncFor(track?.id)
+    setSyncing(false)
+  }
   const playing = !!playback?.isPlaying
   const repeatNext = { off: 'context', context: 'track', track: 'off' }[playback?.repeat || 'off']
   const synced = state.lyricsStatus === 'synced' && lyrics.length > 0
@@ -586,6 +594,13 @@ function NowPlaying({
               )}
             </div>
             {track && <div className="status">{lyricNote}</div>}
+            {open && track && !syncing && (
+              <LyricTools
+                plain={state.lyricsStatus === 'plain' && lyrics.length > 0}
+                mine={state.lyricsSource === 'Timed by you'}
+                onTime={() => setSyncing(true)}
+              />
+            )}
             {state.error && <div className="error">{state.error}</div>}
           </div>
           {open && synced && settings.lyrics.style === 'messages' ? (
@@ -605,6 +620,9 @@ function NowPlaying({
                 lines={lyrics}
                 synced={synced}
                 plain={state.lyricsStatus === 'plain' && lyrics.length > 0}
+                syncing={syncing}
+                endSync={() => setSyncing(false)}
+                canSeek={can('seek')}
                 note={track ? LYRIC_STATUS[state.lyricsStatus] : 'Nothing playing'}
                 playback={playback}
                 durationMs={track?.durationMs}
@@ -683,7 +701,18 @@ function positionNow(playback, fallback) {
 }
 
 /** The song's lyrics inside the player, the current line centred and the list following it. */
-function PlayerLyrics({ lines, synced, plain, note, playback, durationMs, offsetMs }) {
+function PlayerLyrics({
+  lines,
+  synced,
+  plain,
+  syncing,
+  endSync,
+  canSeek,
+  note,
+  playback,
+  durationMs,
+  offsetMs
+}) {
   const pos = usePosition(playback, durationMs, 200) + (offsetMs || 0)
   const idx = synced ? lineIndexAt(lines, pos) : -1
   const list = useRef(null)
@@ -696,6 +725,8 @@ function PlayerLyrics({ lines, synced, plain, note, playback, durationMs, offset
       behavior: 'smooth'
     })
   }, [idx])
+  if (syncing && (plain || synced))
+    return <TapSync lines={lines} playback={playback} canSeek={canSeek} onClose={endSync} />
   if (!synced && plain)
     return <PlainLyrics lines={lines} playback={playback} durationMs={durationMs} />
   if (!synced)
@@ -722,6 +753,156 @@ function PlayerLyrics({ lines, synced, plain, note, playback, durationMs, offset
         )
       )}
       <div className="pl-pad" />
+    </div>
+  )
+}
+
+/**
+ * Under the lyrics status: for untimed lyrics, a way to time them; for lyrics you timed,
+ * re-time, export or remove them (removing asks first).
+ */
+function LyricTools({ plain, mine, onTime }) {
+  const [asking, setAsking] = useState(false)
+  const [saved, setSaved] = useState('')
+  if (plain)
+    return (
+      <div className="lyric-tools">
+        <button className="pill" onClick={onTime}>
+          Time these lyrics
+        </button>
+      </div>
+    )
+  if (!mine) return null
+  if (asking)
+    return (
+      <div className="lyric-tools">
+        <span>Remove your timing for this song?</span>
+        <button className="pill" onClick={() => api.removeTimedLyrics()}>
+          Remove
+        </button>
+        <button className="pill" onClick={() => setAsking(false)}>
+          Keep
+        </button>
+      </div>
+    )
+  return (
+    <div className="lyric-tools">
+      <button className="pill" onClick={onTime}>
+        Re-time
+      </button>
+      <button
+        className="pill"
+        onClick={async () => setSaved((await api.exportTimedLyrics()) ? 'Saved' : '')}
+      >
+        {saved || 'Export .lrc'}
+      </button>
+      <button className="pill" onClick={() => setAsking(true)}>
+        Remove
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Tap-to-sync: play the song and tap (Space, Enter or a click on the lyrics) as each line
+ * starts. Backspace takes the last tap back, Esc leaves. Once every line has its time, Save
+ * keeps it on this PC for the song, and the desktop overlay can show it.
+ */
+function TapSync({ lines, playback, canSeek, onClose }) {
+  const targets = useMemo(() => tapTargets(lines), [lines])
+  const [times, setTimes] = useState([])
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const list = useRef(null)
+  const done = times.length >= targets.length
+  const doTap = useCallback(
+    () => setTimes((t) => tap(t, positionNow(playback, 0), targets.length)),
+    [playback, targets.length]
+  )
+  useEffect(() => {
+    const key = (e) => {
+      if (e.repeat) return
+      if (e.key === ' ' || e.key === 'Enter') doTap()
+      else if (e.key === 'Backspace') setTimes(undoTap)
+      else if (e.key === 'Escape') onClose()
+      else return
+      e.preventDefault()
+      document.activeElement?.blur?.() // so Space never also presses a focused button
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [doTap, onClose])
+  // the next line to tap stays in the middle
+  useEffect(() => {
+    const box = list.current
+    const el = box?.querySelector('.tap-next') || box?.querySelector('.tap-line:last-child')
+    if (box && el)
+      box.scrollTo({
+        top: el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2,
+        behavior: 'smooth'
+      })
+  }, [times.length])
+  const startOver = () => {
+    setTimes([])
+    api.control('seek', 0)
+    if (!playback?.isPlaying) api.control('play')
+  }
+  const save = async () => {
+    setSaving(true)
+    const ok = await api.saveTimedLyrics(timedLines(lines, times))
+    setSaving(false)
+    if (ok) onClose()
+    else setError("Couldn't save the timing")
+  }
+  let k = -1
+  return (
+    <div className="pl-lyrics tap">
+      <div className="tap-head">
+        <div className="tap-title">{done ? 'Every line timed' : 'Tap as each line starts'}</div>
+        <div className="tap-sub">
+          {error ||
+            `Space, Enter or a click · Backspace undoes · ${times.length} of ${targets.length}`}
+        </div>
+        <div className="tap-actions">
+          <button
+            className="pill"
+            disabled={!canSeek}
+            onClick={startOver}
+            data-tip="Back to the start of the song, taps cleared"
+          >
+            Start over
+          </button>
+          <button className="pill" disabled={!times.length} onClick={() => setTimes(undoTap)}>
+            Undo
+          </button>
+          <button className="pill" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="pill on" disabled={!done || saving} onClick={save}>
+            Save
+          </button>
+        </div>
+      </div>
+      <div className="tap-list" ref={list} onClick={doTap}>
+        <div className="pl-pad" />
+        {lines.map((l, i) => {
+          if (!String(l.text || '').trim())
+            return (
+              <div key={i} className="pl-gap">
+                ♪
+              </div>
+            )
+          k++
+          const state = k < times.length ? 'done' : k === times.length ? 'tap-next' : ''
+          return (
+            <div key={i} className={`tap-line ${state}`}>
+              <span className="tap-t">{k < times.length ? fmtTime(times[k]) : ''}</span>
+              {l.text}
+            </div>
+          )
+        })}
+        <div className="pl-pad" />
+      </div>
     </div>
   )
 }

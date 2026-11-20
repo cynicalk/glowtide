@@ -1,4 +1,5 @@
 // Lyrics, best source first:
+//   0. Timed by you (tap-to-sync, myLyrics.js)                  timing 'line'
 //   1. AMLL TTML DB: word timing done by hand (CC0)            timing 'word'
 //   2. LRCLIB enhanced LRC: per-word tags in the file           timing 'word'
 //   3. LRCLIB line-synced LRC: words spread across each line    timing 'line' (estimated)
@@ -12,6 +13,7 @@ import {
   plainLines
 } from '../shared/lyrics.mjs'
 import { amllLyrics } from './amll'
+import { myLrc } from './myLyrics'
 
 const UA = 'Glowtide for Windows/0.1.0'
 const cache = new Map()
@@ -79,8 +81,19 @@ async function fromLrclib(track, toleranceS) {
  * status: 'synced' | 'plain' (text but no timing; we do not invent it: lines are { text }) |
  *         'instrumental' | 'none' | 'error'
  */
+/** The lyrics you timed for this song, or null. */
+export function myLyrics(track) {
+  const lrc = myLrc(track)
+  if (!lrc) return null
+  const lines = estimateWordTiming(parseLrc(lrc), track.durationMs)
+  return lines.length ? { status: 'synced', timing: 'line', source: 'Timed by you', lines } : null
+}
+
 export async function fetchLyrics(track, { toleranceS = 4, spotifyId } = {}) {
   if (!track?.id) return { status: 'none', lines: [] }
+  // yours first, and never cached: a new timing shows at once
+  const mine = myLyrics(track)
+  if (mine) return mine
   if (cache.has(track.id)) return cache.get(track.id)
   let result = null
   try {

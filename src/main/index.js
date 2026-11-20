@@ -6,6 +6,7 @@ import {
   Menu,
   Tray,
   desktopCapturer,
+  dialog,
   ipcMain,
   nativeImage,
   screen,
@@ -22,7 +23,9 @@ import { REDIRECT_URI } from './oauth'
 import { createSpotify, createSpotifyAuth, slimTrack } from './spotify'
 import { createGoogleAuth, createYouTube } from './youtube'
 import { startYtHost, YT_HOST_ORIGIN } from './ytHost'
-import { fetchLyrics } from './lyricsSource'
+import { fetchLyrics, myLyrics } from './lyricsSource'
+import { saveMyLrc, removeMyLrc, myLrc } from './myLyrics'
+import { toLrc } from '../shared/tapsync.mjs'
 import { loadAmllIndex } from './amll'
 import { offsetFor, saveOffset } from './offsets'
 import { createWidgets } from './widgets'
@@ -263,19 +266,7 @@ async function onTrackChange(track) {
         broadcast()
       }
     })
-  // Music videos often run longer than the song (intros, outros): match more loosely.
-  const video = state.source === 'youtube' || (state.source === 'system' && !track.album)
-  // Only the Spotify source knows Spotify's track id; the others match by title and artist.
-  const spotifyId = state.source === 'spotify' ? track.id : undefined
-  fetchLyrics(track, { toleranceS: video ? 20 : 4, spotifyId }).then((l) => {
-    if (state.track?.id !== id) return
-    state.lyricsStatus = l.status
-    state.lyricsTiming = l.timing || null
-    state.lyricsSource = l.source || null
-    lyricsLines = l.lines
-    sendLyrics()
-    broadcast()
-  })
+  loadLyrics(track)
   if (state.source === 'spotify') {
     spotify
       .isLiked(id)
@@ -287,6 +278,38 @@ async function onTrackChange(track) {
       })
       .catch(() => {})
   }
+}
+
+function applyLyrics(l) {
+  state.lyricsStatus = l.status
+  state.lyricsTiming = l.timing || null
+  state.lyricsSource = l.source || null
+  lyricsLines = l.lines
+  sendLyrics()
+  broadcast()
+}
+
+/** The song's lyrics, best source first (yours, then AMLL, then LRCLIB). */
+function loadLyrics(track) {
+  if (state.source === 'demo') return applyLyrics(demoLyrics(track))
+  // Music videos often run longer than the song (intros, outros): match more loosely.
+  const video = state.source === 'youtube' || (state.source === 'system' && !track.album)
+  // Only the Spotify source knows Spotify's track id; the others match by title and artist.
+  const spotifyId = state.source === 'spotify' ? track.id : undefined
+  fetchLyrics(track, { toleranceS: video ? 20 : 4, spotifyId }).then((l) => {
+    if (state.track?.id === track.id) applyLyrics(l)
+  })
+}
+
+/** The demo song's own lyrics, unless you timed it yourself. */
+function demoLyrics(track) {
+  const mine = myLyrics(track)
+  if (mine) return mine
+  const l = demo.snapshot().lyrics
+  // GLOWTIDE_PLAIN_TEST=1: the demo's lyrics as untimed text, to see the read-along view
+  if (DEV && process.env.GLOWTIDE_PLAIN_TEST)
+    return { status: 'plain', lines: l.lines.map((x) => ({ text: x.text })) }
+  return { status: l.status, timing: 'line', source: 'Demo', lines: l.lines }
 }
 
 async function refreshSpotifyPlan() {
@@ -309,15 +332,11 @@ async function poll() {
         state.track = s.track
         state.palette = s.palette
         state.lyricsOffsetMs = offsetFor(s.track)
-        state.lyricsStatus = s.lyrics.status
-        state.lyricsTiming = 'line'
-        state.lyricsSource = 'Demo'
-        lyricsLines = s.lyrics.lines
-        // GLOWTIDE_PLAIN_TEST=1: the demo's lyrics as untimed text, to see the read-along view
-        if (DEV && process.env.GLOWTIDE_PLAIN_TEST) {
-          state.lyricsStatus = 'plain'
-          lyricsLines = lyricsLines.map((l) => ({ text: l.text }))
-        }
+        const l = demoLyrics(s.track)
+        state.lyricsStatus = l.status
+        state.lyricsTiming = l.timing || null
+        state.lyricsSource = l.source || null
+        lyricsLines = l.lines
         sendLyrics()
       }
       state.playback = s.playback
@@ -1122,6 +1141,49 @@ function registerIpc() {
       delta === 0 ? 0 : Math.max(-5000, Math.min(5000, state.lyricsOffsetMs + delta))
     saveOffset(state.track, state.lyricsOffsetMs)
     broadcast()
+  })
+  // Tap-to-sync: the lines you timed ([{ t, text }]) saved for the song playing now.
+  handle('lyrics:saveTimed', (_, lines) => {
+    const track = state.track
+    if (!track || !Array.isArray(lines) || !lines.length || lines.length > 2000) return false
+    const clean = lines
+      .filter((l) => l && Number.isFinite(l.t) && l.t >= 0 && typeof l.text === 'string')
+      .map((l) => ({ t: Math.round(l.t), text: l.text.slice(0, 500) }))
+    if (
+      !clean.length ||
+      !saveMyLrc(track, toLrc(clean, { title: track.name, artist: track.artists }))
+    )
+      return false
+    // the taps were made against the song itself: no nudge on top of them
+    state.lyricsOffsetMs = 0
+    saveOffset(track, 0)
+    loadLyrics(track)
+    return true
+  })
+  handle('lyrics:removeTimed', () => {
+    if (!state.track) return
+    removeMyLrc(state.track)
+    loadLyrics(state.track)
+  })
+  // Your timing as an .lrc file, wherever you choose.
+  handle('lyrics:exportTimed', async () => {
+    const track = state.track
+    const lrc = track && myLrc(track)
+    if (!lrc) return null
+    // without the characters Windows won't take in a file name (and control characters)
+    const name = [...`${(track.artist || track.artists || '').split(',')[0]} - ${track.name}`]
+      .filter((ch) => ch.charCodeAt(0) >= 32 && !'<>:"/\\|?*'.includes(ch))
+      .join('')
+      .trim()
+      .slice(0, 120)
+    const { canceled, filePath } = await dialog.showSaveDialog(player, {
+      title: 'Save the timed lyrics',
+      defaultPath: join(app.getPath('documents'), `${name || 'lyrics'}.lrc`),
+      filters: [{ name: 'Timed lyrics', extensions: ['lrc'] }]
+    })
+    if (canceled || !filePath) return null
+    writeFileSync(filePath, lrc)
+    return filePath
   })
   handle('auth:connect', async () => {
     try {

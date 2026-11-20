@@ -77,6 +77,11 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   The player says which one is showing ("Word-timed lyrics · AMLL TTML DB" or "word timing
   estimated"), and only measured timing gets the karaoke fill.
 
+- **Time lyrics yourself** (tap-to-sync): when a song's lyrics have no timing, **Time these
+  lyrics** under the lyrics view lets you play the song and tap (Space, Enter or a click) as
+  each line starts; Backspace undoes, Esc leaves. Saved on this PC per song (artist and title,
+  so it works from any source), it comes first from then on and the desktop overlay can show
+  it. **Re-time**, **Export .lrc** and **Remove** sit under songs you've timed.
 - **Lyric styles**:
   - **Stack**: the word or line big in the middle.
   - **Aura**: the lyric over a soft, drifting cloud of the cover's colours.

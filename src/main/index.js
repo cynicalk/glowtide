@@ -937,6 +937,15 @@ function createPlayer() {
     }
   })
   for (const ev of ['blur', 'hide', 'minimize']) player.on(ev, () => setFocused(false))
+  // The player's page keeps running while hidden (YouTube, the glow's state), so it never
+  // reports itself hidden: say so, and a video background pauses.
+  for (const [ev, on] of [
+    ['hide', false],
+    ['minimize', false],
+    ['show', true],
+    ['restore', true]
+  ])
+    player.on(ev, () => player.webContents.send('window:visible', on))
   player.webContents.setWindowOpenHandler(({ url }) => {
     if (isSafeExternal(url)) shell.openExternal(url)
     return { action: 'deny' }
@@ -1206,6 +1215,7 @@ function placeMini() {
 
 /** Shown while it's on and a song is loaded, hidden while a full-screen app covers it. */
 function syncMini() {
+  if (!app.isReady() || quitting) return
   const m = loadSettings().mini || {}
   if (!m.enabled) {
     if (miniWin && !miniWin.isDestroyed()) miniWin.destroy()

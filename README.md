@@ -54,9 +54,30 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   turns it on or off; resting on it opens every glow choice), the cover filling the window,
   and full screen. Every button has a short description on hover (Settings → App → Button
   hints turns them off). Rest the pointer on the cover and it grows while the window takes
-  on its colour; click it to fill the window. **Sync** opens into − / + to nudge lyric
+  on its colour; click it to fill the window. **Sync** opens into − / + (50 ms a click) to nudge lyric
   timing.
 - **Settings** is a page with tabs: Glow, Lyrics, Colours, Full screen and App.
+- **Command bar** (Ctrl+Alt+G): type a song (Spotify as you type, YouTube Music on Enter) or a
+  command: next, pause, shuffle, repeat, like, volume 40, seek 1:30, device, share, lyrics,
+  glow, full screen, mini. "queue …" adds a song to the queue.
+- **Shortcuts**: Settings → App → Shortcuts records a global shortcut for the command bar,
+  desktop lyrics, full screen, play/pause, next, previous, like and the mini player (ones another
+  app already holds are flagged). In the player: Space, Ctrl+← →, Shift+← → (15 s), [ ] (lyrics
+  50 ms earlier/later, Shift for 0.5 s) and L (like).
+- **Mini player**: a slim player above the taskbar by the clock (cover, song, previous / play /
+  next, and optionally like, shuffle and repeat). It never takes focus, and hides while nothing
+  plays or a full-screen app covers it.
+- **Share**: copies "Song — Artist" and a Spotify or YouTube Music link (the dock, the tray menu,
+  or "share" in the command bar).
+- **Backgrounds** (Settings → Colours → Background): the blurred cover, flowing colours (soft blobs
+  of the cover's colours drifting slowly), or your own picture or video (MP4/WebM, silent and
+  looping, like a live wallpaper), behind the player and optionally the full-screen view. The
+  file is copied into the settings folder; a video pauses while it can't be seen.
+- **Your own lyric colours** (sung, others, highlight) and **line spacing**; the desktop lyrics
+  can also sit on flowing colours.
+- **Wrong lyrics?** under the lyrics view lists LRCLIB's versions of the song (timed first,
+  closest in length), or of what you search; your pick is remembered per song.
+- A short **first-run tour** after you pick a music source.
 - **Edge glow**: one transparent, click-through window per display (all, the main one, or
   one you pick). Its colours come from the cover: **1 colour**, or **2 colours** sharing the
   edge by a split you set and blending where they meet. **Animation**: Default (the light
@@ -142,6 +163,9 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
     the API doesn't expose YouTube Music's own list.
 - **Spotify**
   - Controlling playback needs **Premium**.
+  - Since March 2026, apps made in Spotify's developer dashboard (which is how you connect) get
+    at most 10 search results per type, and can list the songs only of playlists you made or
+    collaborate on. Other playlists (Spotify's own mixes included) still play from **Play**.
   - Music plays in the Spotify app, because playing inside Glowtide would need Widevine DRM.
 - **Word-timed lyrics are limited**: the AMLL database has about 3,500 songs, mostly Chinese
   and Japanese, with some Western pop (Taylor Swift, The Weeknd, Sabrina Carpenter…).
@@ -221,6 +245,8 @@ or `npx electron .` after `npm run build`); a packaged copy ignores every one of
   at 2.5 s, and `$env:GLOWTIDE_HOVER="<selector>"` rests the pointer on that element of the player
   (or the tray panel, with `GLOWTIDE_HOVER_IN=quick`) so hover states show. `state.json` also
   records each glow window's bounds.
+- `$env:GLOWTIDE_COMMAND=1` (with `GLOWTIDE_SNAPSHOT`) opens the command bar and keeps it open to
+  photograph it; `GLOWTIDE_PROBE_IN` also takes `command` and `mini`.
 - `$env:GLOWTIDE_PLAIN_TEST=1` (with `GLOWTIDE_DEMO`) serves the demo's lyrics untimed, to see the
   read-along view.
 - `$env:GLOWTIDE_PROBE_JS="<js>"` (with `GLOWTIDE_SNAPSHOT`) runs in the lyrics overlay, or in the

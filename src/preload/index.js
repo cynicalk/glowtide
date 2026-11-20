@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('glowtide', {
   closeQuick: () => ipcRenderer.invoke('quick:close'),
   closeCommand: () => ipcRenderer.invoke('command:close'),
   onCommandOpen: on('command:open'),
+  onWindowVisible: on('window:visible'),
   share: () => ipcRenderer.invoke('share'),
   recordingShortcut: (on) => ipcRenderer.invoke('shortcuts:recording', !!on)
 })

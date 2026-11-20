@@ -780,6 +780,11 @@ function Shortcuts({ settings, set, taken }) {
   const [rec, setRec] = useState(null)
   const [hint, setHint] = useState('')
   const cur = settings.shortcuts || {}
+  // leaving Settings mid-recording turns Glowtide's shortcuts back on
+  useEffect(() => {
+    if (!rec) return
+    return () => api.recordingShortcut(false)
+  }, [rec])
   const stop = () => {
     setRec(null)
     api.recordingShortcut(false)

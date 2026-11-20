@@ -57,15 +57,23 @@ export function Wallpaper({ bg, colours, className = '' }) {
 function BgVideo({ src, style }) {
   const v = useRef(null)
   useEffect(() => {
+    let shown = true // the window's own word (the player hides to the tray)
     const sync = () => {
       const el = v.current
       if (!el) return
-      if (document.hidden) el.pause()
+      if (document.hidden || !shown) el.pause()
       else el.play().catch(() => {})
     }
+    const off = window.glowtide?.onWindowVisible?.((on) => {
+      shown = on
+      sync()
+    })
     document.addEventListener('visibilitychange', sync)
     sync()
-    return () => document.removeEventListener('visibilitychange', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      off?.()
+    }
   }, [src])
   return (
     <video

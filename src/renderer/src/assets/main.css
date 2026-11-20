@@ -3594,3 +3594,87 @@ video.wall {
 .wall-box.np-wall {
   position: fixed;
 }
+
+/* ---------- the first-run tour ---------- */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(6, 5, 8, 0.62);
+  backdrop-filter: blur(6px);
+  animation: tour-in 0.35s ease;
+}
+.tour-card {
+  width: min(400px, 100%);
+  padding: 26px 24px 18px;
+  border-radius: 20px;
+  background: #16131a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 80px -30px color-mix(in srgb, var(--glow) 55%, transparent);
+  text-align: center;
+}
+.tour-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--glow);
+  background: color-mix(in srgb, var(--glow) 16%, transparent);
+}
+.tour-card h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.tour-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #c9c1bb;
+}
+.tour-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  text-align: left;
+}
+.tour-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 18px 0 14px;
+}
+.tour-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  transition: width 0.25s;
+}
+.tour-dots i.on {
+  width: 18px;
+  background: var(--glow);
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tour-gap {
+  flex: 1;
+}
+@keyframes tour-in {
+  from {
+    opacity: 0;
+  }
+}

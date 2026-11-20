@@ -39,6 +39,7 @@ import { messagesView } from '../overlays/messagesView'
 import { glowAnimation } from '../../../shared/glow.mjs'
 import { ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
 import Welcome from './Welcome'
+import Tour from './Tour'
 import Connect from './Connect'
 import SettingsPanel from './SettingsPanel'
 import YouTubeStage from './YouTubeStage'
@@ -87,6 +88,7 @@ export default function Player() {
         '--space': (settings.lyrics.spacing || 100) / 100
       }}
     >
+      {screen === 'player' && !settings.tourDone && <Tour settings={settings} />}
       <TitleBar
         tag={screen === 'player' ? tag : null}
         maximized={state.playerMaximized}

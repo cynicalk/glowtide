@@ -142,6 +142,11 @@ async function chosenLyrics(track) {
 export function myLyrics(track) {
   const lrc = myLrc(track)
   if (!lrc) return null
+  // timed word by word (enhanced LRC): measured word timing, the karaoke fill included
+  if (hasWordTags(lrc)) {
+    const lines = enhancedLrcLines(lrc, track.durationMs)
+    if (lines.length) return { status: 'synced', timing: 'word', source: 'Timed by you', lines }
+  }
   const lines = estimateWordTiming(parseLrc(lrc), track.durationMs)
   return lines.length ? { status: 'synced', timing: 'line', source: 'Timed by you', lines } : null
 }

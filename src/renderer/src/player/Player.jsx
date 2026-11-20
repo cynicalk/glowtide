@@ -32,7 +32,15 @@ import {
 } from 'lucide-react'
 import { api, fmtTime, useColours, useDisplays, useGlowtide, usePosition } from '../lib/store'
 import { lineIndexAt } from '../../../shared/lyrics.mjs'
-import { tapTargets, tap, undoTap, timedLines } from '../../../shared/tapsync.mjs'
+import {
+  tapTargets,
+  tap,
+  undoTap,
+  timedLines,
+  wordTargets,
+  wordTimedLines
+} from '../../../shared/tapsync.mjs'
+import { drawCard, CARD_SIZES } from './shareCard'
 import { Messages } from '../overlays/Messages'
 import { Wallpaper } from '../lib/Backgrounds'
 import { messagesView } from '../overlays/messagesView'
@@ -40,6 +48,7 @@ import { glowAnimation } from '../../../shared/glow.mjs'
 import { ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
 import Welcome from './Welcome'
 import Tour from './Tour'
+import { Seg } from './SettingsPanel'
 import Connect from './Connect'
 import SettingsPanel from './SettingsPanel'
 import YouTubeStage from './YouTubeStage'
@@ -373,11 +382,13 @@ function NowPlaying({
   const [drag, setDrag] = useState(null)
   const [artBig, setArtBig] = useState(false)
   // Tap-to-sync in the lyrics view; a new song ends it.
-  const [syncing, setSyncing] = useState(false)
+  const [syncing, setSyncing] = useState(false) // false | 'lines' | 'words'
+  const [carding, setCarding] = useState(false)
   const [syncFor, setSyncFor] = useState(track?.id)
   if (syncFor !== track?.id) {
     setSyncFor(track?.id)
     setSyncing(false)
+    setCarding(false)
   }
   const endSync = useCallback(() => setSyncing(false), [])
   const [picking, setPicking] = useState(false)
@@ -623,13 +634,18 @@ function NowPlaying({
               )}
             </div>
             {track && <div className="status">{lyricNote}</div>}
-            {open && track && !syncing && !picking && (
+            {open && track && !syncing && !picking && !carding && (
               <LyricTools
                 key={track.id}
                 plain={state.lyricsStatus === 'plain' && lyrics.length > 0}
+                synced={synced}
+                wordTimed={state.lyricsTiming === 'word'}
                 mine={state.lyricsSource === 'Timed by you'}
-                onTime={() => setSyncing(true)}
+                trackId={track.id}
+                onTime={() => setSyncing('lines')}
+                onTimeWords={() => setSyncing('words')}
                 onPick={() => setPicking(true)}
+                onCard={() => setCarding(true)}
               />
             )}
             {state.error && <div className="error">{state.error}</div>}
@@ -655,6 +671,8 @@ function NowPlaying({
                 endSync={endSync}
                 picking={picking}
                 endPick={endPick}
+                carding={carding}
+                endCard={() => setCarding(false)}
                 track={track}
                 chosen={state.lyricsChosen}
                 canSeek={can('seek')}
@@ -804,6 +822,8 @@ function PlayerLyrics({
   endSync,
   picking,
   endPick,
+  carding,
+  endCard,
   track,
   chosen,
   canSeek,
@@ -827,6 +847,18 @@ function PlayerLyrics({
     })
   }, [idx])
   if (picking) return <VersionPicker track={track} chosen={chosen} onClose={endPick} />
+  if (carding) return <ShareCard lines={lines} current={idx} track={track} onClose={endCard} />
+  if (syncing === 'words' && synced)
+    return (
+      <WordSync
+        lines={lines}
+        playback={playback}
+        trackId={trackId}
+        canSeek={canSeek}
+        paused={pageOpen}
+        onClose={endSync}
+      />
+    )
   if (syncing && (plain || synced))
     return (
       <TapSync
@@ -872,24 +904,58 @@ function PlayerLyrics({
  * Under the lyrics status: for untimed lyrics, a way to time them; for lyrics you timed,
  * re-time, export or remove them (removing asks first).
  */
-function LyricTools({ plain, mine, onTime, onPick }) {
+function LyricTools({
+  plain,
+  synced,
+  wordTimed,
+  mine,
+  trackId,
+  onTime,
+  onTimeWords,
+  onPick,
+  onCard
+}) {
   const [asking, setAsking] = useState(false)
   const [saved, setSaved] = useState('')
+  const [sharing, setSharing] = useState(false)
   const wrong = (
     <button className="pill" onClick={onPick} data-tip="Pick another version of the lyrics">
       Wrong lyrics?
     </button>
   )
+  const card = (plain || synced) && (
+    <button className="pill" onClick={onCard} data-tip="Make an image of a line, for stories">
+      Share a line
+    </button>
+  )
+  const words = synced && !wordTimed && (
+    <button
+      className="pill"
+      onClick={onTimeWords}
+      data-tip="Tap each word as it's sung, for karaoke timing"
+    >
+      Time each word
+    </button>
+  )
+  if (sharing) return <LrclibShare trackId={trackId} onClose={() => setSharing(false)} />
   if (plain)
     return (
       <div className="lyric-tools">
         <button className="pill" onClick={onTime}>
           Time these lyrics
         </button>
+        {card}
         {wrong}
       </div>
     )
-  if (!mine) return <div className="lyric-tools">{wrong}</div>
+  if (!mine)
+    return (
+      <div className="lyric-tools">
+        {words}
+        {card}
+        {wrong}
+      </div>
+    )
   if (asking)
     return (
       <div className="lyric-tools">
@@ -913,6 +979,15 @@ function LyricTools({ plain, mine, onTime, onPick }) {
       <button className="pill" onClick={onTime}>
         Re-time
       </button>
+      {words}
+      {card}
+      <button
+        className="pill"
+        onClick={() => setSharing(true)}
+        data-tip="Publish your timing to LRCLIB, the free lyrics database"
+      >
+        Share to LRCLIB
+      </button>
       <button
         className="pill"
         onClick={async () => setSaved((await api.exportTimedLyrics()) ? 'Saved' : '')}
@@ -922,6 +997,290 @@ function LyricTools({ plain, mine, onTime, onPick }) {
       <button className="pill" onClick={() => setAsking(true)}>
         Remove
       </button>
+    </div>
+  )
+}
+
+/**
+ * Share your timing to LRCLIB: what will be published, a plain warning that it's public
+ * and can't be taken back, and only then Publish.
+ */
+function LrclibShare({ trackId, onClose }) {
+  const [pre, setPre] = useState(null)
+  const [stage, setStage] = useState('confirm') // confirm | working | done | failed
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    let live = true
+    api.sharePreview().then((r) => live && setPre(r))
+    return () => {
+      live = false
+    }
+  }, [])
+  const publish = async () => {
+    setStage('working')
+    const r = await api.shareLrclib(trackId)
+    if (r?.ok) setStage('done')
+    else {
+      setMsg(r?.error || 'Something went wrong.')
+      setStage('failed')
+    }
+  }
+  const b = pre?.body
+  return (
+    <div className="lrclib-share">
+      {!pre && <div className="fine">Getting it ready…</div>}
+      {pre?.error && <div className="fine warn">{pre.error}</div>}
+      {b && stage === 'confirm' && (
+        <>
+          <div className="ls-title">Publish your timing to LRCLIB?</div>
+          <div className="ls-what">
+            {b.trackName} · {b.artistName} · {b.albumName} · {fmtTime(b.duration * 1000)} ·{' '}
+            {b.lines} lines
+          </div>
+          <div className="fine">
+            It becomes public on lrclib.net for every app that uses it, and can’t be removed (LRCLIB
+            keeps every version). Only the words and line times are sent.
+          </div>
+        </>
+      )}
+      {stage === 'working' && (
+        <div className="fine">
+          Publishing… LRCLIB asks for a short proof of work first, which takes up to a minute.
+        </div>
+      )}
+      {stage === 'done' && <div className="ls-title">Published. Thank you!</div>}
+      {stage === 'failed' && <div className="fine warn">{msg}</div>}
+      <div className="lyric-tools">
+        {b && stage === 'confirm' && (
+          <button className="pill on" onClick={publish}>
+            Publish
+          </button>
+        )}
+        <button className="pill" disabled={stage === 'working'} onClick={onClose}>
+          {stage === 'done' ? 'Close' : 'Cancel'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Word by word: play the song and tap (Space, Enter or a click) as each word starts.
+ * Lines whose every word is tapped get word timing (the karaoke fill follows your taps);
+ * the others keep their line time, so it can be saved part way through.
+ */
+function WordSync({ lines, playback, trackId, canSeek, paused, onClose }) {
+  const targets = useMemo(() => wordTargets(lines), [lines])
+  const [times, setTimes] = useState([])
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const list = useRef(null)
+  const next = targets[times.length]
+  const timed = useMemo(() => wordTimedLines(lines, times), [lines, times])
+  const fullLines = timed.filter((l) => l.words).length
+  const doTap = useCallback(
+    () => setTimes((t) => tap(t, positionNow(playback, 0), targets.length)),
+    [playback, targets.length]
+  )
+  useEffect(() => {
+    const key = (e) => {
+      const t = e.target
+      if (
+        e.repeat ||
+        paused ||
+        t?.isContentEditable ||
+        /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName)
+      )
+        return
+      if (e.key === ' ' || e.key === 'Enter') doTap()
+      else if (e.key === 'Backspace') setTimes(undoTap)
+      else if (e.key === 'Escape') onClose()
+      else return
+      e.preventDefault()
+      document.activeElement?.blur?.()
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [doTap, onClose, paused])
+  useEffect(() => {
+    const box = list.current
+    const el = box?.querySelector('.tap-next') || box?.querySelector('.tap-line:last-child')
+    if (box && el)
+      box.scrollTo({
+        top: el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2,
+        behavior: 'smooth'
+      })
+  }, [next?.li])
+  const startOver = () => {
+    setTimes([])
+    api.control('seek', 0)
+    if (!playback?.isPlaying) api.control('play')
+  }
+  const save = async () => {
+    setSaving(true)
+    const ok = await api.saveTimedLyrics(timed, trackId)
+    setSaving(false)
+    if (ok) onClose()
+    else setError("Couldn't save the timing")
+  }
+  let k = -1
+  return (
+    <div className="pl-lyrics tap">
+      <div className="tap-head">
+        <div className="tap-title">
+          {times.length >= targets.length ? 'Every word timed' : 'Tap as each word starts'}
+        </div>
+        <div className="tap-sub">
+          {error ||
+            `Space, Enter or a click · Backspace undoes · ${times.length} of ${targets.length} words`}
+        </div>
+        <div className="tap-actions">
+          <button className="pill" disabled={!canSeek} onClick={startOver}>
+            Start over
+          </button>
+          <button className="pill" disabled={!times.length} onClick={() => setTimes(undoTap)}>
+            Undo
+          </button>
+          <button className="pill" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="pill on"
+            disabled={!fullLines || saving}
+            onClick={save}
+            data-tip="Lines not finished keep their line timing"
+          >
+            {times.length >= targets.length
+              ? 'Save'
+              : `Save ${fullLines} ${fullLines === 1 ? 'line' : 'lines'}`}
+          </button>
+        </div>
+      </div>
+      <div className="tap-list" ref={list} onClick={doTap}>
+        <div className="pl-pad" />
+        {lines.map((l, li) => {
+          const ws = String(l.text || '')
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean)
+          if (!ws.length)
+            return (
+              <div key={li} className="pl-gap">
+                ♪
+              </div>
+            )
+          const here = next?.li === li
+          return (
+            <div key={li} className={`tap-line ${here ? 'tap-next' : ''}`}>
+              {ws.map((w, wi) => {
+                k++
+                const state = k < times.length ? 'done' : k === times.length ? 'next' : ''
+                return (
+                  <span key={wi} className={`tap-w ${state}`}>
+                    {w}{' '}
+                  </span>
+                )
+              })}
+            </div>
+          )
+        })}
+        <div className="pl-pad" />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Share a line: an image for stories (or a square post) with the cover, one line you pick
+ * and the song's name. Copy it, or save it as a PNG.
+ */
+function ShareCard({ lines, current, track, onClose }) {
+  const sung = useMemo(() => lines.filter((l) => String(l.text || '').trim()), [lines])
+  const start = Math.max(
+    0,
+    sung.findIndex((l) => l === lines[current])
+  )
+  const [pick, setPick] = useState(start)
+  const [size, setSize] = useState('story')
+  const [cover, setCover] = useState(null)
+  const [note, setNote] = useState('')
+  const canvas = useRef(null)
+  useEffect(() => {
+    let live = true
+    const url = track?.cover
+    if (!url) return
+    api.cardCover(url).then((data) => {
+      if (!live || !data) return
+      const img = new Image()
+      img.onload = () => live && setCover(img)
+      img.src = data
+    })
+    return () => {
+      live = false
+    }
+  }, [track?.cover])
+  useEffect(() => {
+    if (canvas.current)
+      drawCard(canvas.current, {
+        size,
+        cover,
+        line: sung[pick]?.text || '',
+        title: track?.name || '',
+        artist: (track?.artists || '').split(',')[0]
+      })
+  }, [size, cover, pick, sung, track])
+  useEffect(() => {
+    const k = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
+  const png = () => canvas.current.toDataURL('image/png')
+  const name = `${(track?.artists || '').split(',')[0]} - ${track?.name || 'Glowtide'}`
+  return (
+    <div className="pl-lyrics card-maker">
+      <div className="tap-head">
+        <div className="tap-title">Share a line</div>
+        <div className="tap-actions">
+          <Seg
+            value={size}
+            options={Object.keys(CARD_SIZES).map((k) => [k, CARD_SIZES[k].label])}
+            onChange={setSize}
+          />
+          <button
+            className="pill on"
+            onClick={async () => setNote((await api.copyCard(png())) ? 'Copied' : "Couldn't copy")}
+          >
+            Copy image
+          </button>
+          <button
+            className="pill"
+            onClick={async () => setNote((await api.saveCard(png(), name)) ? 'Saved' : '')}
+          >
+            Save…
+          </button>
+          <button className="pill" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="tap-sub">{note || 'Pick a line below'}</div>
+      </div>
+      <div className="card-body">
+        <canvas ref={canvas} className={`card-preview ${size}`} />
+        <div className="card-lines">
+          {sung.map((l, i) => (
+            <button
+              key={i}
+              className={`card-line ${i === pick ? 'on' : ''}`}
+              onClick={() => {
+                setPick(i)
+                setNote('')
+              }}
+            >
+              {l.text}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

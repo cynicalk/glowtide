@@ -43,6 +43,7 @@ import { fetchLyrics, myLyrics, lyricsCandidates } from './lyricsSource'
 import { choose as chooseLyrics } from './lyricChoice'
 import { saveMyLrc, removeMyLrc, myLrc } from './myLyrics'
 import { toLrc } from '../shared/tapsync.mjs'
+import { sharePreview, shareToLrclib } from './lrclibShare'
 import { loadAmllIndex } from './amll'
 import { offsetFor, saveOffset } from './offsets'
 import { createWidgets } from './widgets'
@@ -1555,7 +1556,17 @@ function registerIpc() {
     if (!Array.isArray(lines) || !lines.length || lines.length > 2000) return false
     const clean = lines
       .filter((l) => l && Number.isFinite(l.t) && l.t >= 0 && typeof l.text === 'string')
-      .map((l) => ({ t: Math.round(l.t), text: l.text.slice(0, 500) }))
+      .map((l) => {
+        const out = { t: Math.round(l.t), text: l.text.slice(0, 500) }
+        // word times (word-by-word tap-to-sync): one per word, all valid, or none
+        const words = Array.isArray(l.words) ? l.words.slice(0, 120) : null
+        if (
+          words?.length &&
+          words.every((w) => w && Number.isFinite(w.t) && w.t >= 0 && typeof w.w === 'string')
+        )
+          out.words = words.map((w) => ({ t: Math.round(w.t), w: w.w.slice(0, 80) }))
+        return out
+      })
     if (
       !clean.length ||
       !saveMyLrc(track, toLrc(clean, { title: track.name, artist: track.artists }))
@@ -1620,6 +1631,71 @@ function registerIpc() {
     }
     setSettings({ background: { kind: video ? 'video' : 'image', file: name, version } })
     return { ok: true }
+  })
+  // Share your timing to LRCLIB: what would be sent, then (on Publish) sending it.
+  const DEMO_SHARE = 'The demo’s songs aren’t real songs, so they can’t go to LRCLIB.'
+  handle('lyrics:sharePreview', () => {
+    if (state.source === 'demo') return { error: DEMO_SHARE }
+    return state.track
+      ? sharePreview(state.track, myLrc(state.track))
+      : { error: 'Nothing is playing.' }
+  })
+  handle('lyrics:shareLrclib', async (_, trackId) => {
+    const track = state.track
+    if (state.source === 'demo') return { error: DEMO_SHARE }
+    if (!track || track.id !== trackId) return { error: 'The song changed. Try again.' }
+    return shareToLrclib(track, myLrc(track))
+  })
+  // The share card: the cover as a data URL (the page can't read other sites' images into a
+  // canvas), then the finished card copied or saved.
+  handle('card:cover', async (_, url) => {
+    if (typeof url !== 'string') return null
+    if (/^data:image\/(png|jpe?g|webp|svg\+xml);base64,/.test(url))
+      return url.length < 20e6 ? url : null
+    if (
+      !/^https:\/\/([a-z0-9-]+\.)*(scdn\.co|spotifycdn\.com|ytimg\.com|ggpht\.com|googleusercontent\.com)\//i.test(
+        url
+      )
+    )
+      return null
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
+      const type = r.headers.get('content-type') || 'image/jpeg'
+      if (!r.ok || !/^image\//.test(type)) return null
+      const buf = Buffer.from(await r.arrayBuffer())
+      return buf.length < 15e6 ? `data:${type};base64,${buf.toString('base64')}` : null
+    } catch {
+      return null
+    }
+  })
+  const pngOf = (dataUrl) =>
+    typeof dataUrl === 'string' &&
+    dataUrl.startsWith('data:image/png;base64,') &&
+    dataUrl.length < 40e6
+      ? Buffer.from(dataUrl.slice(22), 'base64')
+      : null
+  handle('card:copy', (_, dataUrl) => {
+    const png = pngOf(dataUrl)
+    if (!png) return false
+    clipboard.writeImage(nativeImage.createFromBuffer(png))
+    return true
+  })
+  handle('card:save', async (_, dataUrl, name) => {
+    const png = pngOf(dataUrl)
+    if (!png) return null
+    const base = [...String(name || 'Glowtide card')]
+      .filter((ch) => ch.charCodeAt(0) >= 32 && !'<>:"/\\|?*'.includes(ch))
+      .join('')
+      .trim()
+      .slice(0, 120)
+    const { canceled, filePath } = await dialog.showSaveDialog(player, {
+      title: 'Save the card',
+      defaultPath: join(app.getPath('pictures'), `${base || 'Glowtide card'}.png`),
+      filters: [{ name: 'PNG image', extensions: ['png'] }]
+    })
+    if (canceled || !filePath) return null
+    writeFileSync(filePath, png)
+    return filePath
   })
   handle('lyrics:removeTimed', () => {
     if (!state.track) return

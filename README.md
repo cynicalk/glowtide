@@ -77,6 +77,13 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   file is copied into the settings folder; a video pauses while it can't be seen.
 - **Your own lyric colours** (sung, others, highlight) and **line spacing**; the desktop lyrics
   can also sit on flowing colours.
+- **Time each word**: on line-timed lyrics (or after tap-to-sync), tap as each word starts for
+  karaoke-grade timing; finished lines are saved word by word, the rest keep their line time.
+- **Share to LRCLIB**: lyrics you timed can be published to [LRCLIB](https://lrclib.net) for
+  everyone, after a confirmation that shows exactly what is sent (title, artist, album, length,
+  the words and line times). It's public and permanent; demo songs are never offered.
+- **Share a line**: an image for stories (1080×1920) or a square post, with the cover, a line you
+  pick and the song; copy it or save it as a PNG.
 - **Wrong lyrics?** under the lyrics view lists LRCLIB's versions of the song (timed first,
   closest in length), or of what you search; your pick is remembered per song.
 - A short **first-run tour** after you pick a music source.

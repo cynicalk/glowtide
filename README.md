@@ -4,6 +4,8 @@ A music companion for Windows that lights the edges of your screen in the colour
 cover and puts the song's lyrics on the desktop, word by word. It follows **any music app**
 with no setup, or plays **YouTube Music (free)** and controls **Spotify** itself.
 
+[![Watch the 30-second demo](docs/demo.jpg)](https://github.com/cynicalk/glowtide-releases/releases/download/v1.0.12/glowtide-demo.mp4)
+
 ## Install
 
 1. Download `Glowtide-<version>-setup.exe` from the

@@ -1,6 +1,6 @@
 // Constellation lyric style: a verse fills a real constellation one star per word.
 // The whole figure shows faintly from the start and lights up as the words are sung; when
-// a verse has more words than the figure has stars, the next words start a new one.
+// a verse has more words than the figure has stars, the figure fills again for the rest.
 // Figures are chosen to fit the verse, well-known ones first, and each next figure is a
 // neighbour in the real sky, so a song travels across it. A chorus that comes back returns
 // to its own constellation.
@@ -13,7 +13,7 @@ export const VIEW = { w: 1600, h: 900 }
 const BOX = { cx: 800, cy: 445, w: 920, h: 400 }
 const SECTION_GAP_MS = 5000 // a pause this long starts a new verse
 // how long the journey to the next figure takes; it sets off this long before the verse
-export const TRAVEL_MS = 2600
+export const TRAVEL_MS = 1500
 // below this (sky units) is the caption's: no word is placed there
 const CAPTION_TOP = 720
 
@@ -130,111 +130,128 @@ const plain = (t) =>
     .trim()
 
 /**
- * Where a repeated passage (a chorus) starts or ends, so it gets figures of its own even
- * when the song runs straight into it: a line of three words or more that comes back
- * elsewhere, where the line before (or after) it differs between the two places.
+ * Where a repeated passage (a chorus) starts and ends, so it is a part of its own even when
+ * the song runs straight into it: two or more lines in a row (of three words or more) that
+ * come back together elsewhere. A single line that happens to repeat is not a chorus.
  */
 function passageBreaks(lines) {
   const texts = lines.map((l) => (l.words?.length ? plain(l.text) : null))
-  const at = new Map()
-  texts.forEach((t, i) => {
-    if (t && t.split(' ').length >= 3) at.set(t, [...(at.get(t) || []), i])
-  })
+  const long = (t) => !!t && t.split(' ').length >= 3
   const breaks = new Set() // a new part starts at these lines
-  for (const where of at.values()) {
-    if (where.length < 2) continue
-    for (const i of where)
-      for (const j of where) {
-        if (Math.abs(i - j) <= 1) continue
-        if (i > 0 && texts[i - 1] !== texts[j - 1]) breaks.add(i)
-        if (i + 1 < texts.length && texts[i + 1] !== texts[j + 1]) breaks.add(i + 1)
-      }
+  for (let i = 0; i < texts.length; i++) {
+    if (!long(texts[i])) continue
+    for (let j = i + 2; j < texts.length; j++) {
+      if (texts[j] !== texts[i]) continue
+      // only from where the two passages start matching, not from inside one
+      if (i > 0 && texts[i - 1] === texts[j - 1]) continue
+      let n = 0
+      while (j + n < texts.length && texts[i + n] && texts[i + n] === texts[j + n] && i + n < j) n++
+      if (n < 2) continue
+      breaks
+        .add(i)
+        .add(j)
+        .add(i + n)
+        .add(j + n)
+    }
   }
   return breaks
 }
 
-/** Words with global index, verse number and the line they belong to. */
+// A part with no pause or chorus to end it still moves on after this many lines (split
+// evenly), so a song without either doesn't spend its whole length in one constellation.
+const MAX_PART_LINES = 8
+
+/** Words with global index, part (verse, chorus) number and the line they belong to. */
 function flatten(lines) {
-  const out = []
   const breaks = passageBreaks(lines)
-  let section = 0
+  // the song's parts, as runs of line indexes
+  const parts = []
+  let cur = []
   let lastEnd = null
   lines.forEach((l, li) => {
     if (!l.words?.length) {
-      if (lastEnd !== null) section++ // a break marker in the file
+      if (cur.length) parts.push(cur) // a break marker in the file
+      cur = []
       lastEnd = null
       return
     }
-    if (lastEnd !== null && (l.t - lastEnd > SECTION_GAP_MS || breaks.has(li))) section++
-    l.words.forEach((w) => out.push({ w: w.w, t: w.t, end: w.end, line: li, section }))
+    if (cur.length && ((lastEnd !== null && l.t - lastEnd > SECTION_GAP_MS) || breaks.has(li))) {
+      parts.push(cur)
+      cur = []
+    }
+    cur.push(li)
     lastEnd = l.end ?? l.t
   })
+  if (cur.length) parts.push(cur)
+  const out = []
+  let section = 0
+  for (const part of parts) {
+    const pieces = Math.ceil(part.length / MAX_PART_LINES)
+    const per = Math.ceil(part.length / pieces)
+    part.forEach((li, k) => {
+      if (k > 0 && k % per === 0) section++
+      for (const w of lines[li].words) out.push({ w: w.w, t: w.t, end: w.end, line: li, section })
+    })
+    section++
+  }
   return out.map((w, i) => ({ ...w, i }))
 }
 
 /**
- * Split every verse into chunks that each fill one constellation.
- * Returns [{ cons, words: [flat word], n }] in song order.
+ * The figures of a song. Each part (a verse, a chorus) stays in one constellation: when it
+ * has more words than the figure has stars, the figure fills again for the next lines
+ * (another page of the same constellation) rather than moving on. The view only travels to
+ * a new constellation when a new part begins.
+ * Returns [{ cons, words: [flat word], n, page }] in song order.
  */
 export function buildFigures(lines, seed = 0) {
   const words = flatten(lines)
-  const lineEnd = (k) => {
-    let j = k
-    while (j < words.length && words[j].line === words[k].line) j++
-    return j
+  // the parts, each as its lines' words: [[word, ...], ...] per line
+  const parts = []
+  for (const w of words) {
+    const part = parts[w.section] || (parts[w.section] = [])
+    const line = part.at(-1)
+    if (line && line[0].line === w.line) line.push(w)
+    else part.push([w])
   }
-  const sectionEnd = (k) => {
-    let j = k
-    while (j < words.length && words[j].section === words[k].section) j++
-    return j
-  }
-  // How many words from k a figure of this size takes: whole lines while they fit, or (a
-  // line longer than the figure) as many words as it has stars.
-  const taken = (k, size) => {
-    const end = sectionEnd(k)
-    let j = k
-    while (j < end && lineEnd(j) - k <= size) j = lineEnd(j)
-    return j > k ? j - k : Math.min(size, lineEnd(k) - k)
+  // Pages of a figure this size: whole lines while they fit; a line longer than the figure
+  // fills it and carries on in the next page.
+  const paginate = (part, size) => {
+    const pages = []
+    let page = []
+    for (const line of part) {
+      if (page.length + line.length <= size) {
+        page.push(...line)
+        continue
+      }
+      if (page.length) pages.push(page)
+      page = []
+      for (let i = 0; i < line.length; i += size) {
+        const piece = line.slice(i, i + size)
+        if (piece.length === size) pages.push(piece)
+        else page = piece
+      }
+    }
+    if (page.length) pages.push(page)
+    return pages
   }
 
   const figures = []
   const used = new Map() // id -> times used
-  const sung = [] // { texts, cons }: each figure's lines, so a returning chorus is recognised
+  const sung = new Map() // a part's text -> its constellation, so a chorus comes back to it
   let prev = null
-  let k = 0
-  while (k < words.length) {
-    let cons = null
-    let take = 0
-    const atLineStart = k === 0 || words[k - 1].line !== words[k].line
-    // A chorus coming back: the same lines as an earlier figure return to its constellation.
-    if (atLineStart) {
-      const end = sectionEnd(k)
-      let best = null
-      for (const f of sung) {
-        let j = k
-        let ok = true
-        for (const text of f.texts) {
-          if (j >= end || plain(lines[words[j].line].text) !== text) {
-            ok = false
-            break
-          }
-          j = lineEnd(j)
-        }
-        if (ok && (!best || j - k > best.take)) best = { cons: f.cons, take: j - k }
-      }
-      if (best) ({ cons, take } = best)
-    }
+  for (const part of parts.filter(Boolean)) {
+    const key = part.map((line) => plain(lines[line[0].line].text)).join('\n')
+    let cons = sung.get(key)
     if (!cons) {
-      const remaining = sectionEnd(k) - k
-      const firstLine = lineEnd(k) - k
+      const count = part.reduce((a, line) => a + line.length, 0)
       let bestScore = -Infinity
       CONSTELLATIONS.forEach((c, ci) => {
         if (prev && c.id === prev.id) return
-        const size = c.stars.length
-        const t = taken(k, size)
-        // hold as much of the verse as possible, with as few stars left without a word
-        let score = 2 * (t / remaining) + 1.5 * (t / size)
-        if (size < firstLine) score -= 2 // the line would be split across two skies
+        const pages = paginate(part, c.stars.length)
+        // as few pages as possible, each as full as possible
+        const fill = count / (pages.length * c.stars.length)
+        let score = 2 * fill - 1.2 * (pages.length - 1)
         if (FAMOUS.has(c.id)) score += 1.2
         if (prev) {
           // a neighbour in the real sky, so the song travels rather than jumps
@@ -244,20 +261,14 @@ export function buildFigures(lines, seed = 0) {
         score -= 1.5 * (used.get(c.id) || 0)
         // a little chance, more for the first figure, so songs don't all start alike
         score += (prev ? 0.6 : 1.6) * rand(seed + figures.length * 131 + ci * 7)
-        if (score > bestScore) [bestScore, cons, take] = [score, c, t]
+        if (score > bestScore) [bestScore, cons] = [score, c]
       })
+      sung.set(key, cons)
     }
-    const chunk = words.slice(k, k + take)
-    k += take
     used.set(cons.id, (used.get(cons.id) || 0) + 1)
-    // only a figure of whole lines can be recognised when it comes back
-    const whole = atLineStart && (k >= words.length || words[k - 1].line !== words[k].line)
-    if (whole) {
-      const texts = [...new Set(chunk.map((w) => w.line))].map((li) => plain(lines[li].text))
-      const key = texts.join('\n')
-      if (!sung.some((f) => f.texts.join('\n') === key)) sung.push({ texts, cons })
-    }
-    figures.push({ cons, words: chunk, n: figures.length })
+    paginate(part, cons.stars.length).forEach((page, p) =>
+      figures.push({ cons, words: page, n: figures.length, page: p })
+    )
     prev = cons
   }
   return figures

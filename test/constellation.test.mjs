@@ -322,3 +322,32 @@ test('a chorus is recognised even when the song runs straight into it', () => {
     assert.equal(at(6).cons.id, at(2).cons.id, `seed ${seed}`)
   }
 })
+
+test('the view moves on only when a new part of the song begins, not every few lines', () => {
+  // two verses of six lines and a chorus of four lines that comes back, sung straight
+  // through with no pauses
+  const verse = (n) =>
+    Array.from({ length: 6 }, (_, i) => `verse ${n} line ${i} has a few more words in it`)
+  const chorus = [
+    'we light the sky tonight',
+    'every star is ours',
+    'nothing else to say',
+    'hold on to the night'
+  ]
+  const text = [...verse(1), ...chorus, ...verse(2), ...chorus]
+  const lrc = text
+    .map((l, i) => {
+      const s = 5 + i * 3
+      return `[${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}.00] ${l}`
+    })
+    .join('\n')
+  const ls = estimateWordTiming(parseLrc(lrc), 120000)
+  for (const seed of [1, 2, 3, 4]) {
+    const figs = buildFigures(ls, seed)
+    const journeys = figs.filter((f, i) => i > 0 && f.cons.id !== figs[i - 1].cons.id).length
+    assert.ok(journeys <= 3, `seed ${seed}: ${journeys} journeys for four parts`)
+    const at = (line) => figs.find((f) => f.words.some((w) => w.line === line)).cons.id
+    assert.equal(at(0), at(5), `seed ${seed}: a verse stays in one constellation`)
+    assert.equal(at(6), at(16), `seed ${seed}: the chorus comes back to its own`)
+  }
+})

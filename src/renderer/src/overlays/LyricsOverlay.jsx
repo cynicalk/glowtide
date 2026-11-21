@@ -284,12 +284,30 @@ function FigureView({ sky, labelPx, gone }) {
       style={{ transform: skyOffset(VIEW.w / 2 + cam.x, VIEW.h / 2 + cam.y) }}
     >
       {complete && <Meteor n={sky.figure.n} />}
-      <svg className="sky" viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMid meet">
-        {/* a soft wide stroke under each line stands in for a blur filter */}
+      {/* a soft wide stroke under each line stands in for a blur filter; on a layer of
+          its own, so it can breathe with the beat without the lines repainting */}
+      <svg
+        className="sky sky-glow"
+        viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+        preserveAspectRatio="xMidYMid meet"
+      >
         {edges.map((e) => (
           <path
             key={`g${e.a}-${e.b}-${e.i}`}
             className="sky-edge glow"
+            d={e.d}
+            pathLength="1"
+            style={{ '--d': `${delay(e.b) + 0.08}s` }}
+          />
+        ))}
+      </svg>
+      {/* each line a tube of light, its edge feathered: a soft wider stroke, the coloured
+          line, and a bright core */}
+      <svg className="sky" viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMid meet">
+        {edges.map((e) => (
+          <path
+            key={`f${e.a}-${e.b}-${e.i}`}
+            className="sky-edge feather"
             d={e.d}
             pathLength="1"
             style={{ '--d': `${delay(e.b) + 0.08}s` }}
@@ -304,22 +322,38 @@ function FigureView({ sky, labelPx, gone }) {
             style={{ '--d': `${delay(e.b) + 0.08}s` }}
           />
         ))}
-        {sky.stars.map((s, i) => {
-          if (!shown(s)) return null
-          // each star its real size and colour: Betelgeuse orange, Rigel blue-white
-          const r = starRadius(s)
-          return (
-            <g
-              key={`s${i}`}
-              className={`star lit ${s.current ? 'cur' : ''}`}
-              style={{ '--d': `${delay(i)}s`, '--star': starColour(s.bv) }}
-            >
-              <circle className="halo" cx={s.x} cy={s.y} r={r * 2.8} />
-              <circle className="core" cx={s.x} cy={s.y} r={r} />
-            </g>
-          )
-        })}
+        {edges.map((e) => (
+          <path
+            key={`c${e.a}-${e.b}-${e.i}`}
+            className="sky-edge core"
+            d={e.d}
+            pathLength="1"
+            style={{ '--d': `${delay(e.b) + 0.08}s` }}
+          />
+        ))}
       </svg>
+      {/* Stars are small glowing spheres, each on its own layer like the words, so each can
+          twinkle at its own pace without the sky repainting. Each is its real size and
+          colour: Betelgeuse orange, Rigel blue-white. */}
+      {sky.stars.map((s, i) => {
+        if (!shown(s)) return null
+        return (
+          <div
+            key={`s${i}`}
+            className={`sky-star ${s.current ? 'cur' : ''}`}
+            style={{
+              transform: skyOffset(s.x, s.y),
+              '--d': `${delay(i)}s`,
+              '--star': starColour(s.bv),
+              '--r': starRadius(s),
+              '--tw': `${2.2 + ((i * 37) % 23) / 10}s`,
+              '--tp': `${-((i * 53) % 31) / 10}s`
+            }}
+          >
+            <i />
+          </div>
+        )
+      })}
       {/* Words are HTML, each on its own layer: they arrive large and glowing, then settle
           beside their star, all by scale and opacity, so the sky itself never repaints. */}
       {sky.stars.map((s, i) => {
@@ -330,7 +364,11 @@ function FigureView({ sky, labelPx, gone }) {
           <div
             key={`w${i}`}
             className={`sky-word ${age} a-${at.anchor}`}
-            style={{ transform: skyOffset(at.x, at.y) }}
+            style={{
+              transform: skyOffset(at.x, at.y),
+              '--sw': `${4.2 + ((i * 29) % 17) / 10}s`,
+              '--sp': `${-((i * 41) % 37) / 10}s`
+            }}
           >
             <span data-w={s.word}>{s.word}</span>
           </div>
@@ -361,7 +399,7 @@ function Constellation({ sky, scale }) {
   // The caption changes once per line, not once per word, so it never flickers.
   const { prev: leavingCap } = useSwap(f ? `${capLine}|${f.text}` : 'none', f?.text || '')
   // The size a word settles at (sky units); the word being sung is drawn larger still.
-  const labelPx = Math.round(28 * Math.min(1.2, Math.max(0.85, scale)))
+  const labelPx = Math.round(32 * Math.min(1.2, Math.max(0.85, scale)))
   const len = f?.text.length || 0
   const capEm = len <= 22 ? 1 : len <= 38 ? 0.82 : len <= 60 ? 0.68 : 0.56
   const figures = [leaving, fig].filter((s, i, a) => s && a.indexOf(s) === i)

@@ -81,10 +81,14 @@ export const DEFAULT_SETTINGS = {
   // ('any') uses the microphone
   calls: { enabled: false, mode: 'calls', level: 30 },
   remote: { enabled: false }, // the phone remote: a page on your home network
+  // speaking to the command bar: wake: listen for "Hey Glowtide" (off unless you turn it on)
+  voice: { wake: false },
   widgets: {
     fps: 60,
     accent: '#7c5cff', // the full-screen view's "custom" colour theme
-    stage: { style: 'ring', theme: 'album' }
+    // backdrop: 'blur' (the cover blurred, with the visualizer) or 'art' (the cover sharp,
+    // filling the screen)
+    stage: { style: 'ring', theme: 'album', backdrop: 'blur' }
   }
 }
 

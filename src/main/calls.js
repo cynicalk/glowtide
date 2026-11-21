@@ -200,6 +200,7 @@ export function createCallDucker({
   control,
   log = () => {},
   readMic = micUsers, // (tests: who is using the mic)
+  ignore = () => [], // process names whose mic use is never a call (Glowtide listening to you)
   timer: ticking = true
 }) {
   const file = join(dir, 'call-duck.json')
@@ -207,6 +208,7 @@ export function createCallDucker({
   let quietPolls = 0
   let busy = false
   let timer = null
+  let voiceTimer = null
 
   const save = () => {
     try {
@@ -217,34 +219,37 @@ export function createCallDucker({
     }
   }
 
-  async function duck(users) {
+  async function duck(users, { by = 'call', level: lv } = {}) {
     const st = getState()
     // 'none': in a call, with nothing Glowtide could turn down. It holds until the call ends,
     // so a failed attempt isn't retried (a PowerShell start) every few seconds.
-    ducked = { method: 'none', source: st.source }
-    const level = Math.min(0.9, Math.max(0, (settings().calls?.level ?? 30) / 100))
+    ducked = { method: 'none', source: st.source, by }
+    const level = Math.min(0.9, Math.max(0, lv ?? (settings().calls?.level ?? 30) / 100))
     const playing = !!st.playback?.isPlaying
     if (st.source === 'youtube') {
-      ducked = { method: 'youtube', source: 'youtube' }
+      ducked = { method: 'youtube', source: 'youtube', by }
       save()
       await control('volume', Math.round(100 * level))
     } else if (st.source === 'spotify') {
       const prev = st.playback?.volume
       if (Number.isFinite(prev)) {
-        ducked = { method: 'spotify', source: 'spotify', prev }
+        ducked = { method: 'spotify', source: 'spotify', prev, by }
         save()
         const r = await control('volume', Math.round(prev * level))
-        if (r?.error) ducked = { method: 'none' }
+        if (r?.error) ducked = { method: 'none', by }
       }
     } else if (st.source === 'system') {
       const names = musicProcesses(appLabel(st.systemApp?.id || ''), st.systemApp?.id || '')
       const calling = new Set(users.map(exeOf))
       if (names.length && !names.some((n) => calling.has(n))) {
-        ducked = { method: 'mixer', names, prev: [] }
+        ducked = { method: 'mixer', names, prev: [], by }
         save()
-        ducked.prev = await duckApps(names, level)
-        if (!ducked.prev.length) ducked = { method: 'none' } // nothing of it was playing sound
-      } else if (playing) {
+        const prev = await duckApps(names, level)
+        if (ducked?.method === 'mixer') {
+          ducked.prev = prev
+          if (!prev.length) ducked = { method: 'none', by } // nothing of it was playing sound
+        } else if (prev.length) await restoreApps(prev) // put back while it was turning down
+      } else if (playing && by === 'call') {
         // the call is in the app that plays the music (a browser): pause rather than mute it
         ducked = { method: 'pause', source: 'system' }
         save()
@@ -252,7 +257,7 @@ export function createCallDucker({
       }
     }
     save()
-    log(`call: music down (${ducked.method})`)
+    log(`${by}: music down (${ducked?.method})`)
   }
 
   async function restore(from = ducked) {
@@ -266,13 +271,14 @@ export function createCallDucker({
     else if (from.method === 'mixer') await restoreApps(from.prev || [])
     else if (from.method === 'pause' && same) await control('play')
     save()
-    log(`call: music back (${from.method})`)
+    log(`${from.by || 'call'}: music back (${from.method})`)
   }
 
   async function poll() {
     if (busy) return
     const on = !!settings().calls?.enabled
     const st = getState()
+    if (ducked?.by === 'voice') return // turned down while you speak a command: that puts it back
     if (!on) {
       if (ducked) {
         busy = true
@@ -285,7 +291,11 @@ export function createCallDucker({
     if (st.source === 'demo') return
     busy = true
     try {
-      const users = callers(await readMic(), settings().calls?.mode === 'any' ? 'any' : 'calls')
+      const users = callers(
+        await readMic(),
+        settings().calls?.mode === 'any' ? 'any' : 'calls',
+        ignore()
+      )
       if (users.length) {
         quietPolls = 0
         if (!ducked) await duck(users)
@@ -316,6 +326,26 @@ export function createCallDucker({
 
   return {
     poll,
+    /** Speaking a command: the music down (to 15%) until voiceRelease, unless a call has it. */
+    async voiceHold() {
+      if (ducked || busy || getState().source === 'demo' || !getState().playback?.isPlaying)
+        return false
+      busy = true
+      try {
+        await duck([], { by: 'voice', level: 0.15 })
+      } finally {
+        busy = false
+      }
+      // never left down: listening ends well within this
+      clearTimeout(voiceTimer)
+      voiceTimer = setTimeout(() => this.voiceRelease(), 20000)
+      return true
+    },
+    async voiceRelease() {
+      clearTimeout(voiceTimer)
+      if (ducked?.by !== 'voice') return
+      await restore()
+    },
     /** On quit: turn the music back up (the file covers it if this doesn't finish). */
     stop() {
       clearInterval(timer)

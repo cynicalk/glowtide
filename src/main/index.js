@@ -17,6 +17,7 @@ import {
   session,
   shell,
   Notification,
+  powerMonitor,
   safeStorage
 } from 'electron'
 import { basename, dirname, extname, join } from 'path'
@@ -64,6 +65,7 @@ import { createHistory } from './history'
 import { createCallDucker } from './calls'
 import { createHeadphoneWatch } from './headphones'
 import { createRemote, fetchAllowed } from './remote'
+import { createVoice, VOICE_SCHEME } from './voice'
 
 // where the share card may fetch a cover from: the music services' picture hosts
 const CARD_COVER_HOSTS =
@@ -91,7 +93,12 @@ const EARLIER = { folder: 'Lumn', loginItem: 'xyz.trylumn.windows' }
 // Your background picture or video is served to Glowtide's pages from the settings folder
 // as glowtide-bg://bg/<file> (registered before Electron starts, as schemes must be).
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'glowtide-bg', privileges: { standard: true, secure: true, stream: true } }
+  { scheme: 'glowtide-bg', privileges: { standard: true, secure: true, stream: true } },
+  // the speech model, read by the command bar's voice listening (see voice.js)
+  {
+    scheme: VOICE_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true }
+  }
 ])
 const BG_FILE = /^bg-\d+\.(jpe?g|png|webp|gif|mp4|webm)$/
 const bgDir = () => join(app.getPath('userData'), 'background')
@@ -225,6 +232,24 @@ let history = null
 let calls = null // quieter during calls
 let headphones = null // pause when headphones come out
 let remote = null // the phone remote (a page on your home network)
+let voice = null // speaking to the command bar: the speech model and the wake word
+
+/** The wake word listens only while it's turned on (and the model is there to understand
+ * what's said after it). */
+function syncWake(opts) {
+  if (!voice) return
+  voice.setWake(!!loadSettings().voice?.wake && voice.status().ready, opts)
+}
+
+let voiceSent = ''
+function sendVoice(s) {
+  // the download reports every chunk: pass on only what the page would show differently
+  const key = `${s.ready}${s.downloading}${s.percent}${s.error}${s.wakeOn}${s.wakeError}`
+  if (key === voiceSent) return
+  voiceSent = key
+  state.voice = s
+  broadcast()
+}
 /** Starts or stops the phone remote to match the settings. */
 function syncRemote() {
   if (!remote) return
@@ -1348,8 +1373,12 @@ function placeQuick(show) {
 // ---------- the command bar (Ctrl+Alt+G): type a song or a command ----------
 const COMMAND = { width: 620, height: 460 }
 
-function toggleCommand() {
-  if (commandWin && !commandWin.isDestroyed() && commandWin.isVisible()) return commandWin.hide()
+/** listen: open it listening (the wake word, or the voice shortcut). */
+function toggleCommand({ listen = false } = {}) {
+  if (commandWin && !commandWin.isDestroyed() && commandWin.isVisible()) {
+    if (listen) return commandWin.webContents.send('command:listen')
+    return commandWin.hide()
+  }
   if (!commandWin || commandWin.isDestroyed()) {
     commandWin = new BrowserWindow({
       ...COMMAND,
@@ -1378,14 +1407,14 @@ function toggleCommand() {
     })
     commandWin.on('closed', () => (commandWin = null))
     load(commandWin, 'command')
-    commandWin.once('ready-to-show', () => showCommand())
+    commandWin.once('ready-to-show', () => showCommand({ listen }))
     return
   }
-  showCommand()
+  showCommand({ listen })
 }
 
 /** Centred near the top of the display the pointer is on, cleared and ready to type. */
-function showCommand() {
+function showCommand({ listen = false } = {}) {
   const wa = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
   commandWin.setBounds({
     x: Math.round(wa.x + (wa.width - COMMAND.width) / 2),
@@ -1394,7 +1423,7 @@ function showCommand() {
   })
   commandWin.webContents.send('state', state)
   commandWin.webContents.send('settings', loadSettings())
-  commandWin.webContents.send('command:open')
+  commandWin.webContents.send('command:open', { listen })
   commandWin.show()
   commandWin.focus()
 }
@@ -1482,6 +1511,7 @@ function syncMini() {
 // ---------- global shortcuts (Settings → App → Shortcuts) ----------
 const SHORTCUT_ACTIONS = {
   command: () => toggleCommand(),
+  voice: () => toggleCommand({ listen: true }),
   lyrics: () => setSettings({ lyrics: { overlay: !loadSettings().lyrics.overlay } }),
   fullscreen: () => widgets?.toggleStage(player && screen.getDisplayMatching(player.getBounds())),
   playPause: () => control(state.playback?.isPlaying ? 'pause' : 'play'),
@@ -1595,6 +1625,7 @@ function setSettings(patch) {
   }
   if (next.startWithWindows !== before.startWithWindows) syncLoginItem()
   if (!!next.remote?.enabled !== !!before.remote?.enabled) syncRemote()
+  if (!!next.voice?.wake !== !!before.voice?.wake) syncWake()
   if (JSON.stringify(next.mini) !== JSON.stringify(before.mini)) {
     syncFullscreenWatch()
     syncMini()
@@ -1628,6 +1659,18 @@ function registerIpc() {
   })
   handle('quick:close', () => quickWin?.hide())
   handle('command:close', () => commandWin?.hide())
+  // voice: the speech model, and the music turned down while you speak
+  handle('voice:status', () => voice?.status() ?? null)
+  handle('voice:download', async () => {
+    const s = await voice?.download()
+    syncWake()
+    return s
+  })
+  handle('voice:remove', () => {
+    voice?.setWake(false)
+    return voice?.remove()
+  })
+  handle('voice:hold', (_, on) => (on ? calls?.voiceHold() : calls?.voiceRelease()))
   handle('share', () => copyShare())
   // while a shortcut is being recorded, Glowtide's own are off so the keys reach the page
   handle('shortcuts:recording', (_, on) => {
@@ -2137,7 +2180,7 @@ function scheduleSnapshot() {
   if (process.env.GLOWTIDE_SKY_PROBE)
     setTimeout(async () => {
       // Also the words on the figure and where they sit, to check a word never moves once placed.
-      const js = `(() => { const q = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).transform : null }; const fig = document.querySelector('.fig:not(.gone)'); return { cam: q('.fig:not(.gone)'), drift: q('.sky-drift'), field: q('.starfield'), figures: document.querySelectorAll('.fig').length, edges: fig ? fig.querySelectorAll('.sky-edge:not(.glow)').length : 0, stars: fig ? fig.querySelectorAll('.star').length : 0, words: fig ? [...fig.querySelectorAll('.sky-word')].map((t) => [t.textContent, t.getAttribute('x'), t.getAttribute('y'), t.getAttribute('class')]) : [], focus: fig?.querySelector('.focus')?.style.transform || null, cap: document.querySelector('.sky-caption .cap:not(.leave)')?.textContent || null } })()`
+      const js = `(() => { const q = (s) => { const e = document.querySelector(s); return e ? getComputedStyle(e).transform : null }; const fig = document.querySelector('.fig:not(.gone)'); return { cam: q('.fig:not(.gone)'), drift: q('.sky-drift'), field: q('.starfield'), figures: document.querySelectorAll('.fig').length, edges: fig ? fig.querySelectorAll('.sky-edge:not(.glow)').length : 0, stars: fig ? fig.querySelectorAll('.sky-star').length : 0, words: fig ? [...fig.querySelectorAll('.sky-word')].map((t) => [t.textContent, t.getAttribute('x'), t.getAttribute('y'), t.getAttribute('class')]) : [], focus: fig?.querySelector('.focus')?.style.transform || null, cap: document.querySelector('.sky-caption .cap:not(.leave)')?.textContent || null } })()`
       const out = []
       for (let i = 0; i < 8; i++) {
         out.push(await lyricsWin?.webContents.executeJavaScript(js))
@@ -2429,6 +2472,11 @@ else {
       desktopCapturer.getSources({ types: ['screen'] }).then((sources) => sources[0])
     )
 
+    // only the speech model's own files (voice.js)
+    protocol.handle(VOICE_SCHEME, (req) =>
+      voice ? voice.serve(req) : new Response('Not ready', { status: 503 })
+    )
+
     // only the one background file Glowtide copied, never any other path
     protocol.handle('glowtide-bg', (req) => {
       const u = new URL(req.url)
@@ -2488,8 +2536,29 @@ else {
       dir: app.getPath('userData'),
       getState: () => state,
       settings: loadSettings,
-      control: (action, arg) => control(action, arg)
+      control: (action, arg) => control(action, arg),
+      log: (m) => DEV && console.log(m),
+      // Glowtide listening to you (and its wake word helper) isn't a call
+      ignore: () => [
+        basename(process.execPath).replace(/\.exe$/i, ''),
+        ...(voice?.wakeOn ? ['powershell'] : [])
+      ]
     })
+    voice = createVoice({
+      dir: join(app.getPath('userData'), 'voice'),
+      onStatus: sendVoice,
+      onWake: () => {
+        if (state.source === 'demo' && !DEV) return
+        toggleCommand({ listen: true })
+      },
+      log: (where, m) => logError(where, m),
+      // GLOWTIDE_WAKE_WAV (development only): the wake word listens to this file
+      testWav: (DEV && process.env.GLOWTIDE_WAKE_WAV) || ''
+    })
+    state.voice = voice.status()
+    syncWake()
+    // a microphone plugged in while asleep, or a helper that stopped: start listening afresh
+    powerMonitor.on('resume', () => syncWake({ restart: true }))
     remote = createRemote({
       dir: app.getPath('userData'),
       getState: () => state,
@@ -2522,6 +2591,7 @@ else {
     fullscreen.stop()
     smtc.stop()
     calls?.stop()
+    voice?.stop()
     headphones?.stop()
     remote?.stop()
   })

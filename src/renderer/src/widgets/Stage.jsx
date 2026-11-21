@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Play, Pause, SkipBack, SkipForward, MicVocal, Minus, Plus } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, MicVocal, Minus, Plus, Image } from 'lucide-react'
 import { api, useColours, useGlowtide } from '../lib/store'
+import { useSwap } from '../lib/motion'
 import Visualizer from '../viz/Visualizer'
 import { Wallpaper } from '../lib/Backgrounds'
 import { vizPalette, VIZ_STYLES, THEMES } from '../../../shared/viz.mjs'
@@ -11,8 +12,10 @@ const COLOURS = ['album', ...Object.keys(THEMES)]
 /**
  * Full screen: the cover blurred and drifting as the room light, a sharp copy in the
  * middle, the visualizer orbiting it (Ring) or rising underneath, a ripple on every bass hit.
- * Keys: Space play/pause, arrows previous/next, V next visualizer, C next colours, L next
- * lyrics style, Esc leave. The lyrics button opens the lyrics' own options: on or off, their
+ * Or, with the Album art background, the cover itself filling the screen, sharp, drifting
+ * slowly and crossfading to the next song's.
+ * Keys: Space play/pause, arrows previous/next, V next visualizer, C next colours, B the
+ * background, L next lyrics style, Esc leave. The lyrics button opens the lyrics' own options: on or off, their
  * style and their size, so they can be changed without leaving full screen.
  */
 const LYRIC_IDS = LYRIC_STYLES.map((s) => s[0])
@@ -25,6 +28,9 @@ export default function Stage() {
   const cfg = settings?.widgets.stage
   const colours = useColours(state, settings)
   const playing = !!state?.playback?.isPlaying
+  const cover = state?.track?.cover || ''
+  // the art that's leaving, while the next song's fades in over it
+  const { prev: leavingArt } = useSwap(cover, cover)
 
   // Controls fade away once the mouse rests.
   useEffect(() => {
@@ -53,6 +59,10 @@ export default function Stage() {
       else if (e.key === 'v' || e.key === 'V') {
         const i = VIZ_STYLES.indexOf(s.style)
         api.setSettings({ widgets: { stage: { style: VIZ_STYLES[(i + 1) % VIZ_STYLES.length] } } })
+      } else if (e.key === 'b' || e.key === 'B') {
+        api.setSettings({
+          widgets: { stage: { backdrop: s.backdrop === 'art' ? 'blur' : 'art' } }
+        })
       } else if (e.key === 'c' || e.key === 'C') {
         const i = COLOURS.indexOf(s.theme)
         api.setSettings({ widgets: { stage: { theme: COLOURS[(i + 1) % COLOURS.length] } } })
@@ -84,45 +94,58 @@ export default function Stage() {
     accent: settings.widgets.accent
   })
   const ring = cfg.style === 'ring'
+  const art = cfg.backdrop === 'art' && !!t?.cover
   return (
     <div
-      className={`stage ${idle && !lyricsPanel ? 'idle' : ''}`}
+      className={`stage ${idle && !lyricsPanel ? 'idle' : ''} ${art ? 'art' : ''}`}
       style={{ '--p1': palette[0], '--p2': palette[1], '--p3': palette[2] }}
     >
-      {settings.background?.fullscreen && settings.background.kind !== 'cover' ? (
+      {art ? (
+        <div className="stage-art">
+          {leavingArt?.value && (
+            <img key={`l${leavingArt.value}`} className="leave" src={leavingArt.value} alt="" />
+          )}
+          <img key={t.cover} src={t.cover} alt="" />
+        </div>
+      ) : settings.background?.fullscreen && settings.background.kind !== 'cover' ? (
         <Wallpaper bg={settings.background} colours={colours} className="stage-wall" />
       ) : (
         t?.cover && <img className="stage-bg" src={t.coverSoft || t.cover} alt="" />
       )}
       <div className="stage-shade" />
-      <div className={`stage-viz ${ring ? 'ring' : 'under'}`}>
-        <Visualizer
-          style={cfg.style}
-          palette={palette}
-          density={ring ? 72 : 64}
-          glow
-          fps={settings.widgets.fps}
-          playing={playing}
-          ringInner={0.215}
-          onBeat={onBeat}
-        />
-      </div>
-      <div className={`stage-centre ${ring ? 'ring' : 'under'}`}>
-        {ripples.map((k) => (
-          <span
-            key={k}
-            className="ripple"
-            onAnimationEnd={() => setRipples((r) => r.filter((x) => x !== k))}
+      {/* with the art filling the screen, the visualizer and the cover in the middle step aside */}
+      {!art && (
+        <div className={`stage-viz ${ring ? 'ring' : 'under'}`}>
+          <Visualizer
+            style={cfg.style}
+            palette={palette}
+            density={ring ? 72 : 64}
+            glow
+            fps={settings.widgets.fps}
+            playing={playing}
+            ringInner={0.215}
+            onBeat={onBeat}
           />
-        ))}
-        {t?.cover ? (
-          <div className={`stage-cover ${playing ? 'moving' : ''}`}>
-            <img src={t.cover} alt="" />
-          </div>
-        ) : (
-          <div className="stage-cover empty" />
-        )}
-      </div>
+        </div>
+      )}
+      {!art && (
+        <div className={`stage-centre ${ring ? 'ring' : 'under'}`}>
+          {ripples.map((k) => (
+            <span
+              key={k}
+              className="ripple"
+              onAnimationEnd={() => setRipples((r) => r.filter((x) => x !== k))}
+            />
+          ))}
+          {t?.cover ? (
+            <div className={`stage-cover ${playing ? 'moving' : ''}`}>
+              <img src={t.cover} alt="" />
+            </div>
+          ) : (
+            <div className="stage-cover empty" />
+          )}
+        </div>
+      )}
       {t && (
         <div className="stage-title">
           <div className="st-name">{t.name}</div>
@@ -130,7 +153,8 @@ export default function Stage() {
         </div>
       )}
       <div className="stage-hint">
-        V visualizer · C colours · L lyrics · Esc leave · {cfg.style} · {cfg.theme}
+        V visualizer · C colours · B background · L lyrics · Esc leave ·{' '}
+        {art ? 'album art' : `${cfg.style} · ${cfg.theme}`}
       </div>
       {lyricsPanel && <StageLyrics settings={settings} onClose={() => setLyricsPanel(false)} />}
       <div className="stage-controls">
@@ -146,6 +170,17 @@ export default function Stage() {
         </button>
         <button aria-label="Next" onClick={() => api.control('next')}>
           <SkipForward size={22} />
+        </button>
+        <button
+          className={`lyr-btn ${art ? 'on' : ''}`}
+          aria-label="Album art background"
+          aria-pressed={art}
+          title="Album art background (B)"
+          onClick={() =>
+            api.setSettings({ widgets: { stage: { backdrop: art ? 'blur' : 'art' } } })
+          }
+        >
+          <Image size={20} />
         </button>
         <button
           className={`lyr-btn ${lyricsPanel ? 'on' : ''}`}

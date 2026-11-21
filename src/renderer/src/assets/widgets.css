@@ -46,6 +46,54 @@ html[data-route='stage'] body {
   inset: 0;
   background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.55));
 }
+/* The album art background: the cover itself, sharp, filling the screen (cropped to fit),
+   drifting and zooming very slowly; the next song's fades in over it. Only transform and
+   opacity move, so it costs the GPU a little and the CPU nothing. */
+.stage-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+.stage-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  will-change: transform, opacity;
+  animation:
+    art-in 1.4s ease both,
+    art-drift 46s ease-in-out infinite alternate;
+}
+.stage-art img.leave {
+  z-index: -1;
+  animation: art-drift 46s ease-in-out infinite alternate;
+}
+@keyframes art-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes art-drift {
+  from {
+    transform: scale(1.04) translate(-0.8%, 0.6%);
+  }
+  to {
+    transform: scale(1.12) translate(0.8%, -0.8%);
+  }
+}
+/* over the art, a soft vignette and a darker foot, so the title, the controls and the
+   lyrics stay readable on any cover */
+.stage.art .stage-shade {
+  background:
+    linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0) 38%),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0) 22%),
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.45));
+}
+.still .stage-art img {
+  animation: art-in 1.4s ease both;
+}
 .stage-viz {
   position: absolute;
   inset: 0;
@@ -190,13 +238,30 @@ html[data-route='stage'] body {
     transform: translate(16px, 8px) rotate(1.4deg) scale(1.01);
   }
 }
-/* one figure; the camera glides toward the star being sung (its transform) */
+/* one figure; the camera glides toward the star being sung (its transform), and the
+   figure turns a few degrees in depth, slowly (its rotate, seen through the perspective) */
+.sky-drift {
+  perspective: 1500px;
+}
 .fig {
   position: absolute;
   inset: 0;
-  will-change: transform;
+  will-change: transform, rotate;
   transition: transform 1.8s cubic-bezier(0.25, 0.8, 0.25, 1);
-  animation: fig-arrive 0.9s ease-out;
+  animation:
+    fig-tilt 19s ease-in-out infinite alternate,
+    fig-arrive 0.9s ease-out;
+}
+@keyframes fig-tilt {
+  0% {
+    rotate: 0.5 1 0 -9deg;
+  }
+  50% {
+    rotate: 0.9 0.3 0 5deg;
+  }
+  100% {
+    rotate: 0.4 1 0 8deg;
+  }
 }
 @keyframes fig-arrive {
   from {
@@ -206,7 +271,9 @@ html[data-route='stage'] body {
 /* a finished figure fades as the next begins */
 .fig.gone {
   pointer-events: none;
-  animation: fig-gone 1.6s ease-in-out forwards;
+  animation:
+    fig-tilt 19s ease-in-out infinite alternate,
+    fig-gone 1.6s ease-in-out forwards;
 }
 @keyframes fig-gone {
   to {
@@ -244,9 +311,19 @@ html[data-route='stage'] body {
 .focus svg {
   scale: calc(0.94 + var(--pulse, 0.3) * 0.16);
 }
-/* Reduce motion: no shooting star */
+/* Reduce motion: no shooting star, no twinkling, swaying or turning */
 .still .meteor {
   display: none;
+}
+.still .sky-star i::after,
+.still .sky-word span {
+  animation-name: none;
+}
+.still .fig {
+  animation: fig-arrive 0.9s ease-out;
+}
+.still .fig.gone {
+  animation: fig-gone 1.6s ease-in-out forwards;
 }
 /* a completed figure glows a little brighter for a moment */
 .fig.complete .sky-edge:not(.glow) {
@@ -435,12 +512,19 @@ html[data-route='stage'] body {
   text-align: center;
   text-wrap: balance;
   line-height: 1.12;
-  font-weight: 800;
+  font-weight: 900;
   letter-spacing: -0.02em;
-  color: color-mix(in srgb, var(--lyr) 28%, #ffffff);
+  color: color-mix(in srgb, var(--lyr) 22%, #ffffff);
+  -webkit-text-stroke: 0.035em rgba(8, 7, 14, 0.45);
+  paint-order: stroke fill;
   text-shadow:
+    0 0 0.08em rgba(6, 5, 12, 0.65),
+    0 0.025em 0.02em color-mix(in srgb, var(--lyr) 40%, #4a4458),
+    0 0.05em 0.03em color-mix(in srgb, var(--lyr) 30%, #2c2836),
+    0 0.075em 0.045em rgba(26, 23, 32, 0.9),
     0 0 18px color-mix(in srgb, var(--lyr) 50%, transparent),
-    0 6px 22px rgba(0, 0, 0, 0.7);
+    0 0.2em 0.5em rgba(0, 0, 0, 0.6),
+    0 6px 26px rgba(0, 0, 0, 0.7);
   animation:
     lyric-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1),
     lyric-float 4.5s ease-in-out 0.5s infinite alternate;

@@ -28,3 +28,20 @@ Lyrics fetched at run time from https://github.com/amll-dev/amll-ttml-db, releas
 ## LRCLIB (synced lyrics)
 
 Lyrics fetched at run time from https://lrclib.net.
+
+## Voice (speech to text in the command bar)
+
+Bundled in the app:
+
+- transformers.js (`@huggingface/transformers`), © Hugging Face, Apache License 2.0:
+  https://github.com/huggingface/transformers.js
+- `@huggingface/tokenizers`, © Hugging Face, Apache License 2.0.
+- `@huggingface/jinja`, © Hugging Face, MIT License.
+- ONNX Runtime Web (`onnxruntime-web`, `onnxruntime-common`), © Microsoft Corporation, MIT
+  License: https://github.com/microsoft/onnxruntime
+
+Downloaded at run time, when voice is first used (not part of this repository or the installer):
+
+- Whisper tiny.en, © OpenAI, MIT License (https://github.com/openai/whisper), as converted to
+  ONNX by onnx-community and published under the Apache License 2.0:
+  https://huggingface.co/onnx-community/whisper-tiny.en

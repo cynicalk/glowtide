@@ -2,6 +2,7 @@
 
 export const SHORTCUTS = [
   { id: 'command', label: 'Command bar', def: 'CommandOrControl+Alt+G' },
+  { id: 'voice', label: 'Speak a command', def: 'CommandOrControl+Alt+V' },
   { id: 'lyrics', label: 'Desktop lyrics on or off', def: 'CommandOrControl+Alt+L' },
   { id: 'fullscreen', label: 'Full-screen view', def: 'CommandOrControl+Alt+F' },
   { id: 'playPause', label: 'Play or pause', def: '' },

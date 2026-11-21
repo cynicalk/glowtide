@@ -1,14 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, CornerDownLeft, ListPlus, Play, Speaker, Sparkles } from 'lucide-react'
+import {
+  Search,
+  CornerDownLeft,
+  ListPlus,
+  Loader2,
+  Mic,
+  Play,
+  Speaker,
+  Sparkles,
+  Square
+} from 'lucide-react'
 import { api, useGlowtide } from '../lib/store'
 import { parseCommand } from '../../../shared/commands.mjs'
+import { MODEL_BYTES, cleanTranscript, voiceToCommand } from '../../../shared/voice.mjs'
+import { listen, transcribe, warmUp } from '../lib/voice'
 
 const REPEAT_NEXT = { off: 'context', context: 'track', track: 'off' }
+const MB = Math.round(MODEL_BYTES / 1e6)
+
+function micError(e) {
+  if (e?.name === 'NotAllowedError')
+    return "Windows isn't letting Glowtide use the microphone: Settings → Privacy & security → Microphone."
+  if (e?.name === 'NotFoundError') return 'No microphone found.'
+  return `The microphone didn't start (${e?.message || e}).`
+}
 
 /**
  * The command bar (Ctrl+Alt+G): type a command ("next", "volume 40", "seek 1:30") or a
  * song. Spotify searches as you type; YouTube Music on Enter (each search spends daily
  * quota). ↑ ↓ choose, Enter runs, Esc closes.
+ *
+ * Or say it: the mic button, Ctrl+Alt+V or "Hey Glowtide" listens until you stop talking;
+ * then a command runs at once, and "play …" / "queue …" plays or queues the first song found.
  */
 export default function CommandBar() {
   const { state, settings } = useGlowtide()
@@ -19,21 +42,103 @@ export default function CommandBar() {
   const [note, setNote] = useState('')
   const input = useRef(null)
   const list = useRef(null)
+  // voice: 'idle' | 'listening' (waiting for you to talk) | 'hearing' | 'thinking' | 'model'
+  const [mic, setMic] = useState('idle')
+  const [level, setLevel] = useState(0)
+  const [heard, setHeard] = useState('') // what's understood so far, while you talk
+  const listening = useRef(null) // the AbortController while listening
+  const auto = useRef(null) // { text, at }: run this line once its results are in
+  const model = state?.voice
 
-  // each opening starts clean
+  const stopListening = () => {
+    listening.current?.abort()
+    listening.current = null
+  }
+
+  async function startListening(modelReady = model?.ready) {
+    if (listening.current) return
+    if (!modelReady) return setMic('model')
+    const ac = new AbortController()
+    listening.current = ac
+    auto.current = null
+    setNote('')
+    setHeard('')
+    setDevices(null)
+    setMic('listening')
+    warmUp()
+    api.voiceHold(true) // the music down while you speak
+    let samples = null
+    let problem = ''
+    try {
+      samples = await listen({
+        signal: ac.signal,
+        onLevel: setLevel,
+        onSpeech: () => setMic('hearing'),
+        onPartial: (t) => {
+          const c = cleanTranscript(t)
+          if (c && !ac.signal.aborted) setHeard(c)
+        }
+      })
+    } catch (e) {
+      problem = micError(e)
+    }
+    let said = ''
+    if (samples && !ac.signal.aborted) {
+      setMic('thinking')
+      try {
+        said = await transcribe(samples)
+      } catch (e) {
+        problem = `Couldn't understand it (${e.message}).`
+      }
+    }
+    await api.voiceHold(false)
+    if (listening.current === ac) listening.current = null
+    setMic('idle')
+    setLevel(0)
+    setHeard('')
+    if (ac.signal.aborted) return
+    if (problem) return setNote(problem)
+    const v = voiceToCommand(said)
+    if (!v.text)
+      return setNote(
+        samples ? "Didn't catch that. Try again, or type it." : "Didn't hear anything."
+      )
+    setText(v.text)
+    setSel(0)
+    setFound(null)
+    if (v.autorun) auto.current = { text: v.text, at: Date.now() }
+  }
+  const listenRef = useRef(startListening)
+  useEffect(() => {
+    listenRef.current = startListening
+  })
+
+  // each opening starts clean (and listening, when it was opened to listen)
   useEffect(
     () =>
-      api.onCommandOpen(() => {
+      api.onCommandOpen((o) => {
+        stopListening()
+        auto.current = null
         setText('')
         setFound(null)
         setDevices(null)
         setNote('')
         setSel(0)
-        setTimeout(() => input.current?.focus(), 30)
+        setMic('idle')
+        setTimeout(() => {
+          input.current?.focus()
+          if (o?.listen) listenRef.current()
+        }, 30)
       }),
     []
   )
-
+  useEffect(() => api.onCommandListen(() => listenRef.current()), [])
+  // hidden (Esc, or clicking elsewhere): the microphone is let go at once
+  useEffect(() => {
+    const vis = () => document.hidden && stopListening()
+    document.addEventListener('visibilitychange', vis)
+    return () => document.removeEventListener('visibilitychange', vis)
+  }, [])
   const parsed = useMemo(() => parseCommand(text), [text])
   const source = state?.source
   const query = parsed.query
@@ -121,6 +226,37 @@ export default function CommandBar() {
     return out
   }, [devices, parsed, query, source, found])
 
+  // something said that runs by itself: a command at once, a song once it's been found
+  useEffect(() => {
+    const a = auto.current
+    if (!a || a.text !== text) return
+    if (Date.now() - a.at > 10000) return void (auto.current = null)
+    const first = rows[0]
+    let row = null
+    if (parsed.command && !parsed.query) {
+      if (first?.kind === 'cmd' && !first.invalid) row = first
+      else auto.current = null
+    } else if (!parsed.query || !first) return
+    else if (first.kind === 'ytsearch') {
+      // YouTube is searched once (each search spends quota); its results come back as songs
+      if (a.searching) return
+      row = first
+    } else if (found?.q === parsed.query) {
+      row = rows.find((r) => r.kind === 'song') || null
+      if (!row) auto.current = null // nothing found: the list says so
+    }
+    if (!row) return
+    // run after this render, as a click would
+    const t = setTimeout(() => {
+      if (auto.current !== a) return
+      if (row.kind === 'ytsearch') a.searching = true
+      else auto.current = null
+      run(row)
+    })
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, text, found])
+
   // keep the chosen row in range and in view
   const chosen = Math.min(sel, Math.max(0, rows.length - 1))
   useEffect(() => {
@@ -128,7 +264,10 @@ export default function CommandBar() {
   }, [chosen])
 
   const key = (e) => {
-    if (e.key === 'Escape') return close()
+    if (e.key === 'Escape') {
+      stopListening()
+      return close()
+    }
     if (e.key === 'ArrowDown') setSel((chosen + 1) % Math.max(1, rows.length))
     else if (e.key === 'ArrowUp') setSel((chosen - 1 + rows.length) % Math.max(1, rows.length))
     else if (e.key === 'Enter') run(rows[chosen])
@@ -137,6 +276,7 @@ export default function CommandBar() {
   }
 
   const searchable = source === 'spotify' || source === 'youtube'
+  const live = mic === 'listening' || mic === 'hearing'
   return (
     <div className="cmd">
       <div className="cmd-field">
@@ -147,11 +287,14 @@ export default function CommandBar() {
           value={text}
           spellCheck={false}
           placeholder={
-            searchable
-              ? 'A song, or a command: next, volume 40, seek 1:30, queue…'
-              : 'A command: next, pause, share, lyrics, glow…'
+            live
+              ? 'Listening…'
+              : searchable
+                ? 'A song, or a command: next, volume 40, seek 1:30, queue…'
+                : 'A command: next, pause, share, lyrics, glow…'
           }
           onChange={(e) => {
+            auto.current = null
             setText(e.target.value)
             setSel(0)
             setDevices(null)
@@ -159,7 +302,62 @@ export default function CommandBar() {
           }}
           onKeyDown={key}
         />
+        <button
+          className={`cmd-mic ${mic}`}
+          style={{ '--lv': level }}
+          title={live || mic === 'thinking' ? 'Stop listening' : 'Say it (Ctrl+Alt+V)'}
+          aria-label={live || mic === 'thinking' ? 'Stop listening' : 'Say a command'}
+          onClick={() => (listening.current ? stopListening() : startListening())}
+        >
+          {mic === 'thinking' ? (
+            <Loader2 size={16} className="spin" />
+          ) : live ? (
+            <Square size={12} />
+          ) : (
+            <Mic size={16} />
+          )}
+        </button>
       </div>
+      {(live || mic === 'thinking') && (
+        <div className="cmd-heard">
+          {heard
+            ? `“${heard}”`
+            : mic === 'thinking'
+              ? 'Understanding…'
+              : 'Listening… say a song or a command'}
+        </div>
+      )}
+      {mic === 'model' && (
+        <div className="cmd-model">
+          <p>
+            Speaking a command needs Glowtide&apos;s speech model ({MB} MB), downloaded once. It
+            runs on this PC: nothing you say leaves it.
+          </p>
+          {model?.downloading ? (
+            <div className="cmd-progress">
+              <span style={{ width: `${model.percent}%` }} />
+              <em>Downloading… {model.percent}%</em>
+            </div>
+          ) : (
+            <button
+              className="primary small"
+              onClick={async () => {
+                const s = await api.voiceDownload()
+                // downloaded: listen, as was asked
+                if (s?.ready) {
+                  setMic('idle')
+                  startListening(true)
+                }
+              }}
+            >
+              Download the speech model
+            </button>
+          )}
+          {model?.error && !model.downloading && (
+            <p className="cmd-err">The download didn&apos;t finish: {model.error}</p>
+          )}
+        </div>
+      )}
       {note && <div className="cmd-note">{note}</div>}
       <div className="cmd-list" ref={list}>
         {rows.map((r, i) => (
@@ -211,7 +409,7 @@ export default function CommandBar() {
         )}
       </div>
       <div className="cmd-foot">
-        ↑ ↓ choose · Enter run · Esc close · “queue …” adds to the queue
+        ↑ ↓ choose · Enter run · Esc close · “queue …” adds to the queue · Ctrl+Alt+V speak
       </div>
     </div>
   )

@@ -1191,30 +1191,65 @@ input[type='range']:hover::-webkit-slider-thumb,
 }
 .sky-edge {
   fill: none;
-  stroke: color-mix(in srgb, var(--sec) 65%, #ffffff);
-  stroke-width: 1.8;
+  stroke: color-mix(in srgb, var(--sec) 70%, #ffffff);
+  stroke-width: 3.2;
   stroke-linecap: round;
-  opacity: 0.85;
+  stroke-linejoin: round;
+  opacity: 1;
   /* each line draws itself out from the star sung before */
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: edge-draw 0.6s cubic-bezier(0.3, 0, 0.2, 1) var(--d, 0s) forwards;
 }
+/* the bright core down the middle of each line, softly blended into it */
+.sky-edge.core {
+  stroke: color-mix(in srgb, var(--sec) 15%, #ffffff);
+  stroke-width: 1.6;
+  opacity: 0.75;
+}
+/* a wider, fainter stroke just outside the line, so its edge fades rather than stops */
+.sky-edge.feather {
+  stroke: color-mix(in srgb, var(--sec) 75%, #ffffff);
+  stroke-width: 6.5;
+  opacity: 0.28;
+}
 /* the soft light along each line: a wide faint stroke, cheaper than a blur filter */
 .sky-edge.glow {
   stroke: var(--sec);
-  stroke-width: 7;
-  opacity: 0.22;
+  stroke-width: 15;
+  opacity: 0.3;
+}
+/* the glow's own layer breathes with the beat (only its opacity: nothing repaints) */
+.sky-glow {
+  will-change: opacity;
+  opacity: calc(0.7 + var(--pulse, 0.3) * 0.6);
 }
 @keyframes edge-draw {
   to {
     stroke-dashoffset: 0;
   }
 }
-.star .core {
-  fill: var(--star, #fff);
-  transform-box: fill-box;
-  transform-origin: center;
+/* A star: a small sphere, lit from the upper left (a white-hot centre, its own colour,
+   then a soft edge), with a halo in the lyric colour. It pops in when its word is sung,
+   then twinkles at its own pace; the halo swells with the beat. --r is its size in sky
+   units. The star's element only places it; the pop, the twinkle and the halo are on
+   three separate layers so their animations never fight. */
+.sky-star {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  z-index: 1;
+}
+.sky-star i {
+  position: absolute;
+  --s: calc(var(--r, 3) * 3.4 * var(--u));
+  width: var(--s);
+  height: var(--s);
+  left: calc(var(--s) / -2);
+  top: calc(var(--s) / -2);
+  will-change: transform, opacity;
   animation: star-pop 0.7s cubic-bezier(0.3, 1.6, 0.5, 1) var(--d, 0s) both;
 }
 @keyframes star-pop {
@@ -1223,13 +1258,59 @@ input[type='range']:hover::-webkit-slider-thumb,
     transform: scale(0.1);
   }
 }
-.star .halo {
-  fill: color-mix(in srgb, var(--star, #fff) 55%, var(--lyr));
-  opacity: 0.18;
-  animation: fadein 0.7s var(--d, 0s) both;
+.sky-star i::before,
+.sky-star i::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
 }
-.star.cur .halo {
-  opacity: 0.34;
+/* the halo */
+.sky-star i::before {
+  inset: -180%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--star, #fff) 50%, var(--lyr)) 0%,
+    color-mix(in srgb, var(--lyr) 22%, transparent) 30%,
+    transparent 68%
+  );
+  opacity: calc(0.3 + var(--pulse, 0.3) * 0.35);
+  scale: calc(0.9 + var(--pulse, 0.3) * 0.25);
+  will-change: opacity, scale;
+}
+.sky-star.cur i::before {
+  opacity: calc(0.55 + var(--pulse, 0.3) * 0.4);
+  scale: calc(1.15 + var(--pulse, 0.3) * 0.3);
+}
+/* the sphere */
+.sky-star i::after {
+  inset: 0;
+  background: radial-gradient(
+    circle at 38% 36%,
+    #fff 0 18%,
+    color-mix(in srgb, var(--star, #fff) 55%, #fff) 34%,
+    var(--star, #fff) 58%,
+    color-mix(in srgb, var(--star, #fff) 70%, #1b1830) 82%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 calc(var(--s) * 0.45) color-mix(in srgb, var(--star, #fff) 80%, transparent),
+    0 0 calc(var(--s) * 1.1) color-mix(in srgb, var(--lyr) 45%, transparent);
+  will-change: opacity, scale;
+  animation: star-twinkle var(--tw, 3s) ease-in-out var(--tp, 0s) infinite alternate;
+}
+@keyframes star-twinkle {
+  0% {
+    opacity: 1;
+    scale: 1;
+  }
+  55% {
+    opacity: 0.86;
+    scale: 0.9;
+  }
+  100% {
+    opacity: 1;
+    scale: 1.12;
+  }
 }
 /* the words that built the figure: the one being sung is brightest, older lines recede */
 /* A word lands big and bright with a glow in the lyric colour, then settles to its resting
@@ -1245,27 +1326,46 @@ input[type='range']:hover::-webkit-slider-thumb,
   --k: 0.69;
   --o: 0.95;
 }
+/* Heavy, with a dark outline drawn under the letters (so they read on any sky or picture)
+   and a few stacked shadows below that make them look raised off the sky. */
 .sky-word span {
   position: absolute;
   left: 0;
   bottom: -0.24em; /* the point is the text's baseline, as it was in the SVG */
   font-size: calc(var(--wpx) / 0.69 * var(--u));
   line-height: calc(1 * var(--space, 1));
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.01em;
   white-space: nowrap;
-  color: color-mix(in srgb, var(--sec) 35%, #ffffff);
+  color: color-mix(in srgb, var(--sec) 22%, #ffffff);
+  -webkit-text-stroke: 0.045em rgba(8, 7, 14, 0.5);
+  paint-order: stroke fill;
   text-shadow:
-    0 2px 3px rgba(0, 0, 0, 0.45),
-    0 2px 18px rgba(0, 0, 0, 0.55);
+    0 0 0.1em rgba(6, 5, 12, 0.7),
+    0 0.03em 0.025em color-mix(in srgb, var(--lyr) 40%, #4a4458),
+    0 0.06em 0.035em color-mix(in srgb, var(--lyr) 30%, #2c2836),
+    0 0.09em 0.05em rgba(26, 23, 32, 0.9),
+    0 0.16em 0.3em rgba(0, 0, 0, 0.55),
+    0 0.35em 1.2em rgba(0, 0, 0, 0.45);
   scale: var(--k);
   opacity: var(--o);
-  will-change: scale, opacity;
+  will-change: scale, opacity, rotate;
   transition:
     scale 1.1s cubic-bezier(0.22, 1, 0.36, 1),
     opacity 1.2s ease,
     color 0.8s ease;
-  animation: word-land 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  animation:
+    word-land 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+    word-sway var(--sw, 5s) ease-in-out var(--sp, 0s) infinite alternate;
+}
+/* each word sways a little on its own phase, so the figure is never quite still */
+@keyframes word-sway {
+  from {
+    rotate: -1.6deg;
+  }
+  to {
+    rotate: 1.6deg;
+  }
 }
 /* the glow: a copy of the word behind it, faded in only while it is sung */
 .sky-word span::before {
@@ -1273,6 +1373,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   position: absolute;
   inset: 0;
   color: transparent;
+  -webkit-text-stroke: 0;
   text-shadow:
     0 0 12px var(--lyr),
     0 0 30px var(--lyr),
@@ -3216,6 +3317,107 @@ html[data-route='command'] body {
   color: var(--text);
   font: inherit;
   font-size: 16px;
+}
+/* speaking a command: the button rings with how loud you are */
+.cmd-mic {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin-right: -6px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.08s linear;
+}
+.cmd-mic:hover,
+.cmd-mic:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+.cmd-mic.listening,
+.cmd-mic.hearing {
+  background: rgba(255, 120, 150, 0.18);
+  color: #ffb4c6;
+  box-shadow: 0 0 0 calc(2px + var(--lv, 0) * 7px) rgba(255, 120, 150, 0.22);
+}
+.cmd-mic.listening {
+  animation: cmd-mic-wait 1.6s ease-in-out infinite;
+}
+.cmd-mic.thinking {
+  color: var(--text);
+}
+@keyframes cmd-mic-wait {
+  50% {
+    background: rgba(255, 120, 150, 0.3);
+  }
+}
+.cmd-mic .spin {
+  animation: cmd-spin 0.9s linear infinite;
+}
+@keyframes cmd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.cmd-heard {
+  padding: 4px 12px;
+  font-size: 14px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmd-model {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.cmd-model p {
+  margin: 0;
+  color: var(--muted);
+}
+.cmd-model .cmd-err {
+  color: #ffd7b0;
+}
+.cmd-progress {
+  position: relative;
+  width: 100%;
+  height: 22px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+.cmd-progress span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(255, 120, 150, 0.35);
+  transition: width 0.3s ease;
+}
+.cmd-progress em {
+  position: relative;
+  display: block;
+  line-height: 22px;
+  padding: 0 8px;
+  font-style: normal;
+  font-size: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmd-mic.listening,
+  .cmd-mic .spin {
+    animation: none;
+  }
 }
 .cmd-note {
   padding: 6px 12px;

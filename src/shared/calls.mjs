@@ -58,9 +58,11 @@ export function isCallApp(id) {
   return CALL_PACKAGES.test(String(id))
 }
 
-/** The mic users that count: call apps only, or any app ('any'). */
-export function callers(users, mode = 'calls') {
-  return users.filter((id) => (mode === 'any' ? true : isCallApp(id)))
+/** The mic users that count: call apps only, or any app ('any'). ignore: process names
+ * (lower case, no .exe) that never count, such as Glowtide's own voice listening. */
+export function callers(users, mode = 'calls', ignore = []) {
+  const skip = new Set(ignore.map((n) => String(n).toLowerCase()))
+  return users.filter((id) => !skip.has(exeOf(id)) && (mode === 'any' ? true : isCallApp(id)))
 }
 
 // The processes behind the apps Glowtide follows, by their label (media.mjs appLabel).

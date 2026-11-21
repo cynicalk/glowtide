@@ -42,9 +42,11 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 
 - **Full screen** (Ctrl+Alt+F): the cover blurred and drifting as the room light, a sharp
   copy in the middle with the visualizer orbiting it, and a ripple on every bass hit.
-  Six visualizer styles (Bars, Mirror, Blocks, Ring, Waveform, Aurora). Space, the arrows,
-  V (visualizer), C (colours) and Esc work. It caps its frame rate (30/60) and drops to
-  20 fps when nothing is playing.
+  Six visualizer styles (Bars, Mirror, Blocks, Ring, Waveform, Aurora). Or the **Album art**
+  background (the picture button, B, or Settings → Full screen): the cover itself fills the
+  screen, sharp, drifting slowly and crossfading to the next song's. Space, the arrows,
+  V (visualizer), C (colours), B (background) and Esc work. It caps its frame rate (30/60)
+  and drops to 20 fps when nothing is playing.
 - **Light on the computer**: the edge glow and the lyrics draw at 30 fps by default (60 is an option in Settings → Lyrics overlay). Everything that moves continuously is moved by the GPU compositor rather than repainted, and the overlay stops all work while it is hidden. Paused, Glowtide uses almost nothing.
 - **Maximise**: the title-bar button or a double-click gives a roomy full-window player; F11 goes full screen.
 - **Player window**: three parts. On the left, where you go: Now playing, Library, Search,
@@ -62,6 +64,15 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 - **Command bar** (Ctrl+Alt+G): type a song (Spotify as you type, YouTube Music on Enter) or a
   command: next, pause, shuffle, repeat, like, volume 40, seek 1:30, device, share, lyrics,
   glow, full screen, mini. "queue …" adds a song to the queue.
+- **Speak to it** (the command bar's microphone, or Ctrl+Alt+V): say "next song", "volume
+  forty", "go to one minute thirty", "play Blinding Lights by The Weeknd" or "add Levitating to
+  the queue". A command runs at once, and play/queue takes the first song found. Anything else
+  is searched and waits for you to pick. The music drops while you speak. Speech is understood
+  on the PC by Whisper (tiny, English), downloaded once (44 MB) from Hugging Face at a pinned
+  revision and checked against its SHA-256 hashes. Nothing you say is saved or sent anywhere.
+- **"Hey Glowtide"** (Settings → App → Voice, off by default) opens the command bar already
+  listening. Windows' own speech recogniser listens for that one phrase, offline. While it's
+  on, Windows shows its microphone icon.
 - **Shortcuts**: Settings → App → Shortcuts records a global shortcut for the command bar,
   desktop lyrics, full screen, play/pause, next, previous, like and the mini player (ones another
   app already holds are flagged). In the player: Space, Ctrl+← →, Shift+← → (15 s), [ ] (lyrics
@@ -159,12 +170,14 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
     after a long gap, and the next line waiting below.
   - **Constellation**: the words build a real constellation. Each sung word brings in its
     own star, sitting beside it, and the line to it draws itself from the star before.
-    When the verse ends the figure completes with a shooting star, and the next verse
+    When the line ends the figure completes with a shooting star, and the next line
     fades in a new constellation. Well-known
-    figures that fit the verse come first (Orion, the Big Dipper, Cassiopeia, the zodiac…),
-    and a chorus returns to its own constellation each time. Stars have their real
-    brightness and colour (orange Betelgeuse, blue-white Rigel), under a faint Milky Way,
-    and pulse with the music. All 88 are included, drawn from real sky coordinates, with
+    figures that fit the line come first (Orion, the Big Dipper, Cassiopeia, the zodiac…),
+    and a line that comes back returns to its own constellation. Stars are small glowing
+    spheres with their real brightness and colour (orange Betelgeuse, blue-white Rigel),
+    each twinkling at its own pace, under a faint Milky Way. The lines are soft tubes of
+    light whose glow breathes with the beat; the words are bold and raised, sway a little,
+    and the figure turns slowly in depth. All 88 are included, drawn from real sky coordinates, with
     the name, meaning and a short note in the corner and the whole line as a caption.
 - **Overlay options**:
   - Backdrop: none, dim, or blurred album art with film grain.
@@ -227,6 +240,10 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   text to read along, scrolling with the song (a guess from how far in it is, labelled so). YouTube lyrics are matched by
   title, so a music video with an intro may need the ±0.25 s nudge.
 - **No lock screen.** Windows doesn't let apps draw there.
+- **Voice is English only.** Whisper tiny gets most commands right but can mishear unusual
+  song or artist names, so play by voice may pick a near match. Over loud speakers, use
+  headphones or speak close to the mic. "Hey Glowtide" needs Windows' English speech
+  recogniser, which comes with English (US or UK) language packs.
 
 ## Setup
 
@@ -303,6 +320,10 @@ or `npx electron .` after `npm run build`); a packaged copy ignores every one of
   contains the demo's pretend desktop.
 - `$env:GLOWTIDE_COMMAND=1` (with `GLOWTIDE_SNAPSHOT`) opens the command bar and keeps it open to
   photograph it; `GLOWTIDE_PROBE_IN` also takes `command` and `mini`.
+- Voice without a microphone: start Electron with
+  `--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<16 kHz .wav>` and the
+  command bar hears that file. `$env:GLOWTIDE_WAKE_WAV=<.wav>` makes "Hey Glowtide" listen to a
+  file instead of the microphone.
 - `$env:GLOWTIDE_PLAIN_TEST=1` (with `GLOWTIDE_DEMO`) serves the demo's lyrics untimed, to see the
   read-along view.
 - `$env:GLOWTIDE_PROBE_JS="<js>"` (with `GLOWTIDE_SNAPSHOT`) runs in the lyrics overlay, or in the
@@ -342,4 +363,7 @@ Music are trademarks of their owners, and Glowtide is not affiliated with them.
 
 Constellation figures: [d3-celestial](https://github.com/ofrohn/d3-celestial) © 2015 Olaf
 Frohn (BSD 3-Clause). Word-timed lyrics: [AMLL TTML DB](https://github.com/amll-dev/amll-ttml-db)
-(CC0). Synced lyrics: [LRCLIB](https://lrclib.net). See THIRD_PARTY_NOTICES.md.
+(CC0). Synced lyrics: [LRCLIB](https://lrclib.net). Speech: OpenAI's Whisper (MIT) as converted
+by [onnx-community/whisper-tiny.en](https://huggingface.co/onnx-community/whisper-tiny.en)
+(Apache-2.0), run by [transformers.js](https://github.com/huggingface/transformers.js) and ONNX
+Runtime Web (Apache-2.0, MIT). See THIRD_PARTY_NOTICES.md.

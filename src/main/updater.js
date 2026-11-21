@@ -69,10 +69,18 @@ export function createUpdater({ onChange, onError, automatic, devFeed }) {
 
   let timer = null
   let first = null
+  // A check that never hears back (a stalled connection) would leave "Check now" greyed out
+  // until a restart: after a minute with no answer it counts as failed, so it can be tried again.
+  let stall = null
+  const CHECK_TIMEOUT_MS = 60 * 1000
   function check() {
     if (state.status === 'checking' || state.status === 'downloading' || state.status === 'ready')
       return
     autoUpdater.checkForUpdates().catch(() => {}) // reported through the 'error' event
+    clearTimeout(stall)
+    stall = setTimeout(() => {
+      if (state.status === 'checking') set({ status: 'error' })
+    }, CHECK_TIMEOUT_MS)
   }
 
   return {
@@ -91,6 +99,7 @@ export function createUpdater({ onChange, onError, automatic, devFeed }) {
       timer = setInterval(() => automatic() && check(), EVERY_MS)
     },
     stop() {
+      clearTimeout(stall)
       clearTimeout(first)
       clearInterval(timer)
       timer = first = null

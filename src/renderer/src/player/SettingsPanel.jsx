@@ -787,6 +787,7 @@ export default function SettingsPanel({ state, settings, onClose }) {
       {tab === 'app' && (
         <Shortcuts settings={settings} set={set} taken={state.shortcutsTaken || []} />
       )}
+      {tab === 'app' && <VoiceSettings settings={settings} set={set} voice={state.voice} />}
       {tab === 'app' && <CallSettings settings={settings} set={set} />}
       {tab === 'app' && <RemoteSettings settings={settings} set={set} />}
       {tab === 'app' && <BackupSettings />}
@@ -1060,8 +1061,19 @@ function WidgetSettings({ settings, set }) {
         </div>
         <p className="fine">
           Ctrl+Alt+F from anywhere. Space plays or pauses, the arrows skip, V changes the
-          visualizer, C the colours, Esc leaves.
+          visualizer, C the colours, B the background, Esc leaves.
         </p>
+        <div className="srow">
+          <span>Background</span>
+          <Seg
+            value={w.stage?.backdrop === 'art' ? 'art' : 'blur'}
+            options={[
+              ['blur', 'Blurred, with visualizer'],
+              ['art', 'Album art']
+            ]}
+            onChange={(x) => set({ widgets: { stage: { backdrop: x } } })}
+          />
+        </div>
         <div className="srow">
           <span>Frame rate</span>
           <Seg
@@ -1100,6 +1112,94 @@ export function OverrideWheels({ c, g, set }) {
         />
       )}
     </div>
+  )
+}
+
+/** Speaking to the command bar: the wake word, and the speech model it needs. */
+function VoiceSettings({ settings, set, voice }) {
+  const wake = !!settings.voice?.wake
+  const [sure, setSure] = useState(false)
+  const mb = Math.round((voice?.bytes || 0) / 1e6)
+  const turn = async (v) => {
+    if (v && !voice?.ready) {
+      const s = await api.voiceDownload() // the wake word needs the model to understand you
+      if (!s?.ready) return
+    }
+    set({ voice: { wake: v } })
+  }
+  return (
+    <Fold k="voice">
+      <div className="sh">
+        <h3>Voice</h3>
+        <Toggle label='Listen for "Hey Glowtide"' on={wake} onChange={turn} />
+      </div>
+      <p className="fine">
+        Say a song or a command to the command bar: press its microphone or Ctrl+Alt+V, then
+        &ldquo;next song&rdquo;, &ldquo;volume forty&rdquo;, &ldquo;play Blinding Lights&rdquo; or
+        &ldquo;add Levitating to the queue&rdquo;. With the switch on, saying &ldquo;Hey
+        Glowtide&rdquo; opens it listening.
+      </p>
+      <p className="fine">
+        Everything is understood on this PC and nothing you say is kept or sent anywhere. While
+        &ldquo;Hey Glowtide&rdquo; is on, Windows shows its microphone icon: Windows&apos; own
+        speech recogniser is listening for that phrase, and only that phrase.
+      </p>
+      <div className="srow">
+        <span>
+          Speech model{' '}
+          <span className="fine">
+            {voice?.downloading
+              ? `downloading… ${voice.percent}%`
+              : voice?.ready
+                ? `on this PC (${mb} MB)`
+                : `not downloaded (${mb} MB, once)`}
+          </span>
+        </span>
+        <span className="stats-confirm">
+          {!voice?.ready && !voice?.downloading && (
+            <button className="pill" onClick={() => api.voiceDownload()}>
+              Download
+            </button>
+          )}
+          {voice?.ready &&
+            (sure ? (
+              <>
+                <button
+                  className="pill"
+                  onClick={async () => {
+                    setSure(false)
+                    if (wake) set({ voice: { wake: false } })
+                    await api.voiceRemove()
+                  }}
+                >
+                  Remove it
+                </button>
+                <button className="pill" onClick={() => setSure(false)}>
+                  Keep
+                </button>
+              </>
+            ) : (
+              <button className="pill" onClick={() => setSure(true)}>
+                Remove…
+              </button>
+            ))}
+        </span>
+      </div>
+      {voice?.error && !voice.downloading && (
+        <p className="fine" role="status">
+          The download didn&apos;t finish: {voice.error}
+        </p>
+      )}
+      {wake && voice?.wakeError && (
+        <p className="fine" role="status">
+          {voice.wakeError === 'no-recogniser'
+            ? "“Hey Glowtide” needs Windows' English speech recogniser: Settings → Time & language → Language & region, add English (United States), and include its speech options."
+            : voice.wakeError === 'no-microphone'
+              ? "“Hey Glowtide” can't hear you: no microphone was found."
+              : `“Hey Glowtide” didn't start (${voice.wakeError}).`}
+        </p>
+      )}
+    </Fold>
   )
 }
 

@@ -15,7 +15,8 @@ import {
   nativeImage,
   screen,
   session,
-  shell
+  shell,
+  Notification
 } from 'electron'
 import { basename, dirname, extname, join } from 'path'
 import { pathToFileURL } from 'url'
@@ -59,7 +60,9 @@ import { createSmtc } from './smtc'
 import { createFullscreenWatch } from './fullscreen'
 import { createUpdater } from './updater'
 import { createHistory } from './history'
-import { summarize, songKeyOf } from '../shared/stats.mjs'
+import { createCallDucker } from './calls'
+import { createRemote } from './remote'
+import { recapDue, recapText, summarize, songKeyOf } from '../shared/stats.mjs'
 import { hardenContents, hardenSession, isSafeExternal, trustedSender } from './security'
 
 // The GLOWTIDE_* test hooks (snapshots, probes, separate profiles) only work in a development
@@ -202,6 +205,36 @@ function all() {
 // The listening history behind the Stats page (made once the app is ready, as it lives in
 // the settings folder).
 let history = null
+let calls = null // quieter during calls
+let remote = null // the phone remote (a page on your home network)
+/** Starts or stops the phone remote to match the settings. */
+function syncRemote() {
+  if (!remote) return
+  if (loadSettings().remote?.enabled)
+    remote.start((DEV && process.env.GLOWTIDE_REMOTE_HOST) || '0.0.0.0')
+  else remote.stop()
+}
+
+// Weekly recap: on Sunday evening (or Monday morning, if Glowtide wasn't running), a
+// notification with the week's listening; clicking it opens Stats. Once a week, and only
+// when something was played.
+let recapNote = null // kept, so the notification isn't collected before it's clicked
+function checkRecap(now = Date.now()) {
+  const st = loadSettings()
+  if (!history || st.recap === false || st.history === false) return
+  const key = recapDue(now, st.recapLast)
+  if (!key) return
+  updateSettings({ recapLast: key })
+  const text = recapText(summarize(history.plays(), 'week', now))
+  if (!text || !Notification.isSupported()) return
+  recapNote = new Notification({ title: text.title, body: text.body, silent: true })
+  recapNote.on('click', () => {
+    player.show()
+    player.focus()
+    player.webContents.send('panel:open', 'stats')
+  })
+  recapNote.show()
+}
 
 function broadcast() {
   history?.tick()
@@ -1495,6 +1528,7 @@ function setSettings(patch) {
     syncThumbar()
   }
   if (next.startWithWindows !== before.startWithWindows) syncLoginItem()
+  if (!!next.remote?.enabled !== !!before.remote?.enabled) syncRemote()
   if (JSON.stringify(next.mini) !== JSON.stringify(before.mini)) {
     syncFullscreenWatch()
     syncMini()
@@ -1715,6 +1749,13 @@ function registerIpc() {
         cover: history?.coverFor(songKeyOf(x.title, x.artist)) || null
       }))
     }
+  })
+  // The phone remote: whether it runs and where, a pairing code, forgetting every phone.
+  handle('remote:status', () => remote?.status() || null)
+  handle('remote:pair', () => (remote && loadSettings().remote?.enabled ? remote.pair() : null))
+  handle('remote:forget', () => {
+    remote?.forget()
+    return true
   })
   handle('history:clear', () => {
     history?.clear()
@@ -2296,6 +2337,21 @@ else {
       getState: () => state,
       enabled: () => loadSettings().history !== false
     })
+    calls = createCallDucker({
+      dir: app.getPath('userData'),
+      getState: () => state,
+      settings: loadSettings,
+      control: (action, arg) => control(action, arg)
+    })
+    remote = createRemote({
+      dir: app.getPath('userData'),
+      getState: () => state,
+      getLyrics: () => lyricsLines,
+      control: (action, arg) => control(action, arg)
+    })
+    syncRemote()
+    setTimeout(() => checkRecap(), 60000)
+    setInterval(() => checkRecap(), 10 * 60000).unref()
     poll()
     scheduleSnapshot()
     state.update = { ...updater.state }
@@ -2309,6 +2365,8 @@ else {
     updater.stop()
     fullscreen.stop()
     smtc.stop()
+    calls?.stop()
+    remote?.stop()
   })
   app.on('window-all-closed', () => {
     /* stay in the tray */

@@ -65,3 +65,19 @@ export function pickDisplays(choice, displays, primaryId) {
  */
 export const glowBounds = (display, clearTaskbar) =>
   clearTaskbar && display.workArea ? display.workArea : display.bounds
+
+/**
+ * Glow by time of day: how warm and how dim the glow is at this local time. Full and true
+ * to the cover by day (8:00 to 18:00), easing into the night through the evening (to 21:00),
+ * warm and dimmer at night, easing back from 6:00. Returns { warmth, dim }, each 0..1.
+ */
+export function dayTint(date = new Date()) {
+  const h = date.getHours() + date.getMinutes() / 60
+  let night
+  if (h >= 8 && h < 18) night = 0
+  else if (h >= 18 && h < 21) night = (h - 18) / 3
+  else if (h >= 6 && h < 8) night = 1 - (h - 6) / 2
+  else night = 1
+  const ease = night * night * (3 - 2 * night) // smooth at both ends
+  return { warmth: +ease.toFixed(3), dim: +ease.toFixed(3) }
+}

@@ -74,6 +74,8 @@ export default function Player() {
   const colours = useColours(state, settings)
   const [panel, setPanel] = useState(null)
   useEffect(() => api.onDebugPanel(setPanel), [])
+  // a page asked for from outside the window (the weekly recap opens Stats)
+  useEffect(() => api.onOpenPanel((p) => ['stats'].includes(p) && setPanel(p)), [])
   const [lyricsView, toggleLyricsView] = useLyricsView()
   const [immersiveOn, setImmersive] = useImmersive()
   usePlayerKeys(state)

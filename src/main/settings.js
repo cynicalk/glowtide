@@ -38,7 +38,8 @@ export const DEFAULT_SETTINGS = {
     intensity: 70,
     displays: 'all', // 'all' | 'primary' | a display id
     taskbar: true, // keep the glow clear of the taskbar (it follows the work area's edge)
-    idle: 'steady' // 'steady' | 'off' when nothing plays
+    idle: 'steady', // 'steady' | 'off' when nothing plays
+    timeOfDay: false // warmer and dimmer in the evening and at night
   },
   lyrics: {
     overlay: true,
@@ -70,6 +71,12 @@ export const DEFAULT_SETTINGS = {
   background: { kind: 'cover', opacity: 70, fullscreen: false, file: '', version: 0 },
   tourDone: false, // the first-run tour was seen (or skipped)
   history: true, // keep a listening history on this PC, for the Stats page
+  recap: true, // a notification with your week in music, on Sunday evening
+  recapLast: '', // the Sunday whose recap was shown ('2026-11-22')
+  // quieter during calls: the music goes to level% while a call app ('calls') or any app
+  // ('any') uses the microphone
+  calls: { enabled: false, mode: 'calls', level: 30 },
+  remote: { enabled: false }, // the phone remote: a page on your home network
   widgets: {
     fps: 60,
     accent: '#7c5cff', // the full-screen view's "custom" colour theme

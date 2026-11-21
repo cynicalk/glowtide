@@ -89,3 +89,22 @@ test('listening time reads naturally', () => {
   assert.equal(formatListening(45 * 60000), '45 min')
   assert.equal(formatListening(125 * 60000), '2 h 05 min')
 })
+
+test('the weekly recap is due on Sunday evening or Monday morning, once a week', async () => {
+  const { recapDue, recapText } = await import('../src/shared/stats.mjs')
+  const sun = (h) => new Date(2026, 10, 22, h, 0).getTime() // Sunday 22 Nov 2026
+  assert.equal(recapDue(sun(18), ''), null, 'not before 19:00')
+  assert.equal(recapDue(sun(20), ''), '2026-11-22')
+  assert.equal(recapDue(sun(20), '2026-11-22'), null, 'shown already')
+  assert.equal(recapDue(sun(24 + 9), ''), '2026-11-22', 'Monday morning catches a missed Sunday')
+  assert.equal(recapDue(sun(24 + 13), ''), null, 'not after Monday noon')
+  assert.equal(recapDue(sun(-24 * 3 + 20), ''), null, 'not on a Thursday')
+  assert.equal(recapText({ plays: 0 }), null, 'nothing played: no recap')
+  const t = recapText({
+    plays: 3,
+    ms: 125 * 60000,
+    topSongs: [{ title: 'A', artist: 'B', plays: 2 }]
+  })
+  assert.equal(t.title, 'Your week in music: 2 h 05 min')
+  assert.match(t.body, /Top song: A by B \(2 plays\)/)
+})

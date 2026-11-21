@@ -75,6 +75,18 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   month, year or all time, and a "My week in music" card to copy or save. A song counts
   after 30 seconds of listening, from any source but the demo. The history stays on your
   PC (`history.jsonl` in the settings folder); turn it off or clear it on the Stats page.
+  On Sunday evening a **weekly recap** notification shows your week (time listened, top
+  song); click it for Stats and the card.
+- **Phone remote** (Settings → App): play, pause, skip, seek, volume and the lyric line on
+  your phone, on the same Wi-Fi. Open the address Glowtide shows (port 43823) and pair with
+  a six-digit code; only paired phones get in, and "Forget" revokes them. Windows asks once
+  whether Glowtide may use the network: allow private networks.
+- **Quieter during calls** (Settings → App): while Discord, Teams, Zoom, WhatsApp, Slack or
+  a browser call uses your microphone, the music goes down (to 30% by default) and comes
+  back after. An app followed by "Any app" is turned down in the Windows volume mixer; if
+  the call is in the same browser as the music, the music pauses instead.
+- **Glow by time of day** (Settings → Glow): true to the cover by day, easing warmer and up
+  to 40% dimmer from 6 pm, back by 8 am.
 - **Backgrounds** (Settings → Colours → Background): the blurred cover, flowing colours (soft blobs
   of the cover's colours drifting slowly), or your own picture or video (MP4/WebM, silent and
   looping, like a live wallpaper), behind the player and optionally the full-screen view. The

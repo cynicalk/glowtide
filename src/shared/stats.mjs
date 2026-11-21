@@ -152,3 +152,35 @@ export function formatListening(ms) {
   const h = Math.floor(min / 60)
   return `${h} h ${String(min % 60).padStart(2, '0')} min`
 }
+
+const isoDay = (t) => {
+  const d = new Date(t)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Whether the weekly recap is due: from 19:00 on a Sunday until Monday noon, once per week.
+ * Returns that Sunday's date ('2026-11-22') when it is due and wasn't shown yet, else null.
+ */
+export function recapDue(now, lastShown) {
+  const d = new Date(now)
+  const h = d.getHours()
+  let sunday = null
+  if (d.getDay() === 0 && h >= 19) sunday = now
+  else if (d.getDay() === 1 && h < 12) sunday = now - DAY
+  if (sunday === null) return null
+  const key = isoDay(sunday)
+  return key === lastShown ? null : key
+}
+
+/** The recap's words, or null when nothing was played. */
+export function recapText(s) {
+  if (!s?.plays) return null
+  const top = s.topSongs[0]
+  return {
+    title: `Your week in music: ${formatListening(s.ms)}`,
+    body: top
+      ? `Top song: ${top.title}${top.artist ? ` by ${top.artist}` : ''} (${top.plays} ${top.plays === 1 ? 'play' : 'plays'}). Open Stats for your card.`
+      : 'Open Stats for your card.'
+  }
+}

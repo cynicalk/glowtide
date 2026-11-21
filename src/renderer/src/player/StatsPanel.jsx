@@ -104,6 +104,17 @@ export default function StatsPanel({ state, settings }) {
           Kept only on this PC, in Glowtide’s settings folder. Nothing is sent anywhere.
         </p>
         <div className="srow">
+          <span>Weekly recap</span>
+          <Toggle
+            label="A notification with your week in music on Sunday evening"
+            on={settings.recap !== false}
+            onChange={(v) => api.setSettings({ recap: v })}
+          />
+        </div>
+        <p className="fine">
+          On Sunday evening, a notification with your week: time listened and your top song.
+        </p>
+        <div className="srow">
           <span>Clear the history</span>
           {confirm ? (
             <span className="stats-confirm">

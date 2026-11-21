@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useColours, useGlowtide } from '../lib/store'
 import { startBeatTracker } from '../lib/beat'
 import { useFrameRateCap } from '../lib/frameRate'
-import { ANIMATIONS, duoGradient, glowAnimation } from '../../../shared/glow.mjs'
+import { ANIMATIONS, dayTint, duoGradient, glowAnimation } from '../../../shared/glow.mjs'
 
 /**
  * The edge glow. Nothing on it is ever repainted while music plays; per frame it only
@@ -20,6 +20,20 @@ import { ANIMATIONS, duoGradient, glowAnimation } from '../../../shared/glow.mjs
  * One loop drives it all at the chosen frame rate (30 or 60), and only while something
  * plays and something moves. Paused, it all holds still and nothing runs.
  */
+/** Glow by time of day (when on): how warm and dim, looked at again every five minutes. */
+function useDayTint(on) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!on) return
+    const id = setInterval(() => setTick((n) => n + 1), 5 * 60000)
+    return () => clearInterval(id)
+  }, [on])
+  return on ? dayTint() : null
+}
+
+// The warm light the glow leans to at night: a soft amber, like a lamp.
+const WARM = '#ff9a4d'
+
 export default function Glow() {
   const { state, settings } = useGlowtide()
   const colours = useColours(state, settings)
@@ -38,6 +52,9 @@ export default function Glow() {
   const shown = hasTrack && (playing || g?.idle !== 'off')
   const fps = settings?.fps === 60 ? 60 : 30
   useFrameRateCap(fps)
+  const tint = useDayTint(!!g?.timeOfDay)
+  // at night the glow is up to 40% dimmer
+  const nightDim = tint ? 1 - 0.4 * tint.dim : 1
 
   useEffect(() => {
     if (!playing || !react) return
@@ -53,7 +70,7 @@ export default function Glow() {
 
   useEffect(() => {
     if (!g) return
-    const intensity = g.intensity / 100
+    const intensity = (g.intensity / 100) * nightDim
     const turn = (deg) => {
       angle.current = (angle.current + deg) % 360
       const tf = `translate(-50%, -50%) rotate(${angle.current.toFixed(2)}deg)`
@@ -97,16 +114,19 @@ export default function Glow() {
     }
     raf = requestAnimationFrame(loop)
     return () => cancelAnimationFrame(raf)
-  }, [g, anim, shown, playing, react, moving, fps, duo])
+  }, [g, anim, shown, playing, react, moving, fps, duo, nightDim])
 
   if (!settings || !colours) return null
-  const c = colours.glow
+  // at night every colour of the glow leans warm (up to half amber)
+  const warm = (x) =>
+    tint?.warmth ? `color-mix(in srgb, ${x} ${Math.round(100 - 50 * tint.warmth)}%, ${WARM})` : x
+  const c = warm(colours.glow)
   const vars = {
     '--c': c,
-    '--g2': colours.glow2,
+    '--g2': warm(colours.glow2),
     // one colour: the travelling light is a brighter shade of the glow, not other colours
-    '--c2': duo ? colours.highlight : `color-mix(in srgb, ${c} 60%, white)`,
-    '--c3': duo ? colours.lyrics : c,
+    '--c2': duo ? warm(colours.highlight) : `color-mix(in srgb, ${c} 60%, white)`,
+    '--c3': duo ? warm(colours.lyrics) : c,
     '--th': `${settings.glow.thickness}px`,
     '--sp': `${settings.glow.spread}px`
   }

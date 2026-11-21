@@ -356,6 +356,17 @@ export default function SettingsPanel({ state, settings, onClose }) {
             />
           </div>
           <p className="fine">The glow runs along the top of the taskbar instead of behind it.</p>
+          <div className="srow">
+            <span>Follow the time of day</span>
+            <Toggle
+              label="Warmer and dimmer glow in the evening and at night"
+              on={!!g.timeOfDay}
+              onChange={(v) => set({ glow: { timeOfDay: v } })}
+            />
+          </div>
+          <p className="fine">
+            True to the cover by day; from 6 pm it eases warmer and up to 40% dimmer, back by 8 am.
+          </p>
           <label className="srow">
             <span>Display</span>
             <select
@@ -758,6 +769,8 @@ export default function SettingsPanel({ state, settings, onClose }) {
       {tab === 'app' && (
         <Shortcuts settings={settings} set={set} taken={state.shortcutsTaken || []} />
       )}
+      {tab === 'app' && <CallSettings settings={settings} set={set} />}
+      {tab === 'app' && <RemoteSettings settings={settings} set={set} />}
       {tab === 'app' && <Updates update={state.update} settings={settings} set={set} />}
     </div>
   )
@@ -1068,5 +1081,150 @@ export function OverrideWheels({ c, g, set }) {
         />
       )}
     </div>
+  )
+}
+
+/** Quieter during calls: on or off, which apps count as a call, and how quiet. */
+function CallSettings({ settings, set }) {
+  const c = settings.calls || { enabled: false, mode: 'calls', level: 30 }
+  return (
+    <Fold k="calls">
+      <div className="sh">
+        <h3>Quieter during calls</h3>
+        <Toggle
+          label="Turn the music down during calls"
+          on={!!c.enabled}
+          onChange={(v) => set({ calls: { enabled: v } })}
+        />
+      </div>
+      <p className="fine">
+        While you’re on a call, the music goes down and comes back up when the call ends. A call is
+        an app using your microphone: Discord, Teams, Zoom, WhatsApp, Slack, or a browser (Meet).
+      </p>
+      {c.enabled && (
+        <>
+          <div className="srow">
+            <span>Counts as a call</span>
+            <Seg
+              value={c.mode === 'any' ? 'any' : 'calls'}
+              options={[
+                ['calls', 'Call apps'],
+                ['any', 'Any app using the mic']
+              ]}
+              onChange={(v) => set({ calls: { mode: v } })}
+            />
+          </div>
+          <Slider
+            label="Music during a call"
+            min={0}
+            max={80}
+            value={c.level ?? 30}
+            unit="%"
+            onChange={(v) => set({ calls: { level: v } })}
+          />
+          <p className="fine">
+            Any app: only that app goes down, in the Windows volume mixer. If the call is in the
+            same browser as the music, the music pauses instead and plays again afterwards.
+          </p>
+        </>
+      )}
+    </Fold>
+  )
+}
+
+/** The phone remote: on or off, the address to open, a pairing code, paired phones. */
+function RemoteSettings({ settings, set }) {
+  const on = !!settings.remote?.enabled
+  const [st, setSt] = useState(null)
+  const [now, setNow] = useState(() => Date.now())
+  const [sure, setSure] = useState(false)
+  useEffect(() => {
+    if (!on) return
+    let alive = true
+    const load = () => api.remoteStatus().then((s) => alive && setSt(s))
+    load()
+    const id = setInterval(() => {
+      load()
+      setNow(Date.now())
+    }, 1000)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [on])
+  const code = on ? st?.pairing : null
+  const left = code ? Math.max(0, Math.ceil((code.until - now) / 1000)) : 0
+  return (
+    <Fold k="remote">
+      <div className="sh">
+        <h3>Phone remote</h3>
+        <Toggle label="Phone remote" on={on} onChange={(v) => set({ remote: { enabled: v } })} />
+      </div>
+      <p className="fine">
+        Control the music and read the lyrics from your phone, on the same Wi-Fi. The first time,
+        Windows asks whether Glowtide may use the network: allow it on private networks.
+      </p>
+      {on && st && (
+        <>
+          {st.error ? (
+            <div className="error">{st.error}</div>
+          ) : st.addresses.length ? (
+            <div className="srow">
+              <span>On your phone, open</span>
+              <span className="remote-addr">
+                {st.addresses.map((a) => (
+                  <span key={a}>{a}</span>
+                ))}
+              </span>
+            </div>
+          ) : (
+            <p className="fine">This PC isn’t on a home network right now.</p>
+          )}
+          <div className="srow">
+            <span>Pair a phone</span>
+            {code && left > 0 ? (
+              <span className="remote-code" aria-live="polite">
+                <b>{code.code}</b> <small>{left} s</small>
+              </span>
+            ) : (
+              <button className="pill" onClick={() => api.remotePair()}>
+                Get a code
+              </button>
+            )}
+          </div>
+          <div className="srow">
+            <span>Paired phones</span>
+            {st.phones ? (
+              sure ? (
+                <span className="stats-confirm">
+                  <button
+                    className="pill on"
+                    onClick={async () => {
+                      await api.remoteForget()
+                      setSure(false)
+                    }}
+                  >
+                    Forget all
+                  </button>
+                  <button className="pill" onClick={() => setSure(false)}>
+                    Keep
+                  </button>
+                </span>
+              ) : (
+                <button className="pill" onClick={() => setSure(true)}>
+                  {st.phones} · Forget…
+                </button>
+              )
+            ) : (
+              <span className="muted">None yet</span>
+            )}
+          </div>
+          <p className="fine">
+            Only phones you pair with a code can use it. Use it on networks you trust, like your
+            home Wi-Fi.
+          </p>
+        </>
+      )}
+    </Fold>
   )
 }

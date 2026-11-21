@@ -71,3 +71,15 @@ test('clear of the taskbar, the glow follows the work area', () => {
   assert.equal(glowBounds(d, false), d.bounds)
   assert.equal(glowBounds({ bounds: d.bounds }, true), d.bounds)
 })
+
+test('glow by time of day: true by day, warm and dim at night, easing between', async () => {
+  const { dayTint } = await import('../src/shared/glow.mjs')
+  const at = (h, m = 0) => dayTint(new Date(2026, 10, 22, h, m))
+  assert.deepEqual(at(12), { warmth: 0, dim: 0 })
+  assert.deepEqual(at(23), { warmth: 1, dim: 1 })
+  assert.deepEqual(at(3), { warmth: 1, dim: 1 })
+  const evening = at(19, 30).warmth
+  assert.ok(evening > 0.3 && evening < 0.7, String(evening))
+  assert.ok(at(7).warmth > 0 && at(7).warmth < 1, 'morning eases back')
+  assert.ok(at(18, 15).warmth < at(20).warmth, 'deepens through the evening')
+})

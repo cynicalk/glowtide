@@ -214,6 +214,68 @@ html[data-route='stage'] body {
     scale: 1.06;
   }
 }
+/* Travelling to a neighbour: the figure being left slides away and the next comes in from
+   the other side, like the view panning across the real sky (--tx/--ty: which way). */
+.fig.travel {
+  animation: fig-travel-in 2.6s cubic-bezier(0.6, 0, 0.25, 1) both;
+}
+@keyframes fig-travel-in {
+  from {
+    translate: calc(var(--tx) * 105vw) calc(var(--ty) * 105vh);
+  }
+}
+.fig.gone.travel {
+  animation: fig-travel-out 2.6s cubic-bezier(0.6, 0, 0.25, 1) forwards;
+}
+@keyframes fig-travel-out {
+  75% {
+    opacity: 1;
+  }
+  to {
+    translate: calc(var(--tx) * -105vw) calc(var(--ty) * -105vh);
+    opacity: 0;
+  }
+}
+/* a shooting star when a figure is finished */
+.meteor {
+  position: absolute;
+  width: 22vmin;
+  height: 2px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.95), transparent);
+  border-radius: 2px;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: meteor 1.3s cubic-bezier(0.3, 0.6, 0.4, 1) 0.9s;
+}
+@keyframes meteor {
+  0% {
+    opacity: 0;
+    transform: translateX(0) scaleX(0.2);
+  }
+  15% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-34vmin) scaleX(1);
+  }
+}
+/* the sparkle on the word being sung swells a little with the beat */
+.focus svg {
+  scale: calc(0.94 + var(--pulse, 0.3) * 0.16);
+}
+/* Reduce motion: no journey or shooting star, figures simply fade */
+.still .fig.travel {
+  animation: fig-arrive 0.9s ease-out;
+}
+.still .fig.gone.travel {
+  animation: fig-gone 1.6s ease-in-out forwards;
+}
+.still .meteor {
+  display: none;
+}
 /* a completed figure glows a little brighter for a moment */
 .fig.complete .sky-edge:not(.glow) {
   animation:

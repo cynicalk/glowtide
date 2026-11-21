@@ -14,6 +14,9 @@ import {
   constellationAt,
   rand,
   seedOf,
+  starColour,
+  starRadius,
+  travelDirection,
   VIEW
 } from '../../../shared/constellation.mjs'
 
@@ -199,8 +202,11 @@ function Starfield({ seed }) {
       })
     return g
   }, [seed])
+  // the Milky Way: a faint band across the sky at an angle of its own for each song
+  const tilt = Math.round(-40 + rand(seed + 7) * 80)
   return (
     <div className="starfield">
+      <div className="milky" style={{ rotate: `${tilt}deg` }} />
       {groups.map((dots, k) => (
         <svg
           key={k}
@@ -217,7 +223,44 @@ function Starfield({ seed }) {
   )
 }
 
-const r3 = (m) => (m === 1 ? 6 : m === 2 ? 4.8 : 3.8)
+/**
+ * The nearer stars around one figure. They travel with it, so moving between figures reads
+ * as the view panning across the sky rather than one drawing swapped for another.
+ */
+function NearField({ n }) {
+  const dots = useMemo(
+    () =>
+      Array.from({ length: 46 }, (_, i) => ({
+        x: rand(n * 977 + i * 13) * VIEW.w,
+        y: rand(n * 977 + i * 17 + 5) * VIEW.h,
+        r: 0.7 + rand(n * 977 + i * 23 + 9) * 1.4,
+        o: 0.25 + rand(n * 977 + i * 29 + 3) * 0.5
+      })),
+    [n]
+  )
+  return (
+    <svg
+      className="sky sky-near"
+      viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
+      preserveAspectRatio="xMidYMid slice"
+    >
+      {dots.map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r={p.r} opacity={p.o} />
+      ))}
+    </svg>
+  )
+}
+
+/** A shooting star across the sky when a figure is finished: where and which way, per figure. */
+function Meteor({ n }) {
+  const from = rand(n * 31 + 1) < 0.5 ? -1 : 1
+  const style = {
+    left: `${20 + rand(n * 31 + 2) * 60}vw`,
+    top: `${8 + rand(n * 31 + 3) * 22}vh`,
+    rotate: `${from * (150 + rand(n * 31 + 4) * 20)}deg`
+  }
+  return <div className="meteor" style={style} />
+}
 
 /**
  * One figure as the words have built it so far. Nothing is drawn ahead of the song: a star
@@ -229,7 +272,7 @@ const r3 = (m) => (m === 1 ? 6 : m === 2 ? 4.8 : 3.8)
  * time (the camera leaning toward the newest stars, the sparkle gliding between them) is an
  * HTML layer over it that the compositor moves, so the stars are never repainted for it.
  */
-function FigureView({ sky, labelPx, gone }) {
+function FigureView({ sky, labelPx, gone, travel }) {
   const placed = useMemo(() => placeLabels(sky.stars, { fontPx: labelPx }), [sky, labelPx])
   const words = sky.stars.filter((s) => s.word).length
   const complete = words > 0 && sky.stars.every((s) => !s.word || s.lit)
@@ -262,9 +305,14 @@ function FigureView({ sky, labelPx, gone }) {
     .filter(Boolean)
   return (
     <div
-      className={`fig ${gone ? 'gone' : ''} ${complete ? 'complete' : ''}`}
-      style={{ transform: skyOffset(VIEW.w / 2 + cam.x, VIEW.h / 2 + cam.y) }}
+      className={`fig ${gone ? 'gone' : ''} ${complete ? 'complete' : ''} ${travel ? 'travel' : ''}`}
+      style={{
+        transform: skyOffset(VIEW.w / 2 + cam.x, VIEW.h / 2 + cam.y),
+        ...(travel && { '--tx': travel[0], '--ty': travel[1] })
+      }}
     >
+      <NearField n={sky.figure.n} />
+      {complete && <Meteor n={sky.figure.n} />}
       <svg className="sky" viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMid meet">
         {/* a soft wide stroke under each line stands in for a blur filter */}
         {edges.map((e) => (
@@ -287,12 +335,13 @@ function FigureView({ sky, labelPx, gone }) {
         ))}
         {sky.stars.map((s, i) => {
           if (!shown(s)) return null
-          const r = r3(s.m)
+          // each star its real size and colour: Betelgeuse orange, Rigel blue-white
+          const r = starRadius(s)
           return (
             <g
               key={`s${i}`}
               className={`star lit ${s.current ? 'cur' : ''}`}
-              style={{ '--d': `${delay(i)}s` }}
+              style={{ '--d': `${delay(i)}s`, '--star': starColour(s.bv) }}
             >
               <circle className="halo" cx={s.x} cy={s.y} r={r * 2.8} />
               <circle className="core" cx={s.x} cy={s.y} r={r} />
@@ -345,11 +394,23 @@ function Constellation({ sky, scale }) {
   const len = f?.text.length || 0
   const capEm = len <= 22 ? 1 : len <= 38 ? 0.82 : len <= 60 ? 0.68 : 0.56
   const figures = [leaving, fig].filter((s, i, a) => s && a.indexOf(s) === i)
+  // The view travels across the real sky from the figure leaving to its neighbour arriving:
+  // the old one slides away one way as the new one comes in from the other.
+  const travel =
+    leaving && fig && leaving !== fig
+      ? travelDirection(leaving.figure.centre, fig.figure.centre)
+      : null
   return (
     <>
       <div className="sky-drift" style={{ '--wpx': labelPx }}>
         {figures.map((s) => (
-          <FigureView key={s.figure.n} sky={s} labelPx={labelPx} gone={s === leaving} />
+          <FigureView
+            key={s.figure.n}
+            sky={s}
+            labelPx={labelPx}
+            gone={s === leaving}
+            travel={travel}
+          />
         ))}
       </div>
       <div
@@ -430,9 +491,10 @@ export default function LyricsOverlay() {
   )
   const now = useClock()
   const beatRef = useRef(null)
-  // Music energy for Aura, Waves and Beat (and nothing is listened to otherwise).
+  // Music energy for Aura, Waves, Beat and the constellation's stars (and nothing is
+  // listened to otherwise).
   useBeatVars(beatRef, {
-    playing: ['aura', 'waves', 'beat'].includes(style) && !!active,
+    playing: ['aura', 'waves', 'beat', 'constellation'].includes(style) && !!active,
     fps,
     listen: !!settings && listensToMusic(settings.glow)
   })
@@ -496,10 +558,10 @@ export default function LyricsOverlay() {
             )}
             {style === 'messages' && <Messages view={win?.chat ? win : null} track={state.track} />}
             {style === 'constellation' && (
-              <>
+              <div className="sky-beat" ref={beatRef}>
                 <Starfield seed={seed} />
                 <Constellation sky={win?.stars ? win : null} scale={scale} />
-              </>
+              </div>
             )}
           </>
         )}

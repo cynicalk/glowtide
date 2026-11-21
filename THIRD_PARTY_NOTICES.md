@@ -2,8 +2,9 @@
 
 ## d3-celestial (constellation figures)
 
-The constellation stick figures in `src/shared/skyData.mjs` are generated from
-`data/constellations.lines.json` of https://github.com/ofrohn/d3-celestial.
+The constellation stick figures, their places in the sky and their stars' brightness and
+colour in `src/shared/skyData.mjs` are generated from `data/constellations.lines.json` and
+`data/stars.6.json` of https://github.com/ofrohn/d3-celestial.
 
 ```
 Copyright (c) 2015, Olaf Frohn

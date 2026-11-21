@@ -122,9 +122,13 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
     after a long gap, and the next line waiting below.
   - **Constellation**: the words build a real constellation. Each sung word brings in its
     own star, sitting beside it, and the line to it draws itself from the star before.
-    When the verse ends the figure completes, and the next verse starts a new one. All 88
-    are included, drawn from real sky coordinates, with the name, meaning and a short note
-    in the corner and the whole line as a caption underneath.
+    When the verse ends the figure completes with a shooting star, and the view glides
+    across the real sky to a neighbouring constellation for the next verse. Well-known
+    figures that fit the verse come first (Orion, the Big Dipper, Cassiopeia, the zodiac…),
+    and a chorus returns to its own constellation each time. Stars have their real
+    brightness and colour (orange Betelgeuse, blue-white Rigel), under a faint Milky Way,
+    and pulse with the music. All 88 are included, drawn from real sky coordinates, with
+    the name, meaning and a short note in the corner and the whole line as a caption.
 - **Overlay options**:
   - Backdrop: none, dim, or blurred album art with film grain.
   - Serif or sans clock, and 12 Windows fonts.

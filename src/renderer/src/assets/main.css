@@ -1141,6 +1141,35 @@ input[type='range']:hover::-webkit-slider-thumb,
   width: 100vw;
   height: 100vh;
 }
+/* the constellation's whole sky: the beat (--pulse) brightens the stars a little */
+.sky-beat {
+  position: absolute;
+  inset: 0;
+}
+.sky-beat .starfield,
+.sky-beat .sky-near {
+  opacity: calc(0.72 + var(--pulse, 0.3) * 0.4);
+}
+/* the Milky Way: a soft band of light, tinted by the lyric colour, drawn once */
+.milky {
+  position: absolute;
+  left: -30vw;
+  right: -30vw;
+  top: 50%;
+  height: 46vh;
+  margin-top: -23vh;
+  background: radial-gradient(
+    ellipse 50% 50% at 50% 50%,
+    color-mix(in srgb, var(--lyr) 14%, rgba(220, 225, 255, 0.075)) 0%,
+    color-mix(in srgb, var(--lyr) 7%, rgba(220, 225, 255, 0.032)) 45%,
+    transparent 72%
+  );
+}
+/* the nearer stars, which travel with their figure */
+.sky-near {
+  fill: #fff;
+  will-change: opacity;
+}
 /* The background stars: three layers drawn once, each fading at its own pace, so the
    field twinkles without any star being repainted. */
 .starfield {
@@ -1189,7 +1218,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   }
 }
 .star .core {
-  fill: #fff;
+  fill: var(--star, #fff);
   transform-box: fill-box;
   transform-origin: center;
   animation: star-pop 0.7s cubic-bezier(0.3, 1.6, 0.5, 1) var(--d, 0s) both;
@@ -1201,7 +1230,7 @@ input[type='range']:hover::-webkit-slider-thumb,
   }
 }
 .star .halo {
-  fill: var(--lyr);
+  fill: color-mix(in srgb, var(--star, #fff) 55%, var(--lyr));
   opacity: 0.18;
   animation: fadein 0.7s var(--d, 0s) both;
 }

@@ -71,6 +71,10 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   plays or a full-screen app covers it.
 - **Share**: copies "Song — Artist" and a Spotify or YouTube Music link (the dock, the tray menu,
   or "share" in the command bar).
+- **Stats**: time listened each day (or month), your top songs and artists for the week,
+  month, year or all time, and a "My week in music" card to copy or save. A song counts
+  after 30 seconds of listening, from any source but the demo. The history stays on your
+  PC (`history.jsonl` in the settings folder); turn it off or clear it on the Stats page.
 - **Backgrounds** (Settings → Colours → Background): the blurred cover, flowing colours (soft blobs
   of the cover's colours drifting slowly), or your own picture or video (MP4/WebM, silent and
   looping, like a live wallpaper), behind the player and optionally the full-screen view. The
@@ -122,8 +126,8 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
     after a long gap, and the next line waiting below.
   - **Constellation**: the words build a real constellation. Each sung word brings in its
     own star, sitting beside it, and the line to it draws itself from the star before.
-    When the verse ends the figure completes with a shooting star, and the view glides
-    across the real sky to a neighbouring constellation for the next verse. Well-known
+    When the verse ends the figure completes with a shooting star, and the next verse
+    fades in a new constellation. Well-known
     figures that fit the verse come first (Orion, the Big Dipper, Cassiopeia, the zodiac…),
     and a chorus returns to its own constellation each time. Stars have their real
     brightness and colour (orange Betelgeuse, blue-white Rigel), under a faint Milky Way,

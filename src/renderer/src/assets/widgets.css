@@ -196,7 +196,7 @@ html[data-route='stage'] body {
   inset: 0;
   will-change: transform;
   transition: transform 1.8s cubic-bezier(0.25, 0.8, 0.25, 1);
-  animation: fig-arrive 0.6s ease-out;
+  animation: fig-arrive 0.9s ease-out;
 }
 @keyframes fig-arrive {
   from {
@@ -206,34 +206,12 @@ html[data-route='stage'] body {
 /* a finished figure fades as the next begins */
 .fig.gone {
   pointer-events: none;
-  animation: fig-gone 0.9s ease-in-out forwards;
+  animation: fig-gone 1.6s ease-in-out forwards;
 }
 @keyframes fig-gone {
   to {
     opacity: 0;
     scale: 1.06;
-  }
-}
-/* Travelling to a neighbour: the figure being left slides away and the next comes in from
-   the other side, like the view panning across the real sky (--tx/--ty: which way). */
-.fig.travel {
-  animation: fig-travel-in 1.5s cubic-bezier(0.45, 0, 0.2, 1) both;
-}
-@keyframes fig-travel-in {
-  from {
-    translate: calc(var(--tx) * 105vw) calc(var(--ty) * 105vh);
-  }
-}
-.fig.gone.travel {
-  animation: fig-travel-out 1.5s cubic-bezier(0.45, 0, 0.2, 1) forwards;
-}
-@keyframes fig-travel-out {
-  75% {
-    opacity: 1;
-  }
-  to {
-    translate: calc(var(--tx) * -105vw) calc(var(--ty) * -105vh);
-    opacity: 0;
   }
 }
 /* a shooting star when a figure is finished */
@@ -266,20 +244,14 @@ html[data-route='stage'] body {
 .focus svg {
   scale: calc(0.94 + var(--pulse, 0.3) * 0.16);
 }
-/* Reduce motion: no journey or shooting star, figures simply fade */
-.still .fig.travel {
-  animation: fig-arrive 0.6s ease-out;
-}
-.still .fig.gone.travel {
-  animation: fig-gone 0.9s ease-in-out forwards;
-}
+/* Reduce motion: no shooting star */
 .still .meteor {
   display: none;
 }
 /* a completed figure glows a little brighter for a moment */
 .fig.complete .sky-edge:not(.glow) {
   animation:
-    edge-draw 0.9s cubic-bezier(0.45, 0, 0.2, 1) var(--d, 0s) forwards,
+    edge-draw 0.6s cubic-bezier(0.3, 0, 0.2, 1) var(--d, 0s) forwards,
     edge-glow 2.4s ease-in-out 0.6s;
 }
 @keyframes edge-glow {

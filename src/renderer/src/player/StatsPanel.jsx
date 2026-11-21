@@ -1,0 +1,283 @@
+// Stats: what you've been listening to, from the history Glowtide keeps on this PC. Time
+// listened by day (or month), your top songs and artists, and a card to share.
+
+import { useEffect, useRef, useState } from 'react'
+import { api } from '../lib/store'
+import { Seg, Toggle } from './SettingsPanel'
+import { drawStatsCard } from './shareCard'
+import { RANGES, formatListening } from '../../../shared/stats.mjs'
+
+const RANGE_OPTIONS = Object.keys(RANGES).map((k) => [k, RANGES[k].label])
+
+/** The range's stats, refreshed when the song changes and every 30 s while open. */
+function useStats(range, trackId) {
+  const [res, setRes] = useState({ range: null, data: null })
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 30000)
+    return () => clearInterval(id)
+  }, [])
+  useEffect(() => {
+    let alive = true
+    api.stats(range).then((data) => alive && setRes({ range, data }))
+    return () => {
+      alive = false
+    }
+  }, [range, trackId, tick])
+  return [res.range === range ? res.data : null, () => setTick((n) => n + 1)]
+}
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+export default function StatsPanel({ state, settings }) {
+  const [range, setRange] = useState('week')
+  const [data, refresh] = useStats(range, state.track?.id)
+  const [carding, setCarding] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+  const on = settings.history !== false
+
+  if (carding && data) return <StatsCard data={data} onClose={() => setCarding(false)} />
+
+  return (
+    <div className="stats">
+      <div className="stats-head">
+        <Seg value={range} options={RANGE_OPTIONS} onChange={setRange} />
+        {data?.plays > 0 && (
+          <button className="pill" onClick={() => setCarding(true)}>
+            Share a card
+          </button>
+        )}
+      </div>
+      {!data ? (
+        <div className="muted pad">Loading…</div>
+      ) : data.plays === 0 ? (
+        <p className="muted pad">
+          {on
+            ? 'Nothing here yet. A song counts once you’ve listened to it for 30 seconds, from any app, Spotify or YouTube Music (the demo’s songs don’t count).'
+            : 'Listening history is off, so nothing is being counted. Turn it on below.'}
+        </p>
+      ) : (
+        <>
+          <Tiles data={data} />
+          <Bars data={data} />
+          <div className="stats-lists">
+            <section>
+              <div className="sect">Top songs</div>
+              {data.topSongs.map((s, i) => (
+                <div className="row stats-row" key={s.key}>
+                  <span className="stats-rank">{i + 1}</span>
+                  {s.cover ? <img src={s.cover} alt="" /> : <div className="thumb-ph" />}
+                  <div className="row-text">
+                    <div className="t">{s.title}</div>
+                    <div className="s">{s.artist}</div>
+                  </div>
+                  <span className="stats-count">{plural(s.plays, 'play')}</span>
+                </div>
+              ))}
+            </section>
+            <section>
+              <div className="sect">Top artists</div>
+              {data.topArtists.map((a, i) => (
+                <div className="row stats-row" key={a.artist}>
+                  <span className="stats-rank">{i + 1}</span>
+                  <div className="row-text">
+                    <div className="t">{a.artist}</div>
+                    <div className="s">{formatListening(a.ms)}</div>
+                  </div>
+                  <span className="stats-count">{plural(a.plays, 'play')}</span>
+                </div>
+              ))}
+            </section>
+          </div>
+        </>
+      )}
+      <div className="stats-foot">
+        <div className="srow">
+          <span>Keep a listening history</span>
+          <Toggle
+            label="Keep a listening history"
+            on={on}
+            onChange={(v) => api.setSettings({ history: v })}
+          />
+        </div>
+        <p className="fine">
+          Kept only on this PC, in Glowtide’s settings folder. Nothing is sent anywhere.
+        </p>
+        <div className="srow">
+          <span>Clear the history</span>
+          {confirm ? (
+            <span className="stats-confirm">
+              <button
+                className="pill on"
+                onClick={async () => {
+                  await api.clearHistory()
+                  setConfirm(false)
+                  refresh()
+                }}
+              >
+                Clear everything
+              </button>
+              <button className="pill" onClick={() => setConfirm(false)}>
+                Keep it
+              </button>
+            </span>
+          ) : (
+            <button className="pill" onClick={() => setConfirm(true)}>
+              Clear…
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** The headline numbers. */
+function Tiles({ data }) {
+  const prevName = RANGES[data.range].previous
+  let change = null
+  if (data.previous && prevName) {
+    const d = data.ms - data.previous.ms
+    change =
+      Math.abs(d) < 60000
+        ? `about the same as ${prevName}`
+        : `${formatListening(Math.abs(d))} ${d > 0 ? 'more' : 'less'} than ${prevName}`
+  }
+  const top = data.topArtists[0]
+  return (
+    <div className="stats-tiles">
+      <div className="stats-tile">
+        <div className="k">Time listened</div>
+        <div className="v">{formatListening(data.ms)}</div>
+        {change && <div className="d">{change}</div>}
+      </div>
+      <div className="stats-tile">
+        <div className="k">Plays</div>
+        <div className="v">{data.plays}</div>
+        <div className="d">{plural(data.songs, 'different song')}</div>
+      </div>
+      {top && (
+        <div className="stats-tile">
+          <div className="k">Top artist</div>
+          <div className="v name">{top.artist}</div>
+          <div className="d">{plural(top.plays, 'play')}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Time listened per day (a week or month) or per month (a year, all time). One series in
+ * the accent colour; a day with nothing played has no bar (not a sliver standing for zero).
+ * Pointing at a bar reads it out above the chart.
+ */
+function Bars({ data }) {
+  const [at, setAt] = useState(null)
+  const max = Math.max(...data.buckets.map((b) => b.ms), 1)
+  const n = data.buckets.length
+  const labelEvery = n <= 13 ? 1 : 5
+  const b = at !== null ? data.buckets[at] : null
+  const unit = data.range === 'week' || data.range === 'month' ? 'day' : 'month'
+  return (
+    <div className="stats-chart">
+      <div className="stats-read">
+        {b ? (
+          <>
+            <b>{b.long}</b> · {b.ms ? formatListening(b.ms) : 'nothing played'}
+            {b.plays > 0 && ` · ${plural(b.plays, 'play')}`}
+          </>
+        ) : (
+          `Time listened each ${unit}`
+        )}
+      </div>
+      <div className="stats-bars" onMouseLeave={() => setAt(null)}>
+        {data.buckets.map((x, i) => (
+          <div
+            key={x.start}
+            className={`stats-slot ${at === i ? 'on' : ''}`}
+            onMouseEnter={() => setAt(i)}
+            aria-label={`${x.long}: ${x.ms ? formatListening(x.ms) : 'nothing played'}`}
+            role="img"
+          >
+            {x.ms > 0 && <i style={{ height: `${Math.max(2, (x.ms / max) * 100)}%` }} />}
+          </div>
+        ))}
+      </div>
+      <div className="stats-axis">
+        {data.buckets.map((x, i) => (
+          <span key={x.start}>{i % labelEvery === 0 || i === n - 1 ? x.label : ''}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** The card: drawn at full size, copied or saved as a PNG. */
+function StatsCard({ data, onClose }) {
+  const canvas = useRef(null)
+  const [covers, setCovers] = useState([])
+  const [note, setNote] = useState('')
+  const songs = data.topSongs.slice(0, 5)
+  useEffect(() => {
+    let live = true
+    Promise.all(
+      songs.map((s) =>
+        s.cover
+          ? api.cardCover(s.cover).then(
+              (url) =>
+                url &&
+                new Promise((res) => {
+                  const img = new Image()
+                  img.onload = () => res(img)
+                  img.onerror = () => res(null)
+                  img.src = url
+                })
+            )
+          : null
+      )
+    ).then((imgs) => live && setCovers(imgs))
+    return () => {
+      live = false
+    }
+  }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (canvas.current) drawStatsCard(canvas.current, { data, covers })
+  }, [data, covers])
+  useEffect(() => {
+    const k = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
+  const png = () => canvas.current.toDataURL('image/png')
+  return (
+    <div className="stats card-maker">
+      <div className="tap-head">
+        <div className="tap-title">{RANGES[data.range].title}</div>
+        <div className="tap-actions">
+          <button
+            className="pill on"
+            onClick={async () => setNote((await api.copyCard(png())) ? 'Copied' : "Couldn't copy")}
+          >
+            Copy image
+          </button>
+          <button
+            className="pill"
+            onClick={async () =>
+              setNote((await api.saveCard(png(), RANGES[data.range].title)) ? 'Saved' : '')
+            }
+          >
+            Save…
+          </button>
+          <button className="pill" onClick={onClose}>
+            Back
+          </button>
+        </div>
+        <div className="tap-sub">{note || 'A picture of your listening, to share'}</div>
+      </div>
+      <div className="card-body">
+        <canvas ref={canvas} className="card-preview story" />
+      </div>
+    </div>
+  )
+}

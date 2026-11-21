@@ -28,7 +28,8 @@ import {
   Disc3,
   Expand,
   ImageIcon,
-  Share2
+  Share2,
+  ChartColumn
 } from 'lucide-react'
 import { api, fmtTime, useColours, useDisplays, useGlowtide, usePosition } from '../lib/store'
 import { lineIndexAt } from '../../../shared/lyrics.mjs'
@@ -51,6 +52,7 @@ import Tour from './Tour'
 import { Seg } from './SettingsPanel'
 import Connect from './Connect'
 import SettingsPanel from './SettingsPanel'
+import StatsPanel from './StatsPanel'
 import YouTubeStage from './YouTubeStage'
 import { SearchPanel, LibraryPanel, QueuePanel, DevicesPanel } from './Panels'
 import { YtSearch, YtLibrary, YtQueue } from './YtPanels'
@@ -150,6 +152,7 @@ export default function Player() {
                   ))}
                 {(panel === 'devices' || panel === 'apps') &&
                   (sys ? <SystemApps state={state} /> : <DevicesPanel state={state} />)}
+                {panel === 'stats' && <StatsPanel state={state} settings={settings} />}
                 {panel === 'settings' && (
                   <SettingsPanel state={state} settings={settings} onClose={() => setPanel(null)} />
                 )}
@@ -212,6 +215,7 @@ function Sidebar({ state, panel, setPanel }) {
   return (
     <nav className="sidebar" aria-label="Glowtide">
       {items.map((it) => item(it, (it[0] === 'devices' || it[0] === 'apps') && noDevices))}
+      {item(['stats', 'Stats', ChartColumn, 'Stats · what you listen to most'])}
       <span className="side-gap" />
       {item(['settings', 'Settings', Cog, 'Settings · glow, lyrics, colours and more'])}
     </nav>
@@ -276,6 +280,7 @@ const PANEL_TITLES = {
   queue: 'Queue',
   devices: 'Devices',
   apps: 'Follow which app?',
+  stats: 'Your listening',
   settings: 'Settings'
 }
 

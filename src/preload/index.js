@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('glowtide', {
   nudgeLyrics: (delta) => ipcRenderer.invoke('lyrics:nudge', delta),
   saveTimedLyrics: (lines, trackId) => ipcRenderer.invoke('lyrics:saveTimed', lines, trackId),
   removeTimedLyrics: () => ipcRenderer.invoke('lyrics:removeTimed'),
+  stats: (range) => ipcRenderer.invoke('stats:get', range),
+  clearHistory: () => ipcRenderer.invoke('history:clear'),
   exportTimedLyrics: () => ipcRenderer.invoke('lyrics:exportTimed'),
   lyricsCandidates: (q) => ipcRenderer.invoke('lyrics:candidates', q),
   chooseLyrics: (id) => ipcRenderer.invoke('lyrics:choose', id),

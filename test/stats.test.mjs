@@ -1,0 +1,91 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { countsAsPlay, formatListening, songKeyOf, summarize } from '../src/shared/stats.mjs'
+
+const DAY = 86400000
+// a fixed "now": a Wednesday at 15:00 local time
+const NOW = new Date(2026, 10, 18, 15, 0, 0).getTime()
+const play = (daysAgo, title, artist, min = 3) => ({
+  at: NOW - daysAgo * DAY - 3600000,
+  ms: min * 60000,
+  title,
+  artist,
+  source: 'system'
+})
+
+test('a play is 30 seconds, or half of a short song', () => {
+  assert.ok(countsAsPlay(30000, 200000))
+  assert.ok(!countsAsPlay(29000, 200000), 'skipping through is not a play')
+  assert.ok(countsAsPlay(25000, 45000), 'half of a 45-second song')
+  assert.ok(!countsAsPlay(8000, 12000), 'never under 10 seconds')
+})
+
+test('the same song from different sources and spellings is one song', () => {
+  assert.equal(songKeyOf('Song (Remastered 2011)', 'Band, Guest'), songKeyOf('Song', 'Band'))
+  assert.equal(songKeyOf('', 'Band'), null)
+})
+
+test('week: top songs and artists, by plays then time', () => {
+  const plays = [
+    play(0, 'A', 'One'),
+    play(1, 'A', 'One'),
+    play(1, 'B', 'Two, One'),
+    play(2, 'C', 'Three', 10),
+    play(9, 'Old', 'Gone') // before this week
+  ]
+  const s = summarize(plays, 'week', NOW)
+  assert.equal(s.plays, 4)
+  assert.equal(s.ms, 19 * 60000)
+  assert.equal(s.songs, 3)
+  assert.deepEqual(
+    s.topSongs.map((x) => x.title),
+    ['A', 'C', 'B']
+  )
+  assert.equal(s.topArtists[0].artist, 'One', 'a featured artist counts for both')
+  assert.equal(s.topArtists[0].plays, 3)
+  assert.ok(!s.topSongs.some((x) => x.title === 'Old'))
+})
+
+test('the bars add up to the total, one per day of the week', () => {
+  const plays = [play(0, 'A', 'One'), play(3, 'B', 'Two'), play(6, 'C', 'Three')]
+  const s = summarize(plays, 'week', NOW)
+  assert.equal(s.buckets.length, 7)
+  assert.equal(
+    s.buckets.reduce((a, b) => a + b.ms, 0),
+    s.ms
+  )
+  assert.equal(s.buckets.at(-1).plays, 1, 'today is the last bar')
+  const month = summarize(plays, 'month', NOW)
+  assert.equal(month.buckets.length, 30)
+  const year = summarize(plays, 'year', NOW)
+  assert.ok(year.buckets.length >= 12 && year.buckets.length <= 13)
+})
+
+test('no comparison with a period the history does not reach', () => {
+  const s = summarize([play(1, 'A', 'One')], 'week', NOW)
+  assert.equal(s.previous, null)
+  const t = summarize([play(1, 'A', 'One'), play(10, 'B', 'Two', 5)], 'week', NOW)
+  assert.deepEqual(t.previous, { ms: 5 * 60000, plays: 1 })
+})
+
+test('all time starts at the first play', () => {
+  const s = summarize([play(70, 'A', 'One'), play(1, 'B', 'Two')], 'all', NOW)
+  assert.equal(s.plays, 2)
+  assert.ok(s.buckets.length >= 3)
+  assert.equal(s.previous, null)
+})
+
+test('nothing played: an honest empty result', () => {
+  const s = summarize([], 'week', NOW)
+  assert.equal(s.plays, 0)
+  assert.equal(s.ms, 0)
+  assert.deepEqual(s.topSongs, [])
+  assert.equal(s.buckets.length, 7)
+})
+
+test('listening time reads naturally', () => {
+  assert.equal(formatListening(0), '0 min')
+  assert.equal(formatListening(20000), 'under a minute')
+  assert.equal(formatListening(45 * 60000), '45 min')
+  assert.equal(formatListening(125 * 60000), '2 h 05 min')
+})

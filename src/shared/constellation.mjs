@@ -1,9 +1,8 @@
 // Constellation lyric style: a verse fills a real constellation one star per word.
 // The whole figure shows faintly from the start and lights up as the words are sung; when
 // a verse has more words than the figure has stars, the figure fills again for the rest.
-// Figures are chosen to fit the verse, well-known ones first, and each next figure is a
-// neighbour in the real sky, so a song travels across it. A chorus that comes back returns
-// to its own constellation.
+// Figures are chosen to fit the verse, well-known ones first. A chorus that comes back
+// returns to its own constellation.
 // Pure layout in a fixed 1600x900 view; no DOM.
 
 import { CONSTELLATIONS } from './skyCatalog.mjs'
@@ -12,8 +11,6 @@ export const VIEW = { w: 1600, h: 900 }
 // where a figure is drawn: clear of the clock above and the caption below
 const BOX = { cx: 800, cy: 445, w: 920, h: 400 }
 const SECTION_GAP_MS = 5000 // a pause this long starts a new verse
-// how long the journey to the next figure takes; it sets off this long before the verse
-export const TRAVEL_MS = 1500
 // below this (sky units) is the caption's: no word is placed there
 const CAPTION_TOP = 720
 
@@ -23,32 +20,6 @@ export const FAMOUS = new Set(
     ' '
   )
 )
-
-const rad = (d) => (d * Math.PI) / 180
-
-/** Degrees between two places in the sky, each [right ascension, declination]. */
-export function skyDistance(a, b) {
-  const [r1, d1] = a.map(rad)
-  const [r2, d2] = b.map(rad)
-  const c = Math.sin(d1) * Math.sin(d2) + Math.cos(d1) * Math.cos(d2) * Math.cos(r2 - r1)
-  return (Math.acos(Math.min(1, Math.max(-1, c))) * 180) / Math.PI
-}
-
-/**
- * Which way the view moves to go from one figure to the next, as a unit screen vector
- * (x right, y down), drawn as on a sky chart: east to the left, north up. Null when they
- * are the same place (a chorus straight after itself), so the figure just fades.
- */
-export function travelDirection(a, b) {
-  if (!a || !b) return null
-  const [r1, d1] = a.map(rad)
-  const [r2, d2] = b.map(rad)
-  const x = Math.cos(d2) * Math.sin(r2 - r1)
-  const y = Math.cos(d1) * Math.sin(d2) - Math.sin(d1) * Math.cos(d2) * Math.cos(r2 - r1)
-  const len = Math.hypot(x, y)
-  if (len < 1e-3) return null
-  return [+(-x / len).toFixed(3), +(-y / len).toFixed(3)]
-}
 
 // A star's colour from its B-V colour index: hot blue-white through white and yellow to
 // cool orange-red. A little stronger than the eye sees them, so the difference shows.
@@ -200,8 +171,8 @@ function flatten(lines) {
 /**
  * The figures of a song. Each part (a verse, a chorus) stays in one constellation: when it
  * has more words than the figure has stars, the figure fills again for the next lines
- * (another page of the same constellation) rather than moving on. The view only travels to
- * a new constellation when a new part begins.
+ * (another page of the same constellation) rather than moving on. A new constellation comes
+ * only when a new part begins.
  * Returns [{ cons, words: [flat word], n, page }] in song order.
  */
 export function buildFigures(lines, seed = 0) {
@@ -253,11 +224,6 @@ export function buildFigures(lines, seed = 0) {
         const fill = count / (pages.length * c.stars.length)
         let score = 2 * fill - 1.2 * (pages.length - 1)
         if (FAMOUS.has(c.id)) score += 1.2
-        if (prev) {
-          // a neighbour in the real sky, so the song travels rather than jumps
-          const d = skyDistance(prev.centre, c.centre)
-          score += 1.2 * Math.max(0, 1 - d / 60) - (d > 100 ? 0.5 : 0)
-        }
         score -= 1.5 * (used.get(c.id) || 0)
         // a little chance, more for the first figure, so songs don't all start alike
         score += (prev ? 0.6 : 1.6) * rand(seed + figures.length * 131 + ci * 7)
@@ -324,14 +290,6 @@ export function constellationAt(
     // Before the first word: show the first figure unlit, so the sky is there from the start.
     if (mode === 'words' && figs[0].words[0] && posMs < figs[0].words[0].t) figIdx = 0
     else return none
-  } else if (mode === 'words' && litCount === figs[figIdx].words.length && figs[figIdx + 1]) {
-    // This figure is finished: set off for the next one in time to arrive as it begins.
-    const next = figs[figIdx + 1].words[0]
-    if (posMs >= (lastWord.end ?? lastWord.t) && posMs >= next.t - TRAVEL_MS) {
-      figIdx++
-      litCount = 0
-      lastWord = null
-    }
   }
   if (mode === 'words' && lastWord) {
     const lineEnd = lines[lastWord.line].end ?? lastWord.end
@@ -357,9 +315,9 @@ export function constellationAt(
     if (s.current) fi = si
   })
   const focus = fi >= 0 && focusText ? { x: stars[fi].x, y: stars[fi].y, text: focusText } : null
-  const { id, name, title, desc, centre } = fig.cons
+  const { id, name, title, desc } = fig.cons
   return {
-    figure: { id, name, title, desc, n: fig.n, centre },
+    figure: { id, name, title, desc, n: fig.n },
     stars,
     edges,
     focus,

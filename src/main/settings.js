@@ -69,6 +69,7 @@ export const DEFAULT_SETTINGS = {
   // colours, or your own picture or video (copied into the settings folder)
   background: { kind: 'cover', opacity: 70, fullscreen: false, file: '', version: 0 },
   tourDone: false, // the first-run tour was seen (or skipped)
+  history: true, // keep a listening history on this PC, for the Stats page
   widgets: {
     fps: 60,
     accent: '#7c5cff', // the full-screen view's "custom" colour theme

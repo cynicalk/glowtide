@@ -58,6 +58,8 @@ import { appLabel, systemTrack, repeatFromSmtc } from '../shared/media.mjs'
 import { createSmtc } from './smtc'
 import { createFullscreenWatch } from './fullscreen'
 import { createUpdater } from './updater'
+import { createHistory } from './history'
+import { summarize, songKeyOf } from '../shared/stats.mjs'
 import { hardenContents, hardenSession, isSafeExternal, trustedSender } from './security'
 
 // The GLOWTIDE_* test hooks (snapshots, probes, separate profiles) only work in a development
@@ -197,7 +199,12 @@ function all() {
     ...(widgets ? widgets.windows() : [])
   ].filter((w) => w && !w.isDestroyed())
 }
+// The listening history behind the Stats page (made once the app is ready, as it lives in
+// the settings folder).
+let history = null
+
 function broadcast() {
+  history?.tick()
   const stageOn = widgets?.stageDisplay() ?? null
   state.lyricsOverStage = stageOn !== null && !!lyricsWin && lyricsDisplayId === stageOn
   state.spotifyBridge = spotifyBridge()
@@ -1697,6 +1704,22 @@ function registerIpc() {
     writeFileSync(filePath, png)
     return filePath
   })
+  // Stats: what you've listened to, from the local history.
+  handle('stats:get', (_, range) => {
+    const s = summarize(history ? history.plays() : [], range, Date.now())
+    return {
+      ...s,
+      enabled: loadSettings().history !== false,
+      topSongs: s.topSongs.map((x) => ({
+        ...x,
+        cover: history?.coverFor(songKeyOf(x.title, x.artist)) || null
+      }))
+    }
+  })
+  handle('history:clear', () => {
+    history?.clear()
+    return true
+  })
   handle('lyrics:removeTimed', () => {
     if (!state.track) return
     removeMyLrc(state.track)
@@ -2268,6 +2291,11 @@ else {
         miniPlace = ''
         syncMini()
       })
+    history = createHistory({
+      dir: app.getPath('userData'),
+      getState: () => state,
+      enabled: () => loadSettings().history !== false
+    })
     poll()
     scheduleSnapshot()
     state.update = { ...updater.state }
@@ -2276,6 +2304,7 @@ else {
 
   app.on('before-quit', () => {
     quitting = true
+    history?.flush()
     globalShortcut.unregisterAll()
     updater.stop()
     fullscreen.stop()

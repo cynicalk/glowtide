@@ -16,7 +16,6 @@ import {
   seedOf,
   starColour,
   starRadius,
-  travelDirection,
   VIEW
 } from '../../../shared/constellation.mjs'
 
@@ -91,10 +90,14 @@ function wavesView(lines, pos, { mode }) {
   return lineWordsAt(lines, pos, mode)
 }
 
+// A star, its word and the sparkle all grow in from nothing, so the eye sees them a moment
+// after they start: the sky runs this far ahead, so they land on the word, not after it.
+const SKY_LEAD_MS = 110
+
 function skyView(lines, pos, opts) {
   if (figCache.lines !== lines || figCache.seed !== opts.seed)
     figCache = { lines, seed: opts.seed, figures: buildFigures(lines, opts.seed) }
-  return constellationAt(lines, pos, { ...opts, figures: figCache.figures })
+  return constellationAt(lines, pos + SKY_LEAD_MS, { ...opts, figures: figCache.figures })
 }
 
 function Clock({ now, serif }) {
@@ -223,34 +226,6 @@ function Starfield({ seed }) {
   )
 }
 
-/**
- * The nearer stars around one figure. They travel with it, so moving between figures reads
- * as the view panning across the sky rather than one drawing swapped for another.
- */
-function NearField({ n }) {
-  const dots = useMemo(
-    () =>
-      Array.from({ length: 46 }, (_, i) => ({
-        x: rand(n * 977 + i * 13) * VIEW.w,
-        y: rand(n * 977 + i * 17 + 5) * VIEW.h,
-        r: 0.7 + rand(n * 977 + i * 23 + 9) * 1.4,
-        o: 0.25 + rand(n * 977 + i * 29 + 3) * 0.5
-      })),
-    [n]
-  )
-  return (
-    <svg
-      className="sky sky-near"
-      viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
-      preserveAspectRatio="xMidYMid slice"
-    >
-      {dots.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={p.r} opacity={p.o} />
-      ))}
-    </svg>
-  )
-}
-
 /** A shooting star across the sky when a figure is finished: where and which way, per figure. */
 function Meteor({ n }) {
   const from = rand(n * 31 + 1) < 0.5 ? -1 : 1
@@ -272,7 +247,7 @@ function Meteor({ n }) {
  * time (the camera leaning toward the newest stars, the sparkle gliding between them) is an
  * HTML layer over it that the compositor moves, so the stars are never repainted for it.
  */
-function FigureView({ sky, labelPx, gone, travel }) {
+function FigureView({ sky, labelPx, gone }) {
   const placed = useMemo(() => placeLabels(sky.stars, { fontPx: labelPx }), [sky, labelPx])
   const words = sky.stars.filter((s) => s.word).length
   const complete = words > 0 && sky.stars.every((s) => !s.word || s.lit)
@@ -305,13 +280,9 @@ function FigureView({ sky, labelPx, gone, travel }) {
     .filter(Boolean)
   return (
     <div
-      className={`fig ${gone ? 'gone' : ''} ${complete ? 'complete' : ''} ${travel ? 'travel' : ''}`}
-      style={{
-        transform: skyOffset(VIEW.w / 2 + cam.x, VIEW.h / 2 + cam.y),
-        ...(travel && { '--tx': travel[0], '--ty': travel[1] })
-      }}
+      className={`fig ${gone ? 'gone' : ''} ${complete ? 'complete' : ''}`}
+      style={{ transform: skyOffset(VIEW.w / 2 + cam.x, VIEW.h / 2 + cam.y) }}
     >
-      <NearField n={sky.figure.n} />
       {complete && <Meteor n={sky.figure.n} />}
       <svg className="sky" viewBox={`0 0 ${VIEW.w} ${VIEW.h}`} preserveAspectRatio="xMidYMid meet">
         {/* a soft wide stroke under each line stands in for a blur filter */}
@@ -394,23 +365,11 @@ function Constellation({ sky, scale }) {
   const len = f?.text.length || 0
   const capEm = len <= 22 ? 1 : len <= 38 ? 0.82 : len <= 60 ? 0.68 : 0.56
   const figures = [leaving, fig].filter((s, i, a) => s && a.indexOf(s) === i)
-  // The view travels across the real sky from the figure leaving to its neighbour arriving:
-  // the old one slides away one way as the new one comes in from the other.
-  const travel =
-    leaving && fig && leaving !== fig
-      ? travelDirection(leaving.figure.centre, fig.figure.centre)
-      : null
   return (
     <>
       <div className="sky-drift" style={{ '--wpx': labelPx }}>
         {figures.map((s) => (
-          <FigureView
-            key={s.figure.n}
-            sky={s}
-            labelPx={labelPx}
-            gone={s === leaving}
-            travel={travel}
-          />
+          <FigureView key={s.figure.n} sky={s} labelPx={labelPx} gone={s === leaving} />
         ))}
       </div>
       <div

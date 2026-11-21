@@ -6,12 +6,9 @@ import {
   pickConstellation,
   placeStars,
   seedOf,
-  skyDistance,
   starColour,
   starRadius,
-  travelDirection,
   FAMOUS,
-  TRAVEL_MS,
   VIEW
 } from '../src/shared/constellation.mjs'
 import { CONSTELLATIONS } from '../src/shared/skyCatalog.mjs'
@@ -233,18 +230,6 @@ test('songs start in different places', () => {
   assert.ok(firsts.size >= 5, [...firsts].join(' '))
 })
 
-test('a song travels to neighbours rather than jumping across the sky', () => {
-  const d = []
-  for (let seed = 0; seed < 30; seed++) {
-    const figs = buildFigures(song(), seed)
-    for (let i = 1; i < figs.length; i++)
-      if (figs[i].cons.id !== figs[i - 1].cons.id)
-        d.push(skyDistance(figs[i - 1].cons.centre, figs[i].cons.centre))
-  }
-  d.sort((a, b) => a - b)
-  assert.ok(d[d.length >> 1] < 60, `median ${d[d.length >> 1]}`)
-})
-
 test('every figure knows where it is in the sky', () => {
   for (const c of CONSTELLATIONS) {
     const [ra, dec] = c.centre
@@ -252,16 +237,6 @@ test('every figure knows where it is in the sky', () => {
   }
   const ori = CONSTELLATIONS.find((c) => c.id === 'Ori').centre
   assert.ok(Math.abs(ori[0] - 83) < 6 && Math.abs(ori[1] - 5) < 8, 'Orion sits on the equator')
-})
-
-test('travel direction: east is to the left, north is up', () => {
-  const [ex, ey] = travelDirection([100, 0], [110, 0])
-  assert.ok(ex < -0.99 && Math.abs(ey) < 0.01, 'east is to the left')
-  const [wx] = travelDirection([100, 0], [90, 0])
-  assert.ok(wx > 0.99, 'west is to the right')
-  const up = travelDirection([100, 10], [100, 30])
-  assert.ok(up[1] < -0.99, 'north is up the screen')
-  assert.equal(travelDirection([100, 10], [100, 10]), null, 'the same place: no journey')
 })
 
 test('stars take their real colour and brightness', () => {
@@ -274,23 +249,6 @@ test('stars take their real colour and brightness', () => {
   const ori = placeStars(CONSTELLATIONS.find((c) => c.id === 'Ori'))
   const bright = ori.reduce((a, s) => (s.mag < a.mag ? s : a))
   assert.ok(bright.mag < 0.6, 'Rigel or Betelgeuse is in the figure')
-})
-
-test('a finished figure sets off for the next in time to arrive as it begins', () => {
-  const ls = song()
-  const figs = buildFigures(ls, 5)
-  // the first figure that follows a pause long enough for the whole journey
-  const n = figs.findIndex(
-    (f, i) => i > 0 && f.words[0].t - figs[i - 1].words.at(-1).end > TRAVEL_MS + 500
-  )
-  assert.ok(n > 0)
-  const next = figs[n].words[0]
-  const before = constellationAt(ls, next.t - TRAVEL_MS - 200, { seed: 5, figures: figs })
-  assert.equal(before.figure.n, n - 1)
-  const during = constellationAt(ls, next.t - TRAVEL_MS + 200, { seed: 5, figures: figs })
-  assert.equal(during.figure.n, n, 'on the way to the next figure')
-  assert.equal(during.stars.filter((s) => s.lit).length, 0, 'nothing lit before its words')
-  assert.equal(during.focus, null)
 })
 
 test('no word is placed down where the caption is', async () => {
@@ -323,7 +281,7 @@ test('a chorus is recognised even when the song runs straight into it', () => {
   }
 })
 
-test('the view moves on only when a new part of the song begins, not every few lines', () => {
+test('a new constellation comes only when a new part of the song begins', () => {
   // two verses of six lines and a chorus of four lines that comes back, sung straight
   // through with no pauses
   const verse = (n) =>
@@ -344,8 +302,8 @@ test('the view moves on only when a new part of the song begins, not every few l
   const ls = estimateWordTiming(parseLrc(lrc), 120000)
   for (const seed of [1, 2, 3, 4]) {
     const figs = buildFigures(ls, seed)
-    const journeys = figs.filter((f, i) => i > 0 && f.cons.id !== figs[i - 1].cons.id).length
-    assert.ok(journeys <= 3, `seed ${seed}: ${journeys} journeys for four parts`)
+    const changes = figs.filter((f, i) => i > 0 && f.cons.id !== figs[i - 1].cons.id).length
+    assert.ok(changes <= 3, `seed ${seed}: ${changes} changes for four parts`)
     const at = (line) => figs.find((f) => f.words.some((w) => w.line === line)).cons.id
     assert.equal(at(0), at(5), `seed ${seed}: a verse stays in one constellation`)
     assert.equal(at(6), at(16), `seed ${seed}: the chorus comes back to its own`)

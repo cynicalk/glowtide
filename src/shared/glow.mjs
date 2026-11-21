@@ -81,3 +81,34 @@ export function dayTint(date = new Date()) {
   const ease = night * night * (3 - 2 * night) // smooth at both ends
   return { warmth: +ease.toFixed(3), dim: +ease.toFixed(3) }
 }
+
+const plainLine = (t) =>
+  String(t || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+
+/**
+ * The chorus, as line indexes: lines (of three words or more) that come back elsewhere in the
+ * song together with the line before or after them. A single line that happens to repeat
+ * isn't a chorus.
+ */
+export function chorusLines(lines) {
+  const t = (lines || []).map((l) => plainLine(l?.text))
+  const long = (s) => s.split(' ').length >= 3
+  const at = new Map()
+  t.forEach((s, i) => s && long(s) && at.set(s, [...(at.get(s) || []), i]))
+  const out = new Set()
+  for (const where of at.values()) {
+    if (where.length < 2) continue
+    for (const i of where) {
+      // a neighbour that repeats with it, somewhere else in the song
+      const pairs = where.some(
+        (j) =>
+          j !== i && ((t[i + 1] && t[i + 1] === t[j + 1]) || (t[i - 1] && t[i - 1] === t[j - 1]))
+      )
+      if (pairs) out.add(i)
+    }
+  }
+  return out
+}

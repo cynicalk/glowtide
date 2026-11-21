@@ -4,7 +4,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../lib/store'
 import { Seg, Toggle } from './SettingsPanel'
-import { drawStatsCard } from './shareCard'
+import {
+  CARD_SIZES,
+  YEAR_SLIDES,
+  drawCard,
+  drawStatsCard,
+  drawYearSlide,
+  recordClip
+} from './shareCard'
 import { RANGES, formatListening } from '../../../shared/stats.mjs'
 
 const RANGE_OPTIONS = Object.keys(RANGES).map((k) => [k, RANGES[k].label])
@@ -33,20 +40,35 @@ export default function StatsPanel({ state, settings }) {
   const [range, setRange] = useState('week')
   const [data, refresh] = useStats(range, state.track?.id)
   const [carding, setCarding] = useState(false)
+  const [lineCard, setLineCard] = useState(null) // a starred line being made into a card
+  const [yearView, setYearView] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const on = settings.history !== false
 
   if (carding && data) return <StatsCard data={data} onClose={() => setCarding(false)} />
+  if (lineCard) return <LineCard fav={lineCard} onClose={() => setLineCard(null)} />
+  if (yearView) return <YearView onClose={() => setYearView(false)} />
+  const year = new Date().getFullYear()
+  // the year's recap is offered on the year view, and through December and early January
+  const month = new Date().getMonth()
+  const yearOffer = range === 'year' || month === 11
 
   return (
     <div className="stats">
       <div className="stats-head">
         <Seg value={range} options={RANGE_OPTIONS} onChange={setRange} />
-        {data?.plays > 0 && (
-          <button className="pill" onClick={() => setCarding(true)}>
-            Share a card
-          </button>
-        )}
+        <span className="stats-confirm">
+          {data?.plays > 0 && yearOffer && (
+            <button className="pill on" onClick={() => setYearView(true)}>
+              Your {year} in music
+            </button>
+          )}
+          {data?.plays > 0 && (
+            <button className="pill" onClick={() => setCarding(true)}>
+              Share a card
+            </button>
+          )}
+        </span>
       </div>
       {!data ? (
         <div className="muted pad">Loading…</div>
@@ -59,6 +81,7 @@ export default function StatsPanel({ state, settings }) {
       ) : (
         <>
           <Tiles data={data} />
+          {data.onThisDay?.length > 0 && <OnThisDay items={data.onThisDay} />}
           <Bars data={data} />
           <div className="stats-lists">
             <section>
@@ -91,6 +114,7 @@ export default function StatsPanel({ state, settings }) {
           </div>
         </>
       )}
+      <FavLines onCard={setLineCard} />
       <div className="stats-foot">
         <div className="srow">
           <span>Keep a listening history</span>
@@ -139,6 +163,27 @@ export default function StatsPanel({ state, settings }) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** A song you played a lot this time last month or last year. */
+function OnThisDay({ items }) {
+  return (
+    <div className="stats-otd">
+      {items.map((x) => (
+        <div className="row stats-row" key={x.when}>
+          {x.cover ? <img src={x.cover} alt="" /> : <div className="thumb-ph" />}
+          <div className="row-text">
+            <div className="k">{x.label}</div>
+            <div className="t">{x.title}</div>
+            <div className="s">
+              {x.artist ? `${x.artist} · ` : ''}
+              {plural(x.plays, 'play')} that week
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -289,6 +334,264 @@ function StatsCard({ data, onClose }) {
       <div className="card-body">
         <canvas ref={canvas} className="card-preview story" />
       </div>
+    </div>
+  )
+}
+
+/** A picture (https or inline) as an Image for a canvas, through Glowtide's cover fetch. */
+function loadCover(url) {
+  if (!url) return Promise.resolve(null)
+  return api.cardCover(url).then(
+    (data) =>
+      data &&
+      new Promise((res) => {
+        const img = new Image()
+        img.onload = () => res(img)
+        img.onerror = () => res(null)
+        img.src = data
+      })
+  )
+}
+
+/** The lines you starred, newest first: each can become a card or a clip. */
+function FavLines({ onCard }) {
+  const [list, setList] = useState(null)
+  const [all, setAll] = useState(false)
+  useEffect(() => {
+    let live = true
+    api.allFavs().then((l) => live && setList(l || []))
+    return () => {
+      live = false
+    }
+  }, [])
+  if (!list) return null
+  const shown = all ? list : list.slice(0, 5)
+  return (
+    <section className="stats-favs">
+      <div className="sect">Favourite lines</div>
+      {!list.length ? (
+        <p className="fine">
+          Star a line in the lyrics view (☆ beside the line being sung) to keep it here.
+        </p>
+      ) : (
+        <>
+          {shown.map((f) => (
+            <div className="stats-fav" key={`${f.key}\n${f.text}`}>
+              <div className="row-text">
+                <div className="q">“{f.text}”</div>
+                <div className="s">
+                  {f.title}
+                  {f.artist ? ` · ${f.artist}` : ''}
+                </div>
+              </div>
+              <button className="pill" onClick={() => onCard(f)}>
+                Share
+              </button>
+              <button
+                className="rd sm ghost"
+                aria-label="Unstar this line"
+                onClick={async () => setList(await api.removeFav(f.key, f.text))}
+              >
+                ★
+              </button>
+            </div>
+          ))}
+          {list.length > 5 && (
+            <button className="pill" onClick={() => setAll(!all)}>
+              {all ? 'Fewer' : `All ${list.length}`}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
+/** A starred line as a card (story or square) or an 8-second clip. */
+function LineCard({ fav, onClose }) {
+  const canvas = useRef(null)
+  const [size, setSize] = useState('story')
+  const [cover, setCover] = useState(null)
+  const [note, setNote] = useState('')
+  const [rec, setRec] = useState(null)
+  const [redraw, setRedraw] = useState(0)
+  const open = useRef(true)
+  useEffect(
+    () => () => {
+      open.current = false
+    },
+    []
+  )
+  useEffect(() => {
+    let live = true
+    loadCover(fav.cover).then((img) => live && setCover(img))
+    return () => {
+      live = false
+    }
+  }, [fav.cover])
+  const info = { cover, line: fav.text, title: fav.title, artist: fav.artist.split(',')[0] }
+  useEffect(() => {
+    if (canvas.current && rec === null) drawCard(canvas.current, { size, ...info })
+  }, [size, cover, redraw]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const k = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
+  const name = `${info.artist} - ${fav.title || 'Glowtide'}`
+  const png = () => canvas.current.toDataURL('image/png')
+  const clip = async () => {
+    setNote('')
+    const r = await recordClip(
+      canvas.current,
+      { size, ...info },
+      { onSecond: setRec, open: () => open.current }
+    )
+    if (!r) return
+    setRec(null)
+    setRedraw((n) => n + 1)
+    if (r.error) return setNote(r.error)
+    setNote((await api.saveClip(r.bytes, name, r.ext)) ? 'Clip saved' : '')
+  }
+  return (
+    <div className="stats card-maker">
+      <div className="tap-head">
+        <div className="tap-title">A line you loved</div>
+        <div className="tap-actions">
+          <Seg
+            value={size}
+            options={Object.keys(CARD_SIZES).map((k) => [k, CARD_SIZES[k].label])}
+            onChange={setSize}
+          />
+          <button
+            className="pill on"
+            disabled={rec !== null}
+            onClick={async () => setNote((await api.copyCard(png())) ? 'Copied' : "Couldn't copy")}
+          >
+            Copy image
+          </button>
+          <button
+            className="pill"
+            disabled={rec !== null}
+            onClick={async () => setNote((await api.saveCard(png(), name)) ? 'Saved' : '')}
+          >
+            Save…
+          </button>
+          <button className="pill" disabled={rec !== null} onClick={clip}>
+            {rec !== null ? `Recording… ${rec} s` : 'Make a clip…'}
+          </button>
+          <button className="pill" onClick={onClose}>
+            Back
+          </button>
+        </div>
+        <div className="tap-sub">
+          {note || `${fav.title}${fav.artist ? ` · ${fav.artist}` : ''}`}
+        </div>
+      </div>
+      <div className="card-body">
+        <canvas ref={canvas} className={`card-preview ${size}`} />
+      </div>
+    </div>
+  )
+}
+
+/** Your year in music: a few story slides to flick through, copy or save. */
+function YearView({ onClose }) {
+  const year = new Date().getFullYear()
+  const canvas = useRef(null)
+  const [res, setRes] = useState(undefined)
+  const [covers, setCovers] = useState([])
+  const [favCover, setFavCover] = useState(null)
+  const [i, setI] = useState(0)
+  const [note, setNote] = useState('')
+  useEffect(() => {
+    let live = true
+    api.yearInMusic(year).then(async (r) => {
+      if (!live) return
+      setRes(r)
+      if (!r) return
+      const imgs = await Promise.all((r.covers || []).map(loadCover))
+      const fc = r.fav ? await loadCover(r.fav.cover) : null
+      if (live) {
+        setCovers(imgs)
+        setFavCover(fc)
+      }
+    })
+    return () => {
+      live = false
+    }
+  }, [year])
+  const slides = res ? YEAR_SLIDES.filter((s) => s !== 'line' || res.fav) : []
+  const slide = slides[Math.min(i, slides.length - 1)]
+  useEffect(() => {
+    if (canvas.current && res && slide)
+      drawYearSlide(canvas.current, { slide, y: res.y, covers, fav: res.fav, favCover })
+  }, [res, slide, covers, favCover])
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight') setI((n) => Math.min(n + 1, slides.length - 1))
+      else if (e.key === 'ArrowLeft') setI((n) => Math.max(0, n - 1))
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose, slides.length])
+  const png = () => canvas.current.toDataURL('image/png')
+  const name = `My ${year} in music ${i + 1}`
+  return (
+    <div className="stats card-maker">
+      <div className="tap-head">
+        <div className="tap-title">Your {year} in music</div>
+        <div className="tap-actions">
+          <button
+            className="pill"
+            disabled={i === 0}
+            onClick={() => setI(i - 1)}
+            aria-label="Previous slide"
+          >
+            ‹
+          </button>
+          <span className="muted">{slides.length ? `${i + 1} of ${slides.length}` : ''}</span>
+          <button
+            className="pill"
+            disabled={i >= slides.length - 1}
+            onClick={() => setI(i + 1)}
+            aria-label="Next slide"
+          >
+            ›
+          </button>
+          <button
+            className="pill on"
+            disabled={!res}
+            onClick={async () => setNote((await api.copyCard(png())) ? 'Copied' : "Couldn't copy")}
+          >
+            Copy image
+          </button>
+          <button
+            className="pill"
+            disabled={!res}
+            onClick={async () => setNote((await api.saveCard(png(), name)) ? 'Saved' : '')}
+          >
+            Save…
+          </button>
+          <button className="pill" onClick={onClose}>
+            Back
+          </button>
+        </div>
+        <div className="tap-sub">
+          {note ||
+            (res === undefined
+              ? 'Loading…'
+              : res === null
+                ? `Nothing played in ${year} yet.`
+                : 'Flick through with ‹ › or the arrow keys')}
+        </div>
+      </div>
+      {res && (
+        <div className="card-body">
+          <canvas ref={canvas} className="card-preview story" />
+        </div>
+      )}
     </div>
   )
 }

@@ -41,7 +41,7 @@ import {
   wordTargets,
   wordTimedLines
 } from '../../../shared/tapsync.mjs'
-import { drawCard, CARD_SIZES } from './shareCard'
+import { drawCard, CARD_SIZES, recordClip } from './shareCard'
 import { Messages } from '../overlays/Messages'
 import { Wallpaper } from '../lib/Backgrounds'
 import { messagesView } from '../overlays/messagesView'
@@ -640,6 +640,9 @@ function NowPlaying({
                 </div>
               )}
             </div>
+            {synced && track && state.timingHint?.trackId === track.id && (
+              <TimingHint hint={state.timingHint} current={state.lyricsOffsetMs} />
+            )}
             {track && <div className="status">{lyricNote}</div>}
             {open && track && !syncing && !picking && !carding && (
               <LyricTools
@@ -683,6 +686,7 @@ function NowPlaying({
                 track={track}
                 chosen={state.lyricsChosen}
                 canSeek={can('seek')}
+                canStar={state.source !== 'demo'}
                 pageOpen={pageOpen}
                 trackId={track?.id}
                 note={track ? LYRIC_STATUS[state.lyricsStatus] : 'Nothing playing'}
@@ -773,6 +777,31 @@ function ShareButton({ disabled }) {
  * forward, [ ] lyrics 50 ms earlier/later (Shift: 0.5 s), L like. Not while typing, and not
  * when something else (tap-to-sync, a focused button) has the key.
  */
+/** The timing check heard the lyrics running early or late: offer the nudge. */
+function TimingHint({ hint, current }) {
+  const diff = hint.offsetMs - current
+  const secs = (Math.abs(diff) / 1000).toFixed(1)
+  return (
+    <div className="timing-hint" role="status">
+      <span>
+        The lyrics look {secs} s {diff < 0 ? 'early' : 'late'} against the singing.
+      </span>
+      <button
+        className="pill on"
+        onClick={async () => {
+          await api.nudgeLyrics(diff)
+          api.dismissTiming()
+        }}
+      >
+        Fix it
+      </button>
+      <button className="pill" onClick={() => api.dismissTiming()}>
+        No thanks
+      </button>
+    </div>
+  )
+}
+
 function usePlayerKeys(state) {
   const live = useRef(state)
   useEffect(() => {
@@ -834,6 +863,7 @@ function PlayerLyrics({
   track,
   chosen,
   canSeek,
+  canStar,
   pageOpen,
   trackId,
   note,
@@ -844,6 +874,26 @@ function PlayerLyrics({
   const pos = usePosition(playback, durationMs, 200) + (offsetMs || 0)
   const idx = synced ? lineIndexAt(lines, pos) : -1
   const list = useRef(null)
+  // Favourite lines: the ones starred in this song
+  const [favs, setFavs] = useState({ id: null, texts: [] })
+  useEffect(() => {
+    let live = true
+    api.favsForSong().then((texts) => live && setFavs({ id: trackId, texts: texts || [] }))
+    return () => {
+      live = false
+    }
+  }, [trackId])
+  const starred = new Set(favs.id === trackId ? favs.texts : [])
+  const star = async (text) => {
+    const on = await api.toggleFav(text, trackId)
+    if (on === null) return
+    setFavs((f) => ({
+      id: trackId,
+      texts: on ? [...f.texts, text.trim()] : f.texts.filter((t) => t !== text.trim())
+    }))
+  }
+  // Tap a line to jump there (the nudge moves where a line sits in the song, so take it off)
+  const jump = (l) => canSeek && api.control('seek', Math.max(0, Math.round(l.t - (offsetMs || 0))))
   useEffect(() => {
     const box = list.current
     const el = box?.querySelector('.pl-line.cur')
@@ -892,9 +942,27 @@ function PlayerLyrics({
         l.text && l.text.trim() ? (
           <div
             key={i}
-            className={`pl-line ${i === idx ? 'cur' : i < idx ? 'past' : ''} ${Math.abs(i - idx) > 3 ? 'far' : ''}`}
+            className={`pl-line ${i === idx ? 'cur' : i < idx ? 'past' : ''} ${Math.abs(i - idx) > 3 ? 'far' : ''} ${canSeek ? 'seekable' : ''} ${starred.has(l.text.trim()) ? 'starred' : ''}`}
+            role={canSeek ? 'button' : undefined}
+            tabIndex={canSeek ? 0 : undefined}
+            title={canSeek ? 'Play from this line' : undefined}
+            onClick={() => jump(l)}
+            onKeyDown={(e) => e.key === 'Enter' && jump(l)}
           >
             {l.text}
+            {canStar && (
+              <button
+                className="pl-star"
+                aria-label={starred.has(l.text.trim()) ? 'Unstar this line' : 'Star this line'}
+                aria-pressed={starred.has(l.text.trim())}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  star(l.text)
+                }}
+              >
+                {starred.has(l.text.trim()) ? '★' : '☆'}
+              </button>
+            )}
           </div>
         ) : (
           <div key={i} className={`pl-gap ${i === idx ? 'cur' : ''}`}>
@@ -1211,7 +1279,16 @@ function ShareCard({ lines, current, track, onClose }) {
   const [size, setSize] = useState('story')
   const [cover, setCover] = useState(null)
   const [note, setNote] = useState('')
+  const [rec, setRec] = useState(null) // seconds left while a clip records
+  const [redraw, setRedraw] = useState(0)
   const canvas = useRef(null)
+  const open = useRef(true) // closed while a clip records: don't ask where to save it
+  useEffect(
+    () => () => {
+      open.current = false
+    },
+    []
+  )
   useEffect(() => {
     let live = true
     const url = track?.cover
@@ -1235,7 +1312,7 @@ function ShareCard({ lines, current, track, onClose }) {
         title: track?.name || '',
         artist: (track?.artists || '').split(',')[0]
       })
-  }, [size, cover, pick, sung, track])
+  }, [size, cover, pick, sung, track, redraw])
   useEffect(() => {
     const k = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', k)
@@ -1243,6 +1320,27 @@ function ShareCard({ lines, current, track, onClose }) {
   }, [onClose])
   const png = () => canvas.current.toDataURL('image/png')
   const name = `${(track?.artists || '').split(',')[0]} - ${track?.name || 'Glowtide'}`
+  // An animated clip of the card: drawn frame by frame onto the same canvas while a
+  // MediaRecorder records it, then saved as MP4 (or WebM where MP4 isn't offered).
+  const makeClip = async () => {
+    setNote('')
+    const r = await recordClip(
+      canvas.current,
+      {
+        size,
+        cover,
+        line: sung[pick]?.text || '',
+        title: track?.name || '',
+        artist: (track?.artists || '').split(',')[0]
+      },
+      { onSecond: setRec, open: () => open.current }
+    )
+    if (!r) return
+    setRec(null)
+    setRedraw((n) => n + 1) // the still card again
+    if (r.error) return setNote(r.error)
+    setNote((await api.saveClip(r.bytes, name, r.ext)) ? 'Clip saved' : '')
+  }
   return (
     <div className="pl-lyrics card-maker">
       <div className="tap-head">
@@ -1261,15 +1359,21 @@ function ShareCard({ lines, current, track, onClose }) {
           </button>
           <button
             className="pill"
+            disabled={rec !== null}
             onClick={async () => setNote((await api.saveCard(png(), name)) ? 'Saved' : '')}
           >
             Save…
+          </button>
+          <button className="pill" disabled={rec !== null} onClick={makeClip}>
+            {rec !== null ? `Recording… ${rec} s` : 'Make a clip…'}
           </button>
           <button className="pill" onClick={onClose}>
             Close
           </button>
         </div>
-        <div className="tap-sub">{note || 'Pick a line below'}</div>
+        <div className="tap-sub">
+          {note || (rec !== null ? 'Making an 8-second clip' : 'Pick a line below')}
+        </div>
       </div>
       <div className="card-body">
         <canvas ref={canvas} className={`card-preview ${size}`} />
@@ -1278,6 +1382,7 @@ function ShareCard({ lines, current, track, onClose }) {
             <button
               key={i}
               className={`card-line ${i === pick ? 'on' : ''}`}
+              disabled={rec !== null}
               onClick={() => {
                 setPick(i)
                 setNote('')

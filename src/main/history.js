@@ -117,31 +117,41 @@ export function createHistory({ dir, getState, enabled, timer = true }) {
     /* no history yet */
   }
 
+  function saved() {
+    try {
+      return readFileSync(file(), 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => {
+          try {
+            return JSON.parse(l)
+          } catch {
+            return null
+          }
+        })
+        .filter(Boolean)
+    } catch {
+      return [] // nothing yet
+    }
+  }
+
   return {
     tick,
     /** On quit: the song playing counts if it has been listened to long enough. */
     flush: finish,
+    /** The plays written so far (not the one under way). */
+    saved,
     /** Every play, the one under way included once it counts. */
     plays() {
-      let out = []
-      try {
-        out = readFileSync(file(), 'utf8')
-          .split('\n')
-          .filter(Boolean)
-          .map((l) => {
-            try {
-              return JSON.parse(l)
-            } catch {
-              return null
-            }
-          })
-          .filter(Boolean)
-      } catch {
-        /* nothing yet */
-      }
+      const out = saved()
       if (cur && countsAsPlay(cur.ms, cur.durationMs))
         out.push({ at: cur.at, ms: cur.ms, title: cur.title, artist: cur.artist })
       return out
+    },
+    /** Replaces the written plays (a backup brought in, merged with these). */
+    replace(list) {
+      const text = list.map((p) => JSON.stringify(p)).join('\n')
+      writeFileSync(file(), text ? `${text}\n` : '')
     },
     coverFor: (key) => loadCovers()[key] || null,
     clear() {

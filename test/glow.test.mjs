@@ -83,3 +83,22 @@ test('glow by time of day: true by day, warm and dim at night, easing between', 
   assert.ok(at(7).warmth > 0 && at(7).warmth < 1, 'morning eases back')
   assert.ok(at(18, 15).warmth < at(20).warmth, 'deepens through the evening')
 })
+
+test('the chorus: lines that come back together, not one line that repeats', async () => {
+  const { chorusLines } = await import('../src/shared/glow.mjs')
+  const L = (...t) => t.map((text, i) => ({ t: i * 1000, text }))
+  const song = L(
+    'first verse line here',
+    'we light the sky tonight',
+    'every star is ours',
+    'second verse is new',
+    'a lonely line repeats',
+    'we light the sky tonight',
+    'every star is ours',
+    'a lonely line repeats here' // differs: not part of anything
+  )
+  assert.deepEqual([...chorusLines(song)].sort(), [1, 2, 5, 6])
+  const lonely = L('one two three', 'something else', 'one two three', 'more of it')
+  assert.deepEqual([...chorusLines(lonely)], [])
+  assert.deepEqual([...chorusLines([])], [])
+})

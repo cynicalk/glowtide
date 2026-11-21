@@ -76,7 +76,12 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   after 30 seconds of listening, from any source but the demo. The history stays on your
   PC (`history.jsonl` in the settings folder); turn it off or clear it on the Stats page.
   On Sunday evening a **weekly recap** notification shows your week (time listened, top
-  song); click it for Stats and the card.
+  song); click it for Stats and the card. **On this day** shows a song you played a lot this
+  time last month or last year. **Favourite lines**: star a line in the lyrics view (☆ beside
+  it) and it's kept on the Stats page, ready to share as a card or a clip. **Your year in
+  music** (in December, or on This year): story slides with your hours, top songs and
+  artists, your biggest day, your longest run of days and a line you loved; a notification
+  says when it's ready.
 - **Phone remote** (Settings → App): play, pause, skip, seek, volume and the lyric line on
   your phone, on the same Wi-Fi. Open the address Glowtide shows (port 43823) and pair with
   a six-digit code; only paired phones get in, and "Forget" revokes them. Windows asks once
@@ -87,6 +92,12 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
   the call is in the same browser as the music, the music pauses instead.
 - **Glow by time of day** (Settings → Glow): true to the cover by day, easing warmer and up
   to 40% dimmer from 6 pm, back by 8 am.
+- **Glow reacts to the lyrics** (Settings → Glow): a soft flash round the edge as each line
+  starts, and the chorus (lines that come back together) a little brighter.
+- **Backup** (Settings → App): one file with your settings, timed lyrics, picked versions,
+  per-song nudges and listening history, to bring in on another PC or after a reinstall.
+  Sign-in secrets, paired phones and your own background stay behind; the music source and
+  the phone remote stay as they are on the PC you bring it into.
 - **Backgrounds** (Settings → Colours → Background): the blurred cover, flowing colours (soft blobs
   of the cover's colours drifting slowly), or your own picture or video (MP4/WebM, silent and
   looping, like a live wallpaper), behind the player and optionally the full-screen view. The
@@ -98,8 +109,15 @@ Switch sources from the Welcome screen, Settings → Music source, or the tray i
 - **Share to LRCLIB**: lyrics you timed can be published to [LRCLIB](https://lrclib.net) for
   everyone, after a confirmation that shows exactly what is sent (title, artist, album, length,
   the words and line times). It's public and permanent; demo songs are never offered.
+- **Tap a line** in the lyrics view to play from it (where the source can seek).
 - **Share a line**: an image for stories (1080×1920) or a square post, with the cover, a line you
-  pick and the song; copy it or save it as a PNG.
+  pick and the song; copy it or save it as a PNG. **Make a clip** records it as an 8-second
+  video (MP4) instead: the cover turning slowly and the line coming in word by word.
+- **Lyric timing check** (Settings → Lyrics, on by default): for the first minute of a song,
+  Glowtide listens for when the singing comes in and, if the lyrics clearly run early or
+  late, offers to fix them with one click. Needs the edge glow on; not for lyrics you timed.
+- **Pause when headphones come out** (Settings → App, on by default): headphones unplugged
+  or earbuds disconnected pause the music instead of letting it play out loud.
 - **Wrong lyrics?** under the lyrics view lists LRCLIB's versions of the song (timed first,
   closest in length), or of what you search; your pick is remembered per song.
 - A short **first-run tour** after you pick a music source.

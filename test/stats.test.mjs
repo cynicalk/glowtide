@@ -108,3 +108,56 @@ test('the weekly recap is due on Sunday evening or Monday morning, once a week',
   assert.equal(t.title, 'Your week in music: 2 h 05 min')
   assert.match(t.body, /Top song: A by B \(2 plays\)/)
 })
+
+test('"On this day": what you played a lot a month and a year ago, only when you did', async () => {
+  const { onThisDay } = await import('../src/shared/stats.mjs')
+  const now = new Date(2026, 10, 22, 20, 0).getTime()
+  const monthAgo = new Date(2026, 9, 22, 18, 0).getTime()
+  const yearAgo = new Date(2025, 10, 23, 12, 0).getTime()
+  const p = (at, title) => ({ at, ms: 180000, title, artist: 'Band' })
+  const plays = [
+    p(monthAgo, 'Loved'),
+    p(monthAgo + 86400000, 'Loved'),
+    p(monthAgo - 2 * 86400000, 'Loved'),
+    p(monthAgo, 'Once'),
+    p(yearAgo, 'Twice'),
+    p(yearAgo, 'Twice'),
+    p(monthAgo - 10 * 86400000, 'Loved') // outside the week
+  ]
+  const r = onThisDay(plays, now)
+  assert.equal(r.length, 1, 'twice a year ago is not "a lot"')
+  assert.equal(r[0].when, 'month')
+  assert.equal(r[0].title, 'Loved')
+  assert.equal(r[0].plays, 3)
+  assert.deepEqual(onThisDay([], now), [])
+})
+
+test('your year in music: totals, top songs, biggest day and longest run', async () => {
+  const { yearInMusic, yearDue } = await import('../src/shared/stats.mjs')
+  const at = (m, d, h = 12) => new Date(2026, m, d, h).getTime()
+  const p = (t, title, artist = 'Band', min = 3) => ({ at: t, ms: min * 60000, title, artist })
+  const plays = [
+    p(at(10, 20), 'A'),
+    p(at(10, 21), 'A'),
+    p(at(10, 22), 'B'),
+    p(at(10, 22, 14), 'A', 'Band', 30), // the biggest day
+    p(at(10, 25), 'C'),
+    p(at(9, 1), 'D', 'Other'),
+    p(new Date(2025, 11, 31).getTime(), 'Last year')
+  ]
+  const y = yearInMusic(plays, 2026, at(11, 5))
+  assert.equal(y.plays, 6)
+  assert.equal(y.topSongs[0].title, 'A')
+  assert.equal(y.topDay.date, '2026-11-22')
+  assert.deepEqual(y.streak, { days: 3, from: '2026-11-20', to: '2026-11-22' })
+  assert.ok(y.since, 'the history began in October, not January')
+  assert.equal(y.months[10], 42 * 60000)
+  assert.equal(
+    y.months.reduce((a, b) => a + b, 0),
+    y.ms
+  )
+  assert.equal(yearInMusic(plays, 2024, at(11, 5)), null, 'nothing that year')
+  assert.equal(yearDue(at(10, 30), ''), null, 'not in November')
+  assert.equal(yearDue(at(11, 1), ''), '2026')
+  assert.equal(yearDue(at(11, 20), '2026'), null, 'once a year')
+})

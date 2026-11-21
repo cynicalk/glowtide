@@ -42,3 +42,21 @@ export function choose(track, id) {
     /* not saved: it still holds until Glowtide closes */
   }
 }
+
+/** Everything saved, for a backup. */
+export function allSaved() {
+  return { ...load() }
+}
+
+/** Adds a backup's entries (the backup wins for a song in both), then saves. */
+export function mergeSaved(entries) {
+  const all = { ...load(), ...entries }
+  const keys = Object.keys(all)
+  for (const old of keys.slice(0, Math.max(0, keys.length - MAX))) delete all[old]
+  cache = all
+  try {
+    writeFileSync(file(), JSON.stringify(all))
+  } catch {
+    /* kept until Glowtide closes */
+  }
+}

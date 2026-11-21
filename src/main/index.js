@@ -61,8 +61,19 @@ import { createFullscreenWatch } from './fullscreen'
 import { createUpdater } from './updater'
 import { createHistory } from './history'
 import { createCallDucker } from './calls'
+import { createHeadphoneWatch } from './headphones'
 import { createRemote } from './remote'
-import { recapDue, recapText, summarize, songKeyOf } from '../shared/stats.mjs'
+import { exportBackup, importBackup } from './backup'
+import { allFavs, favsFor, removeFav, toggleFav } from './favLines'
+import {
+  onThisDay,
+  recapDue,
+  recapText,
+  summarize,
+  songKeyOf,
+  yearDue,
+  yearInMusic
+} from '../shared/stats.mjs'
 import { hardenContents, hardenSession, isSafeExternal, trustedSender } from './security'
 
 // The GLOWTIDE_* test hooks (snapshots, probes, separate profiles) only work in a development
@@ -171,6 +182,7 @@ const state = {
   lyricsSource: null,
   lyricsOffsetMs: 0,
   error: null,
+  timingHint: null, // { trackId, offsetMs }: the lyrics look early or late against the singing
   redirectUri: REDIRECT_URI,
   // True while Glowtide's own window is the one in use: the lyrics overlay steps aside so it
   // never covers Glowtide's settings or controls.
@@ -206,6 +218,7 @@ function all() {
 // the settings folder).
 let history = null
 let calls = null // quieter during calls
+let headphones = null // pause when headphones come out
 let remote = null // the phone remote (a page on your home network)
 /** Starts or stops the phone remote to match the settings. */
 function syncRemote() {
@@ -222,6 +235,25 @@ let recapNote = null // kept, so the notification isn't collected before it's cl
 function checkRecap(now = Date.now()) {
   const st = loadSettings()
   if (!history || st.recap === false || st.history === false) return
+  // December: your year in music, once
+  const year = yearDue(now, st.yearLast)
+  if (year) {
+    updateSettings({ yearLast: year })
+    if (yearInMusic(history.plays(), Number(year), now) && Notification.isSupported()) {
+      recapNote = new Notification({
+        title: `Your ${year} in music is ready`,
+        body: 'Your top songs, artists, biggest day and more, as cards to share. Open Stats.',
+        silent: true
+      })
+      recapNote.on('click', () => {
+        player.show()
+        player.focus()
+        player.webContents.send('panel:open', 'stats')
+      })
+      recapNote.show()
+      return
+    }
+  }
   const key = recapDue(now, st.recapLast)
   if (!key) return
   updateSettings({ recapLast: key })
@@ -337,6 +369,7 @@ function clearTrack() {
 }
 
 async function onTrackChange(track) {
+  state.timingHint = null
   state.palette = null
   state.liked = null
   // The nudge is per song, and remembered: a mistimed lyric file only needs fixing once.
@@ -1583,6 +1616,45 @@ function registerIpc() {
   on('yt:state', (e, m) => {
     if (e.sender === player?.webContents) onYtMessage(m)
   })
+  // Auto lyric timing check: the glow window heard the lyrics running early or late.
+  handle('timing:hint', (_, trackId, offsetMs) => {
+    if (!state.track || state.track.id !== trackId) return
+    if (!Number.isFinite(offsetMs) || Math.abs(offsetMs) > 2000) return
+    state.timingHint = { trackId, offsetMs: Math.round(offsetMs / 50) * 50 }
+    broadcast()
+  })
+  handle('timing:dismiss', () => {
+    state.timingHint = null
+    broadcast()
+  })
+  // An animated share clip (MP4 or WebM, made in the player), saved where you choose.
+  handle('clip:save', async (_, bytes, name, ext) => {
+    if (!['mp4', 'webm'].includes(ext)) return null
+    const buf = bytes instanceof Uint8Array ? Buffer.from(bytes) : null
+    if (!buf || buf.length < 1000 || buf.length > 80e6) return null
+    // the file is what it says: an MP4 box or a WebM (EBML) header
+    const isMp4 = buf.subarray(4, 8).toString('latin1') === 'ftyp'
+    const isWebm = buf.readUInt32BE(0) === 0x1a45dfa3
+    if ((ext === 'mp4' && !isMp4) || (ext === 'webm' && !isWebm)) return null
+    const base = [...String(name || 'Glowtide clip')]
+      .filter((ch) => ch.charCodeAt(0) >= 32 && !'<>:"/\\|?*'.includes(ch))
+      .join('')
+      .trim()
+      .slice(0, 120)
+    // GLOWTIDE_CLIP_OUT (development only): save there without asking, for the checks
+    if (DEV && process.env.GLOWTIDE_CLIP_OUT) {
+      writeFileSync(`${process.env.GLOWTIDE_CLIP_OUT}.${ext}`, buf)
+      return process.env.GLOWTIDE_CLIP_OUT
+    }
+    const { canceled, filePath } = await dialog.showSaveDialog(player, {
+      title: 'Save the clip',
+      defaultPath: join(app.getPath('videos'), `${base || 'Glowtide clip'}.${ext}`),
+      filters: [{ name: ext === 'mp4' ? 'MP4 video' : 'WebM video', extensions: [ext] }]
+    })
+    if (canceled || !filePath) return null
+    writeFileSync(filePath, buf)
+    return filePath
+  })
   handle('lyrics:nudge', (_, delta) => {
     state.lyricsOffsetMs =
       delta === 0 ? 0 : Math.max(-5000, Math.min(5000, state.lyricsOffsetMs + delta))
@@ -1740,9 +1812,11 @@ function registerIpc() {
   })
   // Stats: what you've listened to, from the local history.
   handle('stats:get', (_, range) => {
-    const s = summarize(history ? history.plays() : [], range, Date.now())
+    const plays = history ? history.plays() : []
+    const s = summarize(plays, range, Date.now())
     return {
       ...s,
+      onThisDay: onThisDay(plays).map((x) => ({ ...x, cover: history?.coverFor(x.key) || null })),
       enabled: loadSettings().history !== false,
       topSongs: s.topSongs.map((x) => ({
         ...x,
@@ -1756,6 +1830,44 @@ function registerIpc() {
   handle('remote:forget', () => {
     remote?.forget()
     return true
+  })
+  // Back up and move your setup.
+  handle('backup:export', () =>
+    exportBackup({ win: player, settings: loadSettings(), history }).catch((e) => ({
+      error: `Couldn’t save the backup (${e.message}).`
+    }))
+  )
+  handle('backup:import', () =>
+    importBackup({
+      win: player,
+      history,
+      apply: (patch) => setSettings(patch),
+      after: () => state.track && loadLyrics(state.track)
+    }).catch((e) => ({ error: `Couldn’t bring it in (${e.message}).` }))
+  )
+  // Favourite lines: star the line being sung; listed on the Stats page.
+  handle('stats:year', (_, year) => {
+    if (!Number.isInteger(year) || year < 2020 || year > 2100) return null
+    const y = yearInMusic(history ? history.plays() : [], year)
+    if (!y) return null
+    const from = new Date(year, 0, 1).getTime()
+    const to = new Date(year + 1, 0, 1).getTime()
+    const fav = allFavs().find((f) => f.at >= from && f.at < to) || null
+    return {
+      y,
+      covers: y.topSongs.map((s) => history?.coverFor(songKeyOf(s.title, s.artist)) || null),
+      fav
+    }
+  })
+  handle('favs:forSong', () => (state.track ? favsFor(state.track) : []))
+  handle('favs:toggle', (_, text, trackId) => {
+    if (!state.track || state.track.id !== trackId || state.source === 'demo') return null
+    return typeof text === 'string' ? toggleFav(state.track, text) : null
+  })
+  handle('favs:all', () => allFavs())
+  handle('favs:remove', (_, key, text) => {
+    if (typeof key === 'string' && typeof text === 'string') removeFav(key, text)
+    return allFavs()
   })
   handle('history:clear', () => {
     history?.clear()
@@ -1964,11 +2076,13 @@ function scheduleSnapshot() {
             ? player
             : where === 'stage'
               ? widgets?.windows()[0]
-              : where === 'command'
-                ? commandWin
-                : where === 'mini'
-                  ? miniWin
-                  : lyricsWin
+              : where === 'glow'
+                ? glowWins[0]
+                : where === 'command'
+                  ? commandWin
+                  : where === 'mini'
+                    ? miniWin
+                    : lyricsWin
         const out = await win?.webContents
           .executeJavaScript(process.env.GLOWTIDE_PROBE_JS, true)
           .catch((e) => `ERR ${e.message}`)
@@ -2023,7 +2137,7 @@ function scheduleSnapshot() {
       app.getAppMetrics() // the first reading only starts the clock
       await wait(Number(process.env.GLOWTIDE_PERF) * 1000)
       const rows = app.getAppMetrics().map((p) => ({
-        name: names.get(p.pid) || p.type,
+        name: names.get(p.pid) || p.serviceName || p.type,
         cpu: Math.round(p.cpu.percentCPUUsage * 10) / 10,
         wakeups: p.cpu.idleWakeupsPerSecond,
         mb: Math.round(p.memory.workingSetSize / 1024)
@@ -2337,6 +2451,11 @@ else {
       getState: () => state,
       enabled: () => loadSettings().history !== false
     })
+    headphones = createHeadphoneWatch({
+      getState: () => state,
+      enabled: () => loadSettings().pauseOnUnplug !== false,
+      pause: () => control('pause')
+    })
     calls = createCallDucker({
       dir: app.getPath('userData'),
       getState: () => state,
@@ -2366,6 +2485,7 @@ else {
     fullscreen.stop()
     smtc.stop()
     calls?.stop()
+    headphones?.stop()
     remote?.stop()
   })
   app.on('window-all-closed', () => {

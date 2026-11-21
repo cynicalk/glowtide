@@ -357,6 +357,18 @@ export default function SettingsPanel({ state, settings, onClose }) {
           </div>
           <p className="fine">The glow runs along the top of the taskbar instead of behind it.</p>
           <div className="srow">
+            <span>React to the lyrics</span>
+            <Toggle
+              label="A soft flash as each lyric line starts, the chorus a little brighter"
+              on={!!g.lyrics}
+              onChange={(v) => set({ glow: { lyrics: v } })}
+            />
+          </div>
+          <p className="fine">
+            A soft flash round the edge as each line starts, and the chorus a little brighter. For
+            songs with synced lyrics.
+          </p>
+          <div className="srow">
             <span>Follow the time of day</span>
             <Toggle
               label="Warmer and dimmer glow in the evening and at night"
@@ -499,6 +511,18 @@ export default function SettingsPanel({ state, settings, onClose }) {
             words can drift within a line. Word-timed songs always go word by word.
           </p>
           <div className="srow">
+            <span>Check the timing</span>
+            <Toggle
+              label="Check the lyric timing against the singing"
+              on={l.timingCheck !== false}
+              onChange={(v) => set({ lyrics: { timingCheck: v } })}
+            />
+          </div>
+          <p className="fine">
+            For the first minute of a song, Glowtide listens for when the singing comes in. If the
+            lyrics clearly run early or late, it offers to fix them. Needs the edge glow on.
+          </p>
+          <div className="srow">
             <span>Clock</span>
             <span className="acct">
               {l.showClock && (
@@ -622,6 +646,18 @@ export default function SettingsPanel({ state, settings, onClose }) {
             />
           </div>
           <p className="fine">A short description when the pointer rests on a button.</p>
+          <div className="srow">
+            <span>Pause when headphones come out</span>
+            <Toggle
+              label="Pause when headphones or earbuds disconnect"
+              on={settings.pauseOnUnplug !== false}
+              onChange={(v) => set({ pauseOnUnplug: v })}
+            />
+          </div>
+          <p className="fine">
+            Unplug your headphones or let your earbuds disconnect, and the music pauses instead of
+            playing out loud.
+          </p>
           <div className="srow">
             <span>Reduce motion</span>
             <Toggle
@@ -771,6 +807,7 @@ export default function SettingsPanel({ state, settings, onClose }) {
       )}
       {tab === 'app' && <CallSettings settings={settings} set={set} />}
       {tab === 'app' && <RemoteSettings settings={settings} set={set} />}
+      {tab === 'app' && <BackupSettings />}
       {tab === 'app' && <Updates update={state.update} settings={settings} set={set} />}
     </div>
   )
@@ -1224,6 +1261,50 @@ function RemoteSettings({ settings, set }) {
             home Wi-Fi.
           </p>
         </>
+      )}
+    </Fold>
+  )
+}
+
+/** Back up your setup to a file, or bring one in (on a new PC, after a reinstall). */
+function BackupSettings() {
+  const [note, setNote] = useState('')
+  const run = async (fn) => {
+    setNote('')
+    const r = await fn()
+    if (!r) return
+    if (r.error) setNote(r.error)
+    else if (r.path) setNote('Saved.')
+    else if (r.ok)
+      setNote(
+        `Brought in: ${r.counts.lyrics} timed ${r.counts.lyrics === 1 ? 'song' : 'songs'}, ${r.counts.plays} plays.`
+      )
+  }
+  return (
+    <Fold k="backup">
+      <div className="sh">
+        <h3>Backup</h3>
+      </div>
+      <p className="fine">
+        One file with your settings, the lyrics you timed, the versions you picked, your per-song
+        nudges and your listening history. Bring it in on another PC or after a reinstall. Sign-in
+        secrets, paired phones and your own background picture or video stay on this PC.
+      </p>
+      <div className="srow">
+        <span>Your setup</span>
+        <span className="stats-confirm">
+          <button className="pill" onClick={() => run(api.exportBackup)}>
+            Back up…
+          </button>
+          <button className="pill" onClick={() => run(api.importBackup)}>
+            Bring in…
+          </button>
+        </span>
+      </div>
+      {note && (
+        <p className="fine" role="status">
+          {note}
+        </p>
       )}
     </Fold>
   )

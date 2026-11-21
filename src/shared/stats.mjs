@@ -184,3 +184,103 @@ export function recapText(s) {
       : 'Open Stats for your card.'
   }
 }
+
+/**
+ * "On this day": the song you played most around this date a month ago and a year ago (the
+ * week centred on that day), when you played it at least three times. Nothing for a period
+ * the history doesn't reach, so it's never a guess.
+ */
+export function onThisDay(plays, now = Date.now()) {
+  const d = new Date(now)
+  const ago = [
+    ['month', 'This time last month', new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())],
+    ['year', 'This time last year', new Date(d.getFullYear() - 1, d.getMonth(), d.getDate())]
+  ]
+  const out = []
+  for (const [when, label, day] of ago) {
+    const mid = day.getTime() + DAY / 2
+    const from = mid - 3.5 * DAY
+    const to = mid + 3.5 * DAY
+    const songs = new Map()
+    for (const p of plays) {
+      if (!Number.isFinite(p?.at) || p.at < from || p.at >= to) continue
+      const key = songKeyOf(p.title, p.artist)
+      if (!key) continue
+      const s = songs.get(key) || { title: p.title, artist: p.artist || '', plays: 0, ms: 0 }
+      s.plays++
+      s.ms += Number.isFinite(p.ms) ? p.ms : 0
+      songs.set(key, s)
+    }
+    const top = [...songs.values()].sort((a, b) => b.plays - a.plays || b.ms - a.ms)[0]
+    if (top && top.plays >= 3)
+      out.push({ when, label, ...top, key: songKeyOf(top.title, top.artist) })
+  }
+  return out
+}
+
+/**
+ * Your year in music: the year's listening (or since your history began, when that was later
+ * in the year). Top songs and artists, your biggest day, your longest run of days in a row,
+ * and time listened each month. null when nothing was played that year.
+ */
+export function yearInMusic(plays, year, now = Date.now()) {
+  const from = new Date(year, 0, 1).getTime()
+  const to = Math.min(new Date(year + 1, 0, 1).getTime(), now)
+  const list = plays.filter(
+    (p) => Number.isFinite(p?.at) && Number.isFinite(p?.ms) && p.title && p.at >= from && p.at < to
+  )
+  if (!list.length) return null
+  const s = summarize(list, 'all', to)
+  const dayKey = (t) => {
+    const d = new Date(t)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+  const days = new Map()
+  const months = Array(12).fill(0)
+  for (const p of list) {
+    const k = dayKey(p.at)
+    const d = days.get(k) || { date: k, ms: 0, plays: 0 }
+    d.ms += p.ms
+    d.plays++
+    days.set(k, d)
+    months[new Date(p.at).getMonth()] += p.ms
+  }
+  const topDay = [...days.values()].sort((a, b) => b.ms - a.ms || b.plays - a.plays)[0]
+  // the longest run of days in a row with something played
+  const sorted = [...days.keys()].sort()
+  let streak = { days: 0, from: null, to: null }
+  let run = 0
+  let start = null
+  let prev = null
+  for (const k of sorted) {
+    const d = new Date(`${k}T12:00:00`)
+    const next = prev && new Date(prev.getTime() + DAY)
+    run = next && dayKey(next) === k ? run + 1 : 1
+    if (run === 1) start = k
+    if (run > streak.days) streak = { days: run, from: start, to: k }
+    prev = d
+  }
+  const first = Math.min(...list.map((p) => p.at))
+  return {
+    year,
+    since: first - from > 14 * DAY ? first : null, // the history began later in the year
+    ms: s.ms,
+    plays: s.plays,
+    songs: s.songs,
+    artists: s.artists,
+    days: days.size,
+    topSongs: s.topSongs.slice(0, 5),
+    topArtists: s.topArtists.slice(0, 5),
+    topDay,
+    streak,
+    months
+  }
+}
+
+/** When the year-in-music notification is due: from 1 December, once a year. */
+export function yearDue(now, lastShown) {
+  const d = new Date(now)
+  if (d.getMonth() !== 11) return null
+  const key = String(d.getFullYear())
+  return key === lastShown ? null : key
+}

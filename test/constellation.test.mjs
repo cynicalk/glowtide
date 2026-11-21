@@ -281,7 +281,7 @@ test('a chorus is recognised even when the song runs straight into it', () => {
   }
 })
 
-test('a new constellation comes only when a new part of the song begins', () => {
+test('every lyric line gets a new constellation; a line that comes back returns to its own', () => {
   // two verses of six lines and a chorus of four lines that comes back, sung straight
   // through with no pauses
   const verse = (n) =>
@@ -302,10 +302,14 @@ test('a new constellation comes only when a new part of the song begins', () => 
   const ls = estimateWordTiming(parseLrc(lrc), 120000)
   for (const seed of [1, 2, 3, 4]) {
     const figs = buildFigures(ls, seed)
-    const changes = figs.filter((f, i) => i > 0 && f.cons.id !== figs[i - 1].cons.id).length
-    assert.ok(changes <= 3, `seed ${seed}: ${changes} changes for four parts`)
     const at = (line) => figs.find((f) => f.words.some((w) => w.line === line)).cons.id
-    assert.equal(at(0), at(5), `seed ${seed}: a verse stays in one constellation`)
-    assert.equal(at(6), at(16), `seed ${seed}: the chorus comes back to its own`)
+    // each line its own figure, never the same one twice in a row for different lines
+    for (let i = 1; i < 6; i++) assert.notEqual(at(i), at(i - 1), `seed ${seed}: line ${i}`)
+    assert.ok(
+      figs.every((f) => new Set(f.words.map((w) => w.line)).size === 1),
+      'one line each'
+    )
+    // the chorus's lines come back to their own constellations
+    for (let i = 0; i < 4; i++) assert.equal(at(6 + i), at(16 + i), `seed ${seed}: chorus ${i}`)
   }
 })

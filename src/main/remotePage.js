@@ -82,12 +82,19 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 button:disabled { opacity: 0.35; }
 `
 
+// The phone signs each request with its key (see remote.js); the signing code is in
+// remoteCrypto.js, served at the top of the script.
+import { REMOTE_CRYPTO_JS } from './remoteCrypto.js'
+
 export const REMOTE_JS = `
 'use strict'
+${REMOTE_CRYPTO_JS}
 const $ = (id) => document.getElementById(id)
-const KEY = 'glowtide-remote-token'
-let token = null
-try { token = localStorage.getItem(KEY) } catch (e) {}
+const KEY = 'glowtide-remote'
+let token = null // { id, key }
+try { token = JSON.parse(localStorage.getItem(KEY) || 'null') } catch (e) {}
+if (!token || typeof token.id !== 'string' || typeof token.key !== 'string') token = null
+let clockSkew = 0 // the PC's clock minus this phone's
 let state = null
 let gotAt = 0
 let lines = []
@@ -100,7 +107,14 @@ const fmt = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.
 const show = (id) => { $('pair').hidden = id !== 'pair'; $('remote').hidden = id !== 'remote' }
 
 async function api(path, opts = {}) {
-  const r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'X-Glowtide-Token': token || '', ...(opts.headers || {}) } })
+  if (!token) { forgetToken(); throw new Error('unpaired') }
+  const method = opts.method || 'GET'
+  const body = opts.body || ''
+  const ts = String(Date.now() + clockSkew)
+  const auth = token.id + '.' + ts + '.' + signRequest(token.key, method, path, ts, body)
+  const r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'X-Glowtide-Auth': auth } })
+  const pcTime = Number(r.headers.get('X-Glowtide-Time'))
+  if (pcTime) clockSkew = pcTime - Date.now()
   if (r.status === 401) { forgetToken(); throw new Error('unpaired') }
   return r
 }
@@ -117,9 +131,10 @@ $('pairForm').addEventListener('submit', async (e) => {
   try {
     const r = await fetch('/api/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, name: (navigator.userAgentData && navigator.userAgentData.platform) || 'Phone' }) })
     const j = await r.json()
-    if (!r.ok || !j.token) { $('pairErr').textContent = j.error || 'Couldn’t pair.'; return }
-    token = j.token
-    try { localStorage.setItem(KEY, token) } catch (e) {}
+    if (!r.ok || !j.id || !j.key) { $('pairErr').textContent = j.error || 'Couldn’t pair.'; return }
+    token = { id: j.id, key: j.key }
+    if (j.now) clockSkew = j.now - Date.now()
+    try { localStorage.setItem(KEY, JSON.stringify(token)) } catch (e) {}
     $('code').value = ''
     start()
   } catch (err) { $('pairErr').textContent = 'Can’t reach Glowtide. Is the PC on the same Wi-Fi?' }

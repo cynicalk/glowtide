@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Copy, Check, ExternalLink } from 'lucide-react'
 import { api } from '../lib/store'
 
@@ -7,6 +7,7 @@ export default function Connect({ state, settings, onBack }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const [copied, setCopied] = useState(false)
+  const attempt = useRef(0) // a click while waiting starts again; only the latest one counts
   const validId = /^[0-9a-f]{32}$/i.test(clientId.trim())
 
   async function connect() {
@@ -16,8 +17,10 @@ export default function Connect({ state, settings, onBack }) {
     }
     setErr(null)
     setBusy(true)
+    const mine = ++attempt.current
     await api.setSettings({ clientId: clientId.trim() })
     const r = await api.connect()
+    if (mine !== attempt.current) return
     setBusy(false)
     if (r?.error) setErr(r.error)
   }
@@ -81,8 +84,8 @@ export default function Connect({ state, settings, onBack }) {
         </li>
       </ol>
       {err && <div className="error">{err}</div>}
-      <button className="primary" onClick={connect} disabled={busy}>
-        {busy ? 'Waiting for Spotify…' : 'Connect Spotify'}
+      <button className="primary" onClick={connect}>
+        {busy ? 'Waiting for Spotify… (click to start again)' : 'Connect Spotify'}
       </button>
       <p className="fine">
         Free accounts work too: Glowtide follows what Spotify plays. Controlling Spotify from

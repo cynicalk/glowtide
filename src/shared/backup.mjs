@@ -11,8 +11,10 @@ const MAX_SONGS = 2000
 const MAX_PLAYS = 60000
 const MAX_LRC = 200000
 
-// Never in a backup: sign-in secrets, and what only makes sense on this PC.
-const LEAVE_OUT = ['googleClientSecret', 'recapLast', 'yearLast']
+// Never in a backup: anything to do with signing in (the Spotify and Google app IDs and the
+// secret, so a backup someone hands you can't point your sign-ins at their app), and what
+// only makes sense on this PC.
+const LEAVE_OUT = ['clientId', 'googleClientId', 'googleClientSecret', 'recapLast', 'yearLast']
 
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
 const keyOk = (k) => typeof k === 'string' && k.length > 1 && k.length < 400 && k.includes('|')

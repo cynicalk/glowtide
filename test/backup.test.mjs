@@ -23,7 +23,7 @@ test('a backup carries your setup but never sign-in secrets', () => {
   assert.equal(b.kind, BACKUP_KIND)
   assert.ok(!('googleClientSecret' in b.settings))
   assert.ok(!('recapLast' in b.settings))
-  assert.equal(b.settings.googleClientId, 'id')
+  assert.ok(!('googleClientId' in b.settings), 'sign-ins are set up on each PC')
   assert.equal(b.settings.remote.enabled, false, 'the remote waits to be turned on again')
   assert.equal(b.settings.background.kind, 'cover', 'a picture or video stays on this PC')
   // and it reads back whole
@@ -43,7 +43,12 @@ test('a hand-made backup gets only what Glowtide keeps, in the right shapes', ()
   const evil = {
     kind: BACKUP_KIND,
     format: 1,
-    settings: { googleClientSecret: 'planted', lyrics: { style: 'stack' } },
+    settings: {
+      googleClientSecret: 'planted',
+      clientId: 'their-spotify-app',
+      googleClientId: 'their-google-app',
+      lyrics: { style: 'stack' }
+    },
     myLyrics: {
       'band|ok': { lrc: '[00:01.00] fine' },
       'band|huge': { lrc: 'x'.repeat(300000) },
@@ -64,6 +69,7 @@ test('a hand-made backup gets only what Glowtide keeps, in the right shapes', ()
   }
   const r = readBackup(JSON.stringify(evil))
   assert.ok(!('googleClientSecret' in r.settings))
+  assert.ok(!('clientId' in r.settings) && !('googleClientId' in r.settings), 'no app IDs planted')
   assert.deepEqual(Object.keys(r.myLyrics), ['band|ok'])
   assert.deepEqual(r.choices, { 'band|a': 42 })
   assert.deepEqual(r.offsets, { 'band|a': 250 })

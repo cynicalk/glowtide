@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, Play, Link2, ExternalLink } from 'lucide-react'
 import { api } from '../lib/store'
 import { parseYouTubeLink } from '../../../shared/youtube.mjs'
@@ -85,6 +85,7 @@ export function GoogleSetup({ settings }) {
   const [secret, setSecret] = useState(settings.googleClientSecret)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const attempt = useRef(0) // a click while waiting starts again; only the latest one counts
   const connect = async () => {
     if (!/\.apps\.googleusercontent\.com$/.test(id.trim())) {
       setErr('A Google Client ID ends in .apps.googleusercontent.com')
@@ -96,8 +97,10 @@ export function GoogleSetup({ settings }) {
     }
     setErr(null)
     setBusy(true)
+    const mine = ++attempt.current
     await api.setSettings({ googleClientId: id.trim(), googleClientSecret: secret.trim() })
     const r = await api.googleConnect()
+    if (mine !== attempt.current) return
     setBusy(false)
     if (r?.error) setErr(r.error)
   }
@@ -151,9 +154,15 @@ export function GoogleSetup({ settings }) {
         </li>
       </ol>
       {err && <div className="error">{err}</div>}
-      <button className="primary small" onClick={connect} disabled={busy}>
-        {busy ? 'Waiting for Google…' : 'Sign in with Google'}
+      <button className="primary small" onClick={connect}>
+        {busy ? 'Waiting for Google… (click to start again)' : 'Sign in with Google'}
       </button>
+      {busy && (
+        <p className="fine">
+          If Google showed an error instead of a sign-in page, check the Client ID and that your
+          Gmail is added as a test user, then click again.
+        </p>
+      )}
       <p className="fine">Glowtide only asks to read your YouTube account, never to change it.</p>
       <div className="heads-up">
         <p>

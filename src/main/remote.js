@@ -4,18 +4,22 @@
 // Security, as this is the one part of Glowtide that listens on the network:
 // - Off unless you turn it on. Only phones you pair get in: pairing needs a six-digit code
 //   shown in Glowtide for three minutes after you ask for one, single use, and dropped after
-//   five wrong tries. A paired phone keeps a random token (only its hash is stored here);
-//   "Forget all phones" revokes them all.
+//   five wrong tries. A paired phone gets its own random key, which it never sends again:
+//   every request after pairing carries a signature (HMAC-SHA-256 over the method, path, time
+//   and body), good for 90 seconds and only once. So someone reading the Wi-Fi traffic sees
+//   signatures they can't reuse, not the key. The keys are kept encrypted with Windows' own
+//   protection (DPAPI). "Forget all phones" revokes them all.
+// - Only devices on a private network (home Wi-Fi, a hotspot) may connect.
 // - Requests must name the PC by its IP address (or localhost) in the Host header, so a web
 //   page can't reach the remote through a domain it rebinds to your network; a request from
 //   another site's page (Origin) is refused.
 // - Bodies are capped, values are checked before they reach the controls, only the actions
 //   the remote page uses are accepted, and the page itself runs under a strict CSP.
-// - Plain HTTP, as on any home network device: anyone on the same Wi-Fi who can read its
-//   traffic could read the token. Use it on networks you trust (the Settings say so).
+// - Plain HTTP, as on any home network device. The key crosses the network once, as a phone
+//   pairs: pair on a network you trust (the Settings say so).
 
 import { createServer } from 'http'
-import { createHash, randomBytes, randomInt, timingSafeEqual } from 'crypto'
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto'
 import { networkInterfaces } from 'os'
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
@@ -29,8 +33,45 @@ const MAX_BODY = 4096
 const COVER_HOSTS =
   /^https:\/\/([a-z0-9-]+\.)*(scdn\.co|spotifycdn\.com|ytimg\.com|ggpht\.com|googleusercontent\.com)\//i
 const HOST_OK = /^(localhost|(\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:.]+\])(:\d{1,5})?$/i
+const SIGN_WINDOW_MS = 90000 // a signature is good this long either side of the PC's clock
 
-const sha = (s) => createHash('sha256').update(s).digest()
+/** Whether a connection comes from this PC or a private network (not the internet). */
+export function privateAddress(addr) {
+  const a = String(addr || '')
+    .toLowerCase()
+    .replace(/^::ffff:/, '')
+  if (a === '127.0.0.1' || a === '::1') return true
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(a)) return true
+  return /^(f[cd][0-9a-f]{2}|fe[89ab][0-9a-f]):/.test(a) // IPv6 unique-local and link-local
+}
+
+/** The signature a request should carry (the page computes the same, see remoteCrypto.js). */
+export function signature(key, method, path, ts, body) {
+  // the key's 32 bytes (it travels as base64url text), as the phone uses them
+  return createHmac('sha256', Buffer.from(key, 'base64url'))
+    .update(`${method}\n${path}\n${ts}\n${body}`)
+    .digest('base64url')
+}
+
+/**
+ * Follows a cover's redirects only while they stay on the allowed picture hosts (at most
+ * three), so an address on those hosts can't send the fetch anywhere else.
+ */
+export async function fetchAllowed(url, allowed, { timeout = 8000, fetcher = fetch } = {}) {
+  let at = url
+  for (let hop = 0; hop < 4; hop++) {
+    if (!allowed.test(at)) return null
+    const r = await fetcher(at, { redirect: 'manual', signal: AbortSignal.timeout(timeout) })
+    if (r.status >= 300 && r.status < 400) {
+      const next = r.headers.get('location')
+      if (!next) return null
+      at = new URL(next, at).href
+      continue
+    }
+    return r
+  }
+  return null
+}
 
 /** The PC's addresses on a home network (private IPv4), for the phone to open. */
 export function lanAddresses() {
@@ -73,43 +114,84 @@ export function checkControl(action, arg) {
  * getState(): Glowtide's state; getLyrics(): the current song's lines; control(action, arg);
  * onChange(): something the Settings show changed (a phone paired, the server stopped).
  */
-export function createRemote({ dir, getState, getLyrics, control, onChange = () => {} }) {
+export function createRemote({
+  dir,
+  getState,
+  getLyrics,
+  control,
+  onChange = () => {},
+  // how the phones' keys are kept on disk: Windows' DPAPI in the app (index.js passes it)
+  protect = (s) => s,
+  unprotect = (s) => s
+}) {
   const phonesFile = join(dir, 'remote-phones.json')
+  // [{ id, key (base64url, in memory only), name, added }]; on disk the key is protected.
+  // Phones paired before signatures (1.0.20 and 1.0.21) kept a token hash: they pair again.
   let phones = []
   try {
     const saved = JSON.parse(readFileSync(phonesFile, 'utf8'))
-    if (Array.isArray(saved))
-      phones = saved.filter((p) => typeof p?.hash === 'string' && /^[0-9a-f]{64}$/.test(p.hash))
+    if (Array.isArray(saved?.phones))
+      for (const p of saved.phones) {
+        if (typeof p?.id !== 'string' || !/^[0-9a-f]{32}$/.test(p.id)) continue
+        try {
+          const key = unprotect(p.key)
+          if (/^[\w-]{43}$/.test(key)) phones.push({ id: p.id, key, name: p.name, added: p.added })
+        } catch {
+          /* can't be read on this PC or account: that phone pairs again */
+        }
+      }
   } catch {
     /* none yet */
   }
   const savePhones = () => {
     try {
-      writeFileSync(phonesFile, JSON.stringify(phones))
+      writeFileSync(
+        phonesFile,
+        JSON.stringify({
+          v: 2,
+          phones: phones.map((p) => ({
+            id: p.id,
+            key: protect(p.key),
+            name: p.name,
+            added: p.added
+          }))
+        })
+      )
     } catch {
       /* best effort */
     }
   }
+  const seen = new Map() // signatures used, until they expire: each works once
   let server = null
   let error = null
   let pairing = null // { code, until, tries }
   let cover = { id: null, type: null, data: null }
 
-  const tokenOk = (req) => {
-    const t = req.headers['x-glowtide-token']
-    if (typeof t !== 'string' || t.length < 20 || t.length > 100) return null
-    const h = sha(t)
-    for (const p of phones) {
-      const ph = Buffer.from(p.hash, 'hex')
-      if (ph.length === h.length && timingSafeEqual(ph, h)) return p
-    }
-    return null
+  /** The phone a request is signed by, or null: "<phone id>.<time ms>.<signature>". */
+  const signedBy = (req, path, raw) => {
+    const h = req.headers['x-glowtide-auth']
+    const m = typeof h === 'string' && h.match(/^([0-9a-f]{32})\.(\d{1,15})\.([\w-]{43})$/)
+    if (!m) return null
+    const [, id, tsText, sig] = m
+    const ts = Number(tsText)
+    const now = Date.now()
+    if (Math.abs(now - ts) > SIGN_WINDOW_MS) return null
+    const phone = phones.find((p) => p.id === id)
+    if (!phone) return null
+    const want = Buffer.from(signature(phone.key, req.method, path, tsText, raw))
+    const got = Buffer.from(sig)
+    if (want.length !== got.length || !timingSafeEqual(want, got)) return null
+    if (seen.has(sig)) return null // replayed
+    if (seen.size > 5000) for (const [k, until] of seen) if (until < now) seen.delete(k)
+    seen.set(sig, now + 2 * SIGN_WINDOW_MS)
+    return phone
   }
 
   const send = (res, status, body, type = 'application/json; charset=utf-8', extra = {}) => {
     res.writeHead(status, {
       'Content-Type': type,
       'Cache-Control': 'no-store',
+      'X-Glowtide-Time': String(Date.now()), // the phone keeps its signatures on the PC's clock
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'no-referrer',
       'X-Frame-Options': 'DENY',
@@ -129,14 +211,15 @@ export function createRemote({ dir, getState, getLyrics, control, onChange = () 
         if (size <= MAX_BODY) chunks.push(c)
       })
       req.on('end', () => {
-        if (size > MAX_BODY) return resolve(null)
+        if (size > MAX_BODY) return resolve({ raw: null, json: null })
+        const raw = Buffer.concat(chunks).toString('utf8')
         try {
-          resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'))
+          resolve({ raw, json: JSON.parse(raw || '{}') })
         } catch {
-          resolve(null)
+          resolve({ raw, json: null })
         }
       })
-      req.on('error', () => resolve(null))
+      req.on('error', () => resolve({ raw: null, json: null }))
     })
 
   /** What the phone shows: the song, where it is, what can be done. */
@@ -187,9 +270,9 @@ export function createRemote({ dir, getState, getLyrics, control, onChange = () 
       if (m && url.length < 20e6) next = { id: t.id, type: m[1], data: Buffer.from(m[2], 'base64') }
       else if (COVER_HOSTS.test(url)) {
         try {
-          const r = await fetch(url, { signal: AbortSignal.timeout(8000) })
-          const type = r.headers.get('content-type') || ''
-          if (r.ok && /^image\/(png|jpe?g|webp)$/.test(type)) {
+          const r = await fetchAllowed(url, COVER_HOSTS)
+          const type = r?.headers.get('content-type') || ''
+          if (r?.ok && /^image\/(png|jpe?g|webp)$/.test(type)) {
             const buf = Buffer.from(await r.arrayBuffer())
             if (buf.length < 8e6) next = { id: t.id, type, data: buf }
           }
@@ -203,6 +286,8 @@ export function createRemote({ dir, getState, getLyrics, control, onChange = () 
   }
 
   async function handle(req, res) {
+    if (!privateAddress(req.socket.remoteAddress))
+      return send(res, 403, { error: 'Only devices on your home network.' })
     const host = String(req.headers.host || '')
     if (!HOST_OK.test(host))
       return send(res, 421, { error: 'Open the remote by the PC’s address.' })
@@ -222,7 +307,7 @@ export function createRemote({ dir, getState, getLyrics, control, onChange = () 
       return send(res, 200, REMOTE_CSS, 'text/css; charset=utf-8')
 
     if (req.method === 'POST' && path === '/api/pair') {
-      const body = await readBody(req)
+      const { json: body } = await readBody(req)
       const code = typeof body?.code === 'string' ? body.code.replace(/\D/g, '') : ''
       if (!pairing || Date.now() > pairing.until)
         return send(res, 403, { error: 'Ask Glowtide for a new code: Settings → Phone remote.' })
@@ -236,19 +321,23 @@ export function createRemote({ dir, getState, getLyrics, control, onChange = () 
         return send(res, 403, { error: 'That code isn’t right.' })
       }
       pairing = null
-      const token = randomBytes(32).toString('base64url')
+      const id = randomBytes(16).toString('hex')
+      const key = randomBytes(32).toString('base64url')
       const name =
         typeof body?.name === 'string' ? body.name.replace(/[^\w ().,-]/g, '').slice(0, 40) : ''
-      phones = [...phones, { hash: sha(token).toString('hex'), name, added: Date.now() }].slice(
-        -MAX_PHONES
-      )
+      phones = [...phones, { id, key, name, added: Date.now() }].slice(-MAX_PHONES)
       savePhones()
       onChange()
-      return send(res, 200, { token })
+      return send(res, 200, { id, key, now: Date.now() })
     }
 
     if (!path.startsWith('/api/')) return send(res, 404, { error: 'Not found.' })
-    if (!tokenOk(req)) return send(res, 401, { error: 'Pair this phone again.' })
+    // signed over the path with its query, and the body as sent
+    const signedPath = url.pathname + url.search
+    const body = req.method === 'POST' ? await readBody(req) : { raw: '', json: null }
+    if (body.raw === null) return send(res, 400, { error: 'Not something the remote can do.' })
+    if (!signedBy(req, signedPath, body.raw))
+      return send(res, 401, { error: 'Pair this phone again.' })
 
     if (req.method === 'GET' && path === '/api/state') return send(res, 200, snapshot())
     if (req.method === 'GET' && path === '/api/lyrics') {
@@ -267,8 +356,7 @@ export function createRemote({ dir, getState, getLyrics, control, onChange = () 
       return send(res, 200, c.data, c.type)
     }
     if (req.method === 'POST' && path === '/api/control') {
-      const body = await readBody(req)
-      const ok = body && checkControl(body.action, body.arg)
+      const ok = body.json && checkControl(body.json.action, body.json.arg)
       if (!ok) return send(res, 400, { error: 'Not something the remote can do.' })
       const r = await control(ok.action, ok.arg)
       return send(res, r?.error ? 409 : 200, r?.error ? { error: r.error } : { ok: true })

@@ -169,21 +169,20 @@ function flatten(lines) {
 }
 
 /**
- * The figures of a song. Each part (a verse, a chorus) stays in one constellation: when it
- * has more words than the figure has stars, the figure fills again for the next lines
- * (another page of the same constellation) rather than moving on. A new constellation comes
- * only when a new part begins.
+ * The figures of a song: a new constellation for every lyric line, picked to fit the line
+ * (well-known ones first). A line that comes back (a chorus) returns to its own
+ * constellation. A line longer than the figure fills it again (another page).
  * Returns [{ cons, words: [flat word], n, page }] in song order.
  */
 export function buildFigures(lines, seed = 0) {
   const words = flatten(lines)
-  // the parts, each as its lines' words: [[word, ...], ...] per line
+  // Every lyric line is a part of its own: a new constellation for each line. (A part is a
+  // list of lines, [[word, ...]], so a line longer than any figure still pages through one.)
   const parts = []
   for (const w of words) {
-    const part = parts[w.section] || (parts[w.section] = [])
-    const line = part.at(-1)
-    if (line && line[0].line === w.line) line.push(w)
-    else part.push([w])
+    const last = parts.at(-1)
+    if (last && last[0][0].line === w.line) last[0].push(w)
+    else parts.push([[w]])
   }
   // Pages of a figure this size: whole lines while they fit; a line longer than the figure
   // fills it and carries on in the next page.

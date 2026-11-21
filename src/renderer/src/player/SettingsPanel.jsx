@@ -1,14 +1,6 @@
 import { useEffect, useState } from 'react'
-import {
-  AlignCenter,
-  Sparkles,
-  Sun,
-  Waves as WavesIcon,
-  Activity,
-  Mic2,
-  Power,
-  MessageCircle
-} from 'lucide-react'
+import { Power } from 'lucide-react'
+import { STYLES } from './lyricStyles'
 import { api, useDisplays } from '../lib/store'
 import { DEFAULT_PALETTE, resolveColours } from '../../../shared/colour.mjs'
 import { glowAnimation } from '../../../shared/glow.mjs'
@@ -35,16 +27,6 @@ const FONTS = [
   'Consolas',
   'Impact',
   'Ink Free'
-]
-
-const STYLES = [
-  ['stack', 'Stack', AlignCenter, 'Big word or line in the middle'],
-  ['karaoke', 'Karaoke', Mic2, 'Words sweep into colour as they are sung, with a count-in'],
-  ['constellation', 'Stars', Sparkles, 'Each verse fills a real constellation'],
-  ['aura', 'Aura', Sun, 'Lyrics over a glowing cloud of the cover’s colours'],
-  ['waves', 'Waves', WavesIcon, 'The whole line rides a ripple'],
-  ['beat', 'Beat', Activity, 'Pulses with the music'],
-  ['messages', 'Messages', MessageCircle, 'Each line arrives as a text message, word by word']
 ]
 
 /**
@@ -1257,8 +1239,9 @@ function RemoteSettings({ settings, set }) {
             )}
           </div>
           <p className="fine">
-            Only phones you pair with a code can use it. Use it on networks you trust, like your
-            home Wi-Fi.
+            Only phones you pair with a code can use it, and only from your home network. After
+            pairing, a phone signs each request instead of sending its key, so pair on Wi-Fi you
+            trust. Phones paired before 1.0.22 need pairing again.
           </p>
         </>
       )}
@@ -1287,8 +1270,8 @@ function BackupSettings() {
       </div>
       <p className="fine">
         One file with your settings, the lyrics you timed, the versions you picked, your per-song
-        nudges and your listening history. Bring it in on another PC or after a reinstall. Sign-in
-        secrets, paired phones and your own background picture or video stay on this PC.
+        nudges and your listening history. Bring it in on another PC or after a reinstall. Sign-ins
+        (Spotify, Google), paired phones and your own background picture or video stay on this PC.
       </p>
       <div className="srow">
         <span>Your setup</span>

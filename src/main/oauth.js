@@ -21,7 +21,10 @@ const esc = (s) =>
 const b64url = (buf) =>
   buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
+// The sign-in under way (Spotify's or Google's: they share the redirect port), and how to end
+// it, answered, when another one starts.
 let pendingServer = null
+let pendingCancel = null
 
 /**
  * name: token file name; getClient(): { clientId, clientSecret? }
@@ -106,7 +109,12 @@ export function createOAuth({ name, label, authUrl, tokenUrl, scopes, extraAuth 
   function signIn() {
     const { clientId } = getClient()
     if (!clientId) return Promise.reject(new Error(`Add your ${label} Client ID first`))
-    pendingServer?.close()
+    // a sign-in started again ends the one before it, answered rather than left waiting
+    if (pendingServer) {
+      pendingServer.close()
+      pendingCancel?.(new Error('Sign-in started again.'))
+      pendingServer = null
+    }
     const verifier = b64url(randomBytes(48))
     const challenge = b64url(createHash('sha256').update(verifier).digest())
     const state = b64url(randomBytes(12))
@@ -159,6 +167,7 @@ export function createOAuth({ name, label, authUrl, tokenUrl, scopes, extraAuth 
       )
       server.listen(REDIRECT_PORT, '127.0.0.1', () => {
         pendingServer = server
+        pendingCancel = reject
         const q = new URLSearchParams({
           client_id: clientId,
           response_type: 'code',

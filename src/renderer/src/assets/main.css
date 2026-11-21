@@ -2263,6 +2263,17 @@ input[type='range']:hover::-webkit-slider-thumb,
   height: 24px;
   font-size: 11px;
 }
+/* the tools stay out of the way: barely there until the pointer is over the lyrics area
+   (or a tool has keyboard focus) */
+.lyric-tools {
+  opacity: 0.12;
+  transition: opacity 0.25s ease;
+}
+:has(> .lyric-tools):hover > .lyric-tools,
+.lyric-tools:hover,
+.lyric-tools:focus-within {
+  opacity: 1;
+}
 .pl-lyrics.tap {
   display: flex;
   flex-direction: column;

@@ -16,11 +16,12 @@ import {
   screen,
   session,
   shell,
-  Notification
+  Notification,
+  safeStorage
 } from 'electron'
 import { basename, dirname, extname, join } from 'path'
 import { pathToFileURL } from 'url'
-import { spawn, spawnSync } from 'child_process'
+import { spawnSync } from 'child_process'
 import { copyFile } from 'fs/promises'
 import os from 'os'
 import {
@@ -62,7 +63,11 @@ import { createUpdater } from './updater'
 import { createHistory } from './history'
 import { createCallDucker } from './calls'
 import { createHeadphoneWatch } from './headphones'
-import { createRemote } from './remote'
+import { createRemote, fetchAllowed } from './remote'
+
+// where the share card may fetch a cover from: the music services' picture hosts
+const CARD_COVER_HOSTS =
+  /^https:\/\/([a-z0-9-]+\.)*(scdn\.co|spotifycdn\.com|ytimg\.com|ggpht\.com|googleusercontent\.com)\//i
 import { exportBackup, importBackup } from './backup'
 import { allFavs, favsFor, removeFav, toggleFav } from './favLines'
 import {
@@ -935,6 +940,19 @@ const startedAtLogin = process.argv.includes('--hidden')
 const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'
 const APP_ID = 'io.github.cynicalk.glowtide'
 
+// reg.exe by its full path (not whatever PATH finds), with what it said
+const REG_EXE = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe')
+function reg(args) {
+  const r = spawnSync(REG_EXE, args, { windowsHide: true, encoding: 'utf8', timeout: 10000 })
+  return {
+    ok: r.status === 0,
+    out: r.stdout || '',
+    err: (r.stderr || r.error?.message || `exit ${r.status}`).trim().slice(0, 200)
+  }
+}
+// a path for the log, without the user's folder in it
+const shortPath = (p) => String(p).replace(app.getPath('home'), '~')
+
 function syncLoginItem() {
   if (!app.isPackaged) return
   const on = !!loadSettings().startWithWindows
@@ -943,15 +961,24 @@ function syncLoginItem() {
   app.setLoginItemSettings({ openAtLogin: false, name: EARLIER.loginItem })
   if (!on) return
   // something on some PCs clears the entry Electron writes: check it's there, and write it
-  // ourselves if it isn't (the same value Electron would write)
-  const q = spawnSync('reg', ['query', RUN_KEY, '/v', APP_ID], { windowsHide: true })
-  if (q.status === 0) return
-  logError('start with Windows', 'the startup entry was missing; written directly')
-  spawn(
-    'reg',
-    ['add', RUN_KEY, '/v', APP_ID, '/t', 'REG_SZ', '/d', `"${process.execPath}" --hidden`, '/f'],
-    { windowsHide: true, stdio: 'ignore' }
-  ).on('error', () => {})
+  // ourselves if it isn't (the same value Electron would write), saying so in the log
+  if (reg(['query', RUN_KEY, '/v', APP_ID]).ok) return
+  const w = reg([
+    'add',
+    RUN_KEY,
+    '/v',
+    APP_ID,
+    '/t',
+    'REG_SZ',
+    '/d',
+    `"${process.execPath}" --hidden`,
+    '/f'
+  ])
+  const check = reg(['query', RUN_KEY, '/v', APP_ID]).ok
+  logError(
+    'start with Windows',
+    `the startup entry was missing; written: ${w.ok ? 'ok' : w.err}; there now: ${check}`
+  )
 }
 
 // The install entry (Settings → Apps) kept the name, version and uninstaller path the app
@@ -961,23 +988,22 @@ function repairInstallEntry() {
   if (!app.isPackaged) return
   const dir = dirname(process.execPath)
   const uninstaller = join(dir, `Uninstall ${app.getName()}.exe`)
-  if (!existsSync(uninstaller)) return // not an installed copy (a portable or unpacked build)
-  const key = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${INSTALL_GUID}`
-  const q = spawnSync('reg', ['query', key, '/v', 'UninstallString'], {
-    windowsHide: true,
-    encoding: 'utf8'
-  })
-  if (q.status === 0 && q.stdout.includes(uninstaller) && q.stdout.length) {
-    const v = spawnSync('reg', ['query', key, '/v', 'DisplayVersion'], {
-      windowsHide: true,
-      encoding: 'utf8'
-    })
-    if (v.stdout?.includes(app.getVersion())) return // already right
+  if (!existsSync(uninstaller)) {
+    logError('install entry', `no uninstaller at ${shortPath(uninstaller)}; left as it is`)
+    return // not an installed copy (a portable or unpacked build)
   }
-  const set = (k, name, value) =>
-    spawnSync('reg', ['add', k, '/v', name, '/t', 'REG_SZ', '/d', value, '/f'], {
-      windowsHide: true
-    })
+  const key = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${INSTALL_GUID}`
+  const q = reg(['query', key, '/v', 'UninstallString'])
+  if (q.ok && q.out.includes(uninstaller)) {
+    const v = reg(['query', key, '/v', 'DisplayVersion'])
+    const n = reg(['query', key, '/v', 'DisplayName'])
+    if (v.out.includes(app.getVersion()) && n.out.includes(app.getName())) return // already right
+  }
+  const failed = []
+  const set = (k, name, value) => {
+    const r = reg(['add', k, '/v', name, '/t', 'REG_SZ', '/d', value, '/f'])
+    if (!r.ok) failed.push(`${name}: ${r.err}`)
+  }
   set(key, 'DisplayName', app.getName())
   set(key, 'DisplayVersion', app.getVersion())
   set(key, 'Publisher', 'cynicalk')
@@ -989,6 +1015,13 @@ function repairInstallEntry() {
   const own = `HKCU\\Software\\${INSTALL_GUID}`
   set(own, 'InstallLocation', dir)
   set(own, 'ShortcutName', app.getName())
+  const now = reg(['query', key, '/v', 'DisplayName'])
+  logError(
+    'install entry',
+    failed.length
+      ? `couldn't update: ${failed.join('; ')}`
+      : `updated to ${app.getName()} ${app.getVersion()} at ${shortPath(dir)}; reads back: ${now.out.includes(app.getName())}`
+  )
 }
 
 // ---------- taskbar buttons: previous, play/pause, next under the taskbar preview ----------
@@ -1765,16 +1798,11 @@ function registerIpc() {
     if (typeof url !== 'string') return null
     if (/^data:image\/(png|jpe?g|webp|svg\+xml);base64,/.test(url))
       return url.length < 20e6 ? url : null
-    if (
-      !/^https:\/\/([a-z0-9-]+\.)*(scdn\.co|spotifycdn\.com|ytimg\.com|ggpht\.com|googleusercontent\.com)\//i.test(
-        url
-      )
-    )
-      return null
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(10000) })
-      const type = r.headers.get('content-type') || 'image/jpeg'
-      if (!r.ok || !/^image\//.test(type)) return null
+      // only the picture hosts, redirects included (fetchAllowed), and only pictures back
+      const r = await fetchAllowed(url, CARD_COVER_HOSTS, { timeout: 10000 })
+      const type = (r?.headers.get('content-type') || '').split(';')[0].trim()
+      if (!r?.ok || !/^image\/(png|jpe?g|webp|gif)$/.test(type)) return null
       const buf = Buffer.from(await r.arrayBuffer())
       return buf.length < 15e6 ? `data:${type};base64,${buf.toString('base64')}` : null
     } catch {
@@ -2466,7 +2494,16 @@ else {
       dir: app.getPath('userData'),
       getState: () => state,
       getLyrics: () => lyricsLines,
-      control: (action, arg) => control(action, arg)
+      control: (action, arg) => control(action, arg),
+      // the phones' keys, encrypted for this Windows account (DPAPI), as the sign-ins are
+      protect: (k) =>
+        safeStorage.isEncryptionAvailable()
+          ? `dpapi:${safeStorage.encryptString(k).toString('base64')}`
+          : k,
+      unprotect: (v) =>
+        typeof v === 'string' && v.startsWith('dpapi:')
+          ? safeStorage.decryptString(Buffer.from(v.slice(6), 'base64'))
+          : v
     })
     syncRemote()
     setTimeout(() => checkRecap(), 60000)

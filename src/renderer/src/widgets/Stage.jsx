@@ -1,21 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, MicVocal, Minus, Plus } from 'lucide-react'
 import { api, useColours, useGlowtide } from '../lib/store'
 import Visualizer from '../viz/Visualizer'
 import { Wallpaper } from '../lib/Backgrounds'
 import { vizPalette, VIZ_STYLES, THEMES } from '../../../shared/viz.mjs'
+import { STYLES as LYRIC_STYLES } from '../player/lyricStyles'
 
 const COLOURS = ['album', ...Object.keys(THEMES)]
 
 /**
  * Full screen: the cover blurred and drifting as the room light, a sharp copy in the
  * middle, the visualizer orbiting it (Ring) or rising underneath, a ripple on every bass hit.
- * Keys: Space play/pause, arrows previous/next, V next visualizer, C next colours, Esc leave.
+ * Keys: Space play/pause, arrows previous/next, V next visualizer, C next colours, L next
+ * lyrics style, Esc leave. The lyrics button opens the lyrics' own options: on or off, their
+ * style and their size, so they can be changed without leaving full screen.
  */
+const LYRIC_IDS = LYRIC_STYLES.map((s) => s[0])
 export default function Stage() {
   const { state, settings } = useGlowtide()
   const [idle, setIdle] = useState(false)
   const [ripples, setRipples] = useState([])
+  const [lyricsPanel, setLyricsPanel] = useState(false)
   const lastRipple = useRef(0)
   const cfg = settings?.widgets.stage
   const colours = useColours(state, settings)
@@ -51,6 +56,11 @@ export default function Stage() {
       } else if (e.key === 'c' || e.key === 'C') {
         const i = COLOURS.indexOf(s.theme)
         api.setSettings({ widgets: { stage: { theme: COLOURS[(i + 1) % COLOURS.length] } } })
+      } else if (e.key === 'l' || e.key === 'L') {
+        const i = LYRIC_IDS.indexOf(settings.lyrics.style)
+        api.setSettings({
+          lyrics: { overlay: true, style: LYRIC_IDS[(i + 1) % LYRIC_IDS.length] }
+        })
       } else return
       e.preventDefault()
     }
@@ -76,7 +86,7 @@ export default function Stage() {
   const ring = cfg.style === 'ring'
   return (
     <div
-      className={`stage ${idle ? 'idle' : ''}`}
+      className={`stage ${idle && !lyricsPanel ? 'idle' : ''}`}
       style={{ '--p1': palette[0], '--p2': palette[1], '--p3': palette[2] }}
     >
       {settings.background?.fullscreen && settings.background.kind !== 'cover' ? (
@@ -120,8 +130,9 @@ export default function Stage() {
         </div>
       )}
       <div className="stage-hint">
-        V visualizer · C colours · Esc leave · {cfg.style} · {cfg.theme}
+        V visualizer · C colours · L lyrics · Esc leave · {cfg.style} · {cfg.theme}
       </div>
+      {lyricsPanel && <StageLyrics settings={settings} onClose={() => setLyricsPanel(false)} />}
       <div className="stage-controls">
         <button aria-label="Previous" onClick={() => api.control('previous')}>
           <SkipBack size={22} />
@@ -136,7 +147,65 @@ export default function Stage() {
         <button aria-label="Next" onClick={() => api.control('next')}>
           <SkipForward size={22} />
         </button>
+        <button
+          className={`lyr-btn ${lyricsPanel ? 'on' : ''}`}
+          aria-label="Lyrics options"
+          aria-expanded={lyricsPanel}
+          onClick={() => setLyricsPanel(!lyricsPanel)}
+        >
+          <MicVocal size={20} />
+        </button>
       </div>
+    </div>
+  )
+}
+
+/** The lyrics' options, over full screen: on or off, style and size. */
+function StageLyrics({ settings, onClose }) {
+  const l = settings.lyrics
+  const size = (d) =>
+    api.setSettings({ lyrics: { size: Math.min(160, Math.max(50, (l.size || 100) + d)) } })
+  return (
+    <div className="stage-lyrics" role="dialog" aria-label="Lyrics">
+      <div className="sl-row">
+        <span>Lyrics on screen</span>
+        <button
+          role="switch"
+          aria-checked={!!l.overlay}
+          className={`sl-switch ${l.overlay ? 'on' : ''}`}
+          onClick={() => api.setSettings({ lyrics: { overlay: !l.overlay } })}
+        >
+          <i />
+        </button>
+      </div>
+      <div className={`sl-styles ${l.overlay ? '' : 'off'}`}>
+        {LYRIC_STYLES.map(([id, label, Icon]) => (
+          <button
+            key={id}
+            className={l.style === id ? 'on' : ''}
+            aria-pressed={l.style === id}
+            onClick={() => api.setSettings({ lyrics: { overlay: true, style: id } })}
+          >
+            <Icon size={18} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="sl-row">
+        <span>Size</span>
+        <span className="sl-size">
+          <button aria-label="Smaller lyrics" onClick={() => size(-10)} disabled={l.size <= 50}>
+            <Minus size={16} />
+          </button>
+          <b>{l.size || 100}%</b>
+          <button aria-label="Bigger lyrics" onClick={() => size(10)} disabled={l.size >= 160}>
+            <Plus size={16} />
+          </button>
+        </span>
+      </div>
+      <button className="sl-done" onClick={onClose}>
+        Done
+      </button>
     </div>
   )
 }

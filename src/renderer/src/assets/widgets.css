@@ -480,3 +480,122 @@ html[data-route='stage'] body {
 .settings .fold {
   padding: 8px 4px;
 }
+
+/* full screen: the lyrics' options, above the controls */
+.stage-controls .lyr-btn {
+  margin-left: -10px;
+  opacity: 0.85;
+}
+.stage-controls .lyr-btn.on {
+  background: rgba(255, 255, 255, 0.18);
+}
+.stage-lyrics {
+  position: absolute;
+  bottom: calc(6vh + 92px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, 92vw);
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(10, 10, 14, 0.62);
+  backdrop-filter: blur(22px);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: sl-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes sl-in {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+.sl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+}
+.sl-switch {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.2);
+  position: relative;
+  transition: background 0.2s;
+}
+.sl-switch i {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: translate 0.2s;
+}
+.sl-switch.on {
+  background: var(--p1, #e0a040);
+}
+.sl-switch.on i {
+  translate: 18px 0;
+}
+.sl-styles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  transition: opacity 0.2s;
+}
+.sl-styles.off {
+  opacity: 0.45;
+}
+.sl-styles button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 0.15s;
+}
+.sl-styles button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.sl-styles button.on {
+  background: rgba(255, 255, 255, 0.92);
+  color: #000;
+}
+.sl-size {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sl-size b {
+  min-width: 46px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.sl-size button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+.sl-size button:disabled {
+  opacity: 0.35;
+}
+.sl-done {
+  align-self: flex-end;
+  padding: 6px 16px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.12);
+}

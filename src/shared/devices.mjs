@@ -11,14 +11,14 @@ export const DESC_VALUE = '{a45c254e-df1c-4efd-8020-67d146a850e0},2' // "Headpho
 export const NAME_VALUE = '{b3f8fa53-0004-438e-9003-51a46e139bfc},6' // "Airdopes 311 Pro"
 
 /**
- * One value of every output, from `reg query <Render> /s /v <value>`: Map(output id ->
- * value as text). The id is the output's {guid}.
+ * One value of every output (or input), from `reg query <Render or Capture> /s /v <value>`:
+ * Map(device id -> value as text). The id is the device's {guid}.
  */
 export function parseRegValues(output, value) {
   const out = new Map()
   let id = null
   for (const line of String(output || '').split(/\r?\n/)) {
-    const key = line.match(/\\Render\\(\{[0-9a-f-]{36}\})(\\Properties)?\s*$/i)
+    const key = line.match(/\\(?:Render|Capture)\\(\{[0-9a-f-]{36}\})(\\Properties)?\s*$/i)
     if (key) {
       id = key[1].toLowerCase()
       continue
@@ -55,4 +55,19 @@ export function activeHeadphones(states, labels) {
 export function headphonesGone(before, after) {
   for (const id of before) if (!after.has(id)) return id
   return null
+}
+
+/**
+ * The connected recording inputs, named as Windows (and Chromium) name them:
+ * "Microphone Array (Realtek(R) Audio)". states, descs, names: Map(id -> text).
+ */
+export function inputLabels(states, descs, names) {
+  const out = []
+  for (const [id, st] of states) {
+    if (!isActive(st)) continue
+    const desc = descs.get(id)
+    const name = names.get(id)
+    if (desc) out.push(name ? `${desc} (${name})` : desc)
+  }
+  return out.sort()
 }

@@ -9,7 +9,7 @@
 //   PowerShell helper, with a grammar of that one phrase: it can't turn anything else said
 //   into text, and nothing is recorded or sent anywhere. It runs only while it's turned on.
 
-import { spawn } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { createHash } from 'crypto'
 import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'fs'
 import { readFile } from 'fs/promises'
@@ -18,6 +18,13 @@ import { Readable } from 'stream'
 import { pipeline } from 'stream/promises'
 import { POWERSHELL } from './powershell.js'
 import { fetchAllowed } from './remote.js'
+import {
+  DESC_VALUE,
+  NAME_VALUE,
+  STATE_VALUE,
+  inputLabels,
+  parseRegValues
+} from '../shared/devices.mjs'
 import {
   MODEL,
   MODEL_BYTES,
@@ -30,6 +37,34 @@ import {
 } from '../shared/voice.mjs'
 
 export const VOICE_SCHEME = 'glowtide-voice'
+
+// ---------- the microphones there are ----------
+// Read from the registry, as Windows' sound settings do, not asked of a page: a page's
+// device list (and even listening for devices changing) starts Chromium's camera service,
+// about 100 MB, which then stays.
+const CAPTURE_KEY = 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio\\Capture'
+const REG_EXE = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe')
+
+function regValues(value) {
+  return new Promise((resolve) =>
+    execFile(
+      REG_EXE,
+      ['query', CAPTURE_KEY, '/s', '/v', value],
+      { windowsHide: true, timeout: 5000, maxBuffer: 1 << 20 },
+      (err, out) => resolve(err ? new Map() : parseRegValues(out, value))
+    )
+  )
+}
+
+/** The connected recording inputs' names, e.g. ["Microphone Array (Realtek(R) Audio)"]. */
+export async function microphones() {
+  const [states, descs, names] = await Promise.all([
+    regValues(STATE_VALUE),
+    regValues(DESC_VALUE),
+    regValues(NAME_VALUE)
+  ])
+  return inputLabels(states, descs, names)
+}
 
 // The wake helper: Windows' speech recogniser, one phrase. It hears the microphone Glowtide
 // chose (not Windows' default recording device, which can be Stereo Mix: the music, not

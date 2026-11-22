@@ -177,3 +177,48 @@ test("the microphone: never Stereo Mix or another 'what the PC plays' input", as
   assert.ok(!isLoopbackMic('Microphone (NVIDIA Broadcast)'))
   assert.ok(!isLoopbackMic('Headset Microphone (Jabra)'))
 })
+
+test('Settings offers only real microphones, and shows one as chosen', async () => {
+  const { micOptions } = await import('../src/shared/voice.mjs')
+  const pc = [
+    'Stereo Mix (Realtek(R) Audio)',
+    'Internal AUX Jack (FxSound Audio Enhancer)',
+    'Line In (Realtek(R) Audio)',
+    'Microphone Array (Realtek(R) Audio)'
+  ]
+  // nothing picked yet: the microphone array, and Stereo Mix isn't offered at all
+  assert.deepEqual(micOptions(pc), {
+    options: ['Microphone Array (Realtek(R) Audio)', 'Line In (Realtek(R) Audio)'],
+    value: 'Microphone Array (Realtek(R) Audio)'
+  })
+  // the one used last, then the one picked, win
+  assert.equal(micOptions(pc, '', 'Line In (Realtek(R) Audio)').value, 'Line In (Realtek(R) Audio)')
+  assert.equal(
+    micOptions(pc, 'Line In (Realtek(R) Audio)', 'Microphone Array (Realtek(R) Audio)').value,
+    'Line In (Realtek(R) Audio)'
+  )
+  // a picked one that's gone: the likeliest instead
+  assert.equal(micOptions(pc, 'USB mic').value, 'Microphone Array (Realtek(R) Audio)')
+  assert.deepEqual(micOptions(['Stereo Mix (Realtek(R) Audio)']), { options: [], value: '' })
+})
+
+test("the registry's recording inputs, named as Windows names them", async () => {
+  const { parseRegValues, inputLabels } = await import('../src/shared/devices.mjs')
+  const K = String.raw`HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture`
+  const a = '{11111111-1111-1111-1111-111111111111}'
+  const b = '{22222222-2222-2222-2222-222222222222}'
+  const key = (id, props = false) => `${K}\\${id}${props ? '\\Properties' : ''}`
+  const states = parseRegValues(
+    `${key(a)}\n    DeviceState    REG_DWORD    0x1\n\n${key(b)}\n    DeviceState    REG_DWORD    0x4\n`,
+    'DeviceState'
+  )
+  const D = '{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+  const N = '{b3f8fa53-0004-438e-9003-51a46e139bfc},6'
+  const descs = parseRegValues(
+    `${key(a, true)}\n    ${D}    REG_SZ    Microphone Array\n${key(b, true)}\n    ${D}    REG_SZ    Line In\n`,
+    D
+  )
+  const names = parseRegValues(`${key(a, true)}\n    ${N}    REG_SZ    Realtek(R) Audio\n`, N)
+  // only the connected one
+  assert.deepEqual(inputLabels(states, descs, names), ['Microphone Array (Realtek(R) Audio)'])
+})

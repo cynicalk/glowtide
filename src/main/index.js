@@ -65,7 +65,7 @@ import { createHistory } from './history'
 import { createCallDucker } from './calls'
 import { createHeadphoneWatch } from './headphones'
 import { createRemote, fetchAllowed } from './remote'
-import { createVoice, VOICE_SCHEME } from './voice'
+import { createVoice, microphones, VOICE_SCHEME } from './voice'
 
 // where the share card may fetch a cover from: the music services' picture hosts
 const CARD_COVER_HOSTS =
@@ -1692,6 +1692,7 @@ function registerIpc() {
   handle('voice:hold', (_, on) => (on ? calls?.voiceHold() : calls?.voiceRelease()))
   // the wake word's microphone, from the command bar window only
   handle('voice:feedWanted', () => wakeFeedWanted())
+  handle('voice:mics', () => microphones())
   handle('voice:feedError', (_, msg) => voice?.feedError(msg))
   on('voice:pcm', (e, buf) => {
     if (e.sender !== commandWin?.webContents) return

@@ -586,6 +586,9 @@ input[type='range']:hover::-webkit-slider-thumb,
   font: inherit;
   font-size: 12px;
   padding: 0 8px;
+  /* a long name (a microphone's, say) is cut short rather than widening the panel */
+  min-width: 0;
+  text-overflow: ellipsis;
 }
 .srow input[type='color'] {
   width: 44px;

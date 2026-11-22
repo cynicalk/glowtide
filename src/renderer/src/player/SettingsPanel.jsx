@@ -11,7 +11,8 @@ import {
   prettyAccelerator
 } from '../../../shared/shortcuts.mjs'
 import ColourWheel from './ColourWheel'
-import { micList } from '../lib/mic'
+import { rememberedMic } from '../lib/mic'
+import { micOptions } from '../../../shared/voice.mjs'
 import { ANIMATION_HINTS, ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
 
 // Fonts that ship with Windows 10/11, so every choice renders.
@@ -1121,17 +1122,16 @@ function VoiceSettings({ settings, set, voice }) {
   const wake = !!settings.voice?.wake
   const mic = settings.voice?.mic || ''
   const [sure, setSure] = useState(false)
-  const [mics, setMics] = useState([])
+  // the microphones, from Windows (not the page's device list, which costs ~100 MB that stays)
+  const [labels, setLabels] = useState([])
   useEffect(() => {
     let live = true
-    const load = () => micList().then((m) => live && setMics(m))
-    load()
-    navigator.mediaDevices?.addEventListener('devicechange', load)
+    api.voiceMics().then((l) => live && setLabels(Array.isArray(l) ? l : []))
     return () => {
       live = false
-      navigator.mediaDevices?.removeEventListener('devicechange', load)
     }
   }, [])
+  const mics = micOptions(labels, mic, rememberedMic()?.label || '')
   const mb = Math.round((voice?.bytes || 0) / 1e6)
   const turn = async (v) => {
     if (v && !voice?.ready) {
@@ -1159,21 +1159,21 @@ function VoiceSettings({ settings, set, voice }) {
       </p>
       <div className="srow">
         <span>Microphone</span>
-        <select value={mic} onChange={(e) => set({ voice: { mic: e.target.value } })}>
-          <option value="">Automatic</option>
-          {mics.map((m) => (
-            <option key={m.label} value={m.label}>
-              {m.loopback ? `${m.label} (records the PC, not you)` : m.label}
-            </option>
-          ))}
-          {mic && !mics.some((m) => m.label === mic) && (
-            <option value={mic}>{mic} (not connected)</option>
-          )}
-        </select>
+        {mics.options.length ? (
+          <select value={mics.value} onChange={(e) => set({ voice: { mic: e.target.value } })}>
+            {mics.options.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="fine">No microphone found</span>
+        )}
       </div>
       <p className="fine">
-        Automatic uses Windows&apos; default microphone, but never Stereo Mix or a sound
-        enhancer&apos;s input: those record what the PC plays, not your voice.
+        Stereo Mix and similar inputs aren&apos;t listed: they record what the PC plays, not your
+        voice.
       </p>
       <div className="srow">
         <span>

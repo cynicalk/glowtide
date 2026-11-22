@@ -300,3 +300,19 @@ export function chooseMic(devices, prefer = '') {
   const mic = real.find((d) => !isLoopbackMic(d.label))
   return mic ? mic.deviceId : null
 }
+
+// names that say "microphone", tried first when nothing else decides
+const MICLIKE = /micro?phone|\bmic\b|array|headset|webcam|camera/i
+
+/**
+ * What Settings offers: the real microphones (never Stereo Mix and the like, which can't hear
+ * you), and which one shows as chosen: the one picked, else the one used last, else the
+ * likeliest (a name that says microphone). labels: the inputs' names.
+ */
+export function micOptions(labels, picked = '', lastUsed = '') {
+  const options = [...new Set((labels || []).filter((l) => l && !isLoopbackMic(l)))].sort(
+    (a, b) => Number(MICLIKE.test(b)) - Number(MICLIKE.test(a))
+  )
+  const value = [picked, lastUsed].find((l) => l && options.includes(l)) || options[0] || ''
+  return { options, value }
+}

@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('glowtide', {
   // the wake word's microphone feed (the command bar window)
   onVoiceFeed: on('voice:feed'),
   voiceFeedWanted: () => ipcRenderer.invoke('voice:feedWanted'),
+  voiceMics: () => ipcRenderer.invoke('voice:mics'),
   voicePcm: (buf) => ipcRenderer.send('voice:pcm', buf),
   voiceFeedError: (msg) => ipcRenderer.invoke('voice:feedError', msg),
   onWindowVisible: on('window:visible'),

@@ -1,6 +1,11 @@
 // The microphone Glowtide listens with: the one picked in Settings, else Windows' default
 // unless that records the PC's own sound (Stereo Mix and the like), else the first real
 // microphone. See chooseMic in shared/voice.mjs.
+//
+// The one chosen is remembered and opened directly next time. Asking the page for the device
+// list (or to hear about devices changing) starts Chromium's camera service, about 100 MB,
+// which then stays: so the list is only asked for when the remembered microphone is gone and
+// Windows' default won't do.
 
 import { chooseMic, isLoopbackMic } from '../../../shared/voice.mjs'
 
@@ -10,45 +15,82 @@ const VOICE = {
   noiseSuppression: true,
   autoGainControl: true
 }
+const KEY = 'glowtide-mic'
 
-async function inputs() {
+/** The microphone used last time: { id, label }, or null. */
+export function rememberedMic() {
   try {
-    return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput')
+    const r = JSON.parse(localStorage.getItem(KEY) || 'null')
+    return r && typeof r.id === 'string' && typeof r.label === 'string' ? r : null
   } catch {
-    return []
+    return null
   }
+}
+function remember(id, label) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ id, label }))
+  } catch {
+    /* not kept: it's chosen again next time */
+  }
+}
+
+const open = (id) =>
+  navigator.mediaDevices.getUserMedia({
+    audio: id && id !== 'default' ? { ...VOICE, deviceId: { exact: id } } : VOICE
+  })
+const labelOf = (s) => s.getAudioTracks()[0]?.label || ''
+const stop = (s) => s.getTracks().forEach((t) => t.stop())
+// a microphone (not the PC's own sound), and the one asked for if one was
+const usable = (s, prefer) => {
+  const l = labelOf(s)
+  return !!l && !isLoopbackMic(l) && (!prefer || l === prefer)
 }
 
 /** A stream from the right microphone. prefer: a microphone's name from Settings, or ''. */
 export async function micStream(prefer = '') {
-  const list = await inputs()
+  // 1. the one used last time, opened directly
+  const r = rememberedMic()
+  if (r && (!prefer || r.label === prefer)) {
+    try {
+      const s = await open(r.id)
+      if (usable(s, prefer)) return s
+      stop(s)
+    } catch (e) {
+      if (e?.name === 'NotAllowedError') throw e
+    }
+  }
+  // 2. Windows' default, if it's a real microphone
+  if (!prefer) {
+    try {
+      const s = await open('default')
+      if (usable(s, '')) return s
+      stop(s)
+    } catch (e) {
+      if (e?.name === 'NotAllowedError') throw e
+    }
+  }
+  // 3. the device list, this once: choose, open and remember
+  let list = []
+  try {
+    list = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput')
+  } catch {
+    /* none */
+  }
   const id = chooseMic(list, prefer)
-  if (!id && list.length) {
+  if (!id) {
     const e = new Error('only inputs that record what the PC plays')
     e.name = 'NotFoundError'
     throw e
   }
-  const audio = id && id !== 'default' ? { ...VOICE, deviceId: { exact: id } } : VOICE
-  return navigator.mediaDevices.getUserMedia({ audio })
-}
-
-/** The microphones there are, for Settings: [{ label, loopback }] (no defaults or duplicates). */
-export async function micList() {
-  const seen = new Set()
-  const out = []
-  for (const d of await inputs()) {
-    if (['default', 'communications'].includes(d.deviceId) || !d.label || seen.has(d.label))
-      continue
-    seen.add(d.label)
-    out.push({ label: d.label, loopback: isLoopbackMic(d.label) })
-  }
-  return out
+  const s = await open(id)
+  if (id !== 'default') remember(id, labelOf(s))
+  return s
 }
 
 /**
  * The wake word's ears: the microphone, continuously, as 16 kHz 16-bit mono PCM handed to
  * send(ArrayBuffer) about four times a second, for Windows' recogniser in the main process.
- * Follows a microphone being plugged in or out. Returns stop().
+ * If the microphone goes away (unplugged), it chooses again. Returns stop().
  */
 export function wakeFeed({ mic = '', send, onError }) {
   let stopped = false
@@ -57,15 +99,25 @@ export function wakeFeed({ mic = '', send, onError }) {
   let again = null
 
   const teardown = () => {
-    for (const t of stream?.getTracks() || []) t.stop()
+    if (stream) stop(stream)
     stream = null
     ctx?.close().catch(() => {})
     ctx = null
   }
   const start = async () => {
     const s = await micStream(mic)
-    if (stopped) return s.getTracks().forEach((t) => t.stop())
+    if (stopped) return stop(s)
     stream = s
+    // unplugged: choose again in a moment
+    s.getAudioTracks()[0]?.addEventListener('ended', () => {
+      if (stopped || stream !== s) return
+      clearTimeout(again)
+      again = setTimeout(() => {
+        if (stopped) return
+        teardown()
+        begin()
+      }, 1500)
+    })
     ctx = new AudioContext({ sampleRate: 16000 })
     const src = ctx.createMediaStreamSource(s)
     const proc = ctx.createScriptProcessor(4096, 1, 1)
@@ -81,21 +133,10 @@ export function wakeFeed({ mic = '', send, onError }) {
     }
   }
   const begin = () => start().catch((e) => !stopped && onError?.(e))
-  // a microphone plugged in or out: choose again
-  const changed = () => {
-    clearTimeout(again)
-    again = setTimeout(() => {
-      if (stopped) return
-      teardown()
-      begin()
-    }, 1200)
-  }
-  navigator.mediaDevices.addEventListener('devicechange', changed)
   begin()
   return () => {
     stopped = true
     clearTimeout(again)
-    navigator.mediaDevices.removeEventListener('devicechange', changed)
     teardown()
   }
 }

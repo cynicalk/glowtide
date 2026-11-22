@@ -64,19 +64,28 @@ export const modelFile = (path) => MODEL.files.find((f) => f.path === path) || n
 // ---------- the wake word ----------
 
 /**
- * Heard first by Windows' own speech recogniser (cheap, always on), written as words it
- * knows how to say. It's strict with accents it wasn't trained on, so it only proposes: a
- * match it's sure of (WAKE_SURE) opens the command bar at once; one it isn't sure of
- * (down to WAKE_MAYBE) is checked by Whisper on the last few seconds of sound first.
+ * The wake word is "Hey Glow": two everyday words both speech models know ("Glowtide", a
+ * made-up word, was heard as "gloated" and the like). "Hey Glowtide" still works.
+ *
+ * Heard first by Windows' own speech recogniser (cheap, always on). It's strict with accents
+ * it wasn't trained on, so it only proposes: a match it's very sure of (WAKE_SURE) opens the
+ * command bar at once; one it's less sure of (down to WAKE_MAYBE) is checked by Whisper on
+ * the last few seconds of sound first.
  */
-export const WAKE_PHRASES = ['hey glow tide', 'hi glow tide', 'okay glow tide']
+export const WAKE_WORD = 'Hey Glow'
+export const WAKE_PHRASES = ['hey glow', 'hi glow', 'okay glow', 'hey glow tide']
 export const WAKE_PHRASE = WAKE_PHRASES[0]
-export const WAKE_SURE = 0.85
+export const WAKE_SURE = 0.93
 export const WAKE_MAYBE = 0.12
 
-// "Hey Glowtide" at the start of what was said, however Whisper spelled it
-const WAKE_LEAD =
-  /^(?:(?:hey|hi|okay|ok)[,.!]?\s+)?(?:glow\s?(?:tide|tides|tied|ties|tight|time|type|side|ride|died|dyed|tired|tile)|glo\s?tide|blow\s?tide|go\s?tide)[,.!?]*(?:\s+|$)/i
+// a greeting, then a word starting "glo" (glow, Glowtide, and how Whisper may hear them)
+const GREETING = '(?:hey|hi|hay|okay|ok)'
+const WAKE_LEAD = new RegExp(`^${GREETING}[,.!]?\\s+glo[a-z]*(?:\\s+tide)?[,.!?]*(?:\\s+|$)`, 'i')
+const WAKE_IN = new RegExp(` ${GREETING} glo[a-z]* `)
+
+// how Whisper (tiny) hears a quick "Hey Glow" said on its own; only taken when it's all it
+// heard, so the word "halo" in a song can't wake it
+const WAKE_ALONE = /^ (halo|hey low|hay low|hey glo|a glow) $/
 
 /** Whether Whisper's text of the last few seconds has the wake word in it. */
 export function isWakeText(text) {
@@ -84,9 +93,7 @@ export function isWakeText(text) {
     .toLowerCase()
     .replace(/[^a-z]+/g, ' ')
     .trim()} `
-  return / glow ?(tide|tides|tied|ties|tight|time|type|side|ride|died|dyed|tired|tile) | glo ?tide | glowtide | blow ?tide | go ?tide /.test(
-    s
-  )
+  return WAKE_IN.test(s) || WAKE_ALONE.test(s)
 }
 
 /**

@@ -223,15 +223,18 @@ test("the registry's recording inputs, named as Windows names them", async () =>
   assert.deepEqual(inputLabels(states, descs, names), ['Microphone Array (Realtek(R) Audio)'])
 })
 
-test('an unsure "Hey Glowtide" is checked against what Whisper heard', async () => {
+test('an unsure "Hey Glow" is checked against what Whisper heard', async () => {
   const { isWakeText, parseWakeLine } = await import('../src/shared/voice.mjs')
   for (const t of [
-    ' Hey Glowtide.',
-    'Hey, glow tide!',
-    'Hi Glow Tide',
-    'okay glow time',
-    'hey glow tied',
-    'Glowtide'
+    'Hey Glow.',
+    'Hey, glow!',
+    'Hi Glow',
+    'okay glow',
+    ' Hey, gloated.',
+    'Hey Glowtide.',
+    'hey glow tide',
+    ' Halo',
+    'Hey low.'
   ])
     assert.ok(isWakeText(t), t)
   for (const t of [
@@ -239,9 +242,13 @@ test('an unsure "Hey Glowtide" is checked against what Whisper heard', async () 
     null,
     ' you',
     'hey google',
-    'the tide is high',
-    'glowing in the dark',
-    'below tide'
+    'hey go',
+    'hello',
+    'glow',
+    'the glow of it',
+    // "halo" in a song is not the wake word
+    'a halo of light around the moon',
+    'hey low down'
   ])
     assert.ok(!isWakeText(t), String(t))
   assert.deepEqual(parseWakeLine('maybe 0.34'), { maybe: 0.34 })
@@ -249,8 +256,10 @@ test('an unsure "Hey Glowtide" is checked against what Whisper heard', async () 
 
 test('the wake word is taken off what was said, however Whisper spelled it', async () => {
   const { voiceToCommand } = await import('../src/shared/voice.mjs')
-  assert.deepEqual(voiceToCommand('Hey, Glotide. Next song.'), { text: 'next', autorun: true })
+  assert.deepEqual(voiceToCommand('Hey Glow, next song.'), { text: 'next', autorun: true })
+  assert.deepEqual(voiceToCommand('Hey, gloated. Next song.'), { text: 'next', autorun: true })
   assert.deepEqual(voiceToCommand('Hi glow tide, pause'), { text: 'pause', autorun: true })
+  assert.deepEqual(voiceToCommand('Hey Glow.'), { text: '', autorun: false })
   assert.deepEqual(voiceToCommand('Hey Glowtide.'), { text: '', autorun: false })
   // a song that merely starts with "glow" is left alone
   assert.equal(voiceToCommand('Glow by Ellie Goulding').text, 'Glow by Ellie Goulding')

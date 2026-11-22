@@ -5,7 +5,7 @@
 //   shared/voice.mjs) before it's kept, so a changed or damaged file is never used.
 // - Glowtide's pages read it as glowtide-voice://model/whisper-tiny.en/<file>; only the files in the
 //   manifest are served, never any other path.
-// - The wake word ("Hey Glowtide") is heard by Windows' own speech recogniser in a
+// - The wake word ("Hey Glow") is heard by Windows' own speech recogniser in a
 //   PowerShell helper, with a grammar of that one phrase: it can't turn anything else said
 //   into text, and nothing is recorded or sent anywhere. It runs only while it's turned on.
 
@@ -398,7 +398,7 @@ export function createVoice({
         if (msg.ready) {
           restarts = 0
           wakeError = null
-          log('voice', `listening for "Hey Glowtide" (${msg.ready})`)
+          log('voice', `listening for "Hey Glow" (${msg.ready})`)
           onStatus(status())
         } else if (msg.error) {
           wakeError = msg.error

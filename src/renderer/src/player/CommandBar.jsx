@@ -31,7 +31,7 @@ function micError(e) {
  * song. Spotify searches as you type; YouTube Music on Enter (each search spends daily
  * quota). ↑ ↓ choose, Enter runs, Esc closes.
  *
- * Or say it: the mic button, Ctrl+Alt+V or "Hey Glowtide" listens until you stop talking;
+ * Or say it: the mic button, Ctrl+Alt+V or "Hey Glow" listens until you stop talking;
  * then a command runs at once, and "play …" / "queue …" plays or queues the first song found.
  */
 export default function CommandBar() {
@@ -101,7 +101,7 @@ export default function CommandBar() {
     if (ac.signal.aborted) return
     if (problem) return setNote(problem)
     const v = voiceToCommand(said)
-    // only "Hey Glowtide" was caught (you waited for the chime): listen for the command
+    // only "Hey Glow" was caught (you waited for the chime): listen for the command
     if (!v.text && !again && isWakeText(said)) return startListening(true, true)
     if (!v.text)
       return setNote(
@@ -137,7 +137,7 @@ export default function CommandBar() {
     []
   )
   useEffect(() => api.onCommandListen(() => listenRef.current()), [])
-  // An unsure "Hey Glowtide": what Whisper makes of the last few seconds of sound
+  // An unsure "Hey Glow": what Whisper makes of the last few seconds of sound
   useEffect(
     () =>
       api.onVoiceCheck(async ({ id, pcm }) => {
@@ -156,7 +156,7 @@ export default function CommandBar() {
       }),
     []
   )
-  // While "Hey Glowtide" is on, this window (hidden or not) is its ears: the chosen
+  // While "Hey Glow" is on, this window (hidden or not) is its ears: the chosen
   // microphone, streamed to Windows' recogniser in the main process.
   useEffect(() => {
     let stop = null

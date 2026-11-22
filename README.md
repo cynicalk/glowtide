@@ -59,7 +59,7 @@ Open the command bar with **Ctrl+Alt+G** and type, or press **Ctrl+Alt+V** and s
 - "Next song" · "Pause" · "Set the volume to forty" · "Go to one minute thirty"
 - "Play Blinding Lights by The Weeknd" · "Add Levitating to the queue"
 
-Turn on **"Hey Glowtide"** (Settings → App → Voice) and just say it, hands-free. The music
+Turn on **"Hey Glow"** (Settings → App → Voice) and just say it, hands-free. The music
 dips while you talk. Your voice is understood **on your PC**, and nothing you say is saved
 or sent anywhere.
 
@@ -149,7 +149,7 @@ shortcuts in Settings → App → Shortcuts.
 
 - **No account, no tracking, no Glowtide server.** Everything runs on your PC.
 - **Voice** is understood on your PC by a speech model downloaded once (44 MB). Nothing you
-  say is recorded, kept or sent anywhere. "Hey Glowtide" is off unless you turn it on; while
+  say is recorded, kept or sent anywhere. "Hey Glow" is off unless you turn it on; while
   it's on, Windows shows its microphone icon.
 - **The beat** comes from your PC's sound output, never the microphone.
 - **Your listening history** stays in your settings folder. Turn it off or clear it on the
@@ -183,7 +183,7 @@ per song. **Wrong lyrics?** under the lyrics shows other versions to pick from.
 - **Pick your microphone** in Settings → App → Voice → Microphone. **Automatic** uses Windows'
   default microphone but skips inputs like **Stereo Mix**, which record what the PC plays rather
   than your voice.
-- **"Hey Glowtide"** is off until you turn it on (Settings → App → Voice). It needs Windows'
+- **"Hey Glow"** is off until you turn it on (Settings → App → Voice). It needs Windows'
   English speech recogniser, which comes with the English (United States or UK) language pack:
   Settings → Time & language → Language & region.
 - Check that Windows lets apps use the microphone: Settings → Privacy & security → Microphone.
@@ -276,7 +276,7 @@ after `npm run build`); a packaged copy ignores every one of them.
   `GLOWTIDE_PROBE_AT` ms (default 3000), and writes what it returns to `probe.json`.
 - Voice without a microphone: start Electron with
   `--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<16 kHz .wav>` and the
-  command bar hears that file. `$env:GLOWTIDE_WAKE_WAV=<.wav>` makes "Hey Glowtide" listen to
+  command bar hears that file. `$env:GLOWTIDE_WAKE_WAV=<.wav>` makes "Hey Glow" listen to
   a file.
 - `$env:GLOWTIDE_PLAIN_TEST=1` (with `GLOWTIDE_DEMO`) serves the demo's lyrics untimed.
 - `$env:GLOWTIDE_UPDATE_FEED="http://127.0.0.1:8899/"` updates a development run from a local

@@ -1144,18 +1144,18 @@ function VoiceSettings({ settings, set, voice }) {
     <Fold k="voice">
       <div className="sh">
         <h3>Voice</h3>
-        <Toggle label='Listen for "Hey Glowtide"' on={wake} onChange={turn} />
+        <Toggle label='Listen for "Hey Glow"' on={wake} onChange={turn} />
       </div>
       <p className="fine">
         Say a song or a command to the command bar: press its microphone or Ctrl+Alt+V, then
         &ldquo;next song&rdquo;, &ldquo;volume forty&rdquo;, &ldquo;play Blinding Lights&rdquo; or
-        &ldquo;add Levitating to the queue&rdquo;. With the switch on, saying &ldquo;Hey
-        Glowtide&rdquo; opens it listening.
+        &ldquo;add Levitating to the queue&rdquo;. With the switch on, saying &ldquo;Hey Glow&rdquo;
+        opens it listening.
       </p>
       <p className="fine">
         Everything is understood on this PC and nothing you say is kept or sent anywhere. While
-        &ldquo;Hey Glowtide&rdquo; is on, Windows shows its microphone icon: Windows&apos; own
-        speech recogniser is listening for that phrase, and only that phrase.
+        &ldquo;Hey Glow&rdquo; is on, Windows shows its microphone icon: Windows&apos; own speech
+        recogniser is listening for that phrase, and only that phrase.
       </p>
       <div className="srow">
         <span>Microphone</span>
@@ -1178,7 +1178,7 @@ function VoiceSettings({ settings, set, voice }) {
       {wake && voice?.lastHeard && (
         <p className="fine" role="status">
           Last heard{' '}
-          {voice.lastHeard.text ? <>&ldquo;{voice.lastHeard.text}&rdquo;</> : '“Hey Glowtide”'}{' '}
+          {voice.lastHeard.text ? <>&ldquo;{voice.lastHeard.text}&rdquo;</> : '“Hey Glow”'}{' '}
           {voice.lastHeard.opened ? '— opened the command bar' : '— not the wake word, ignored'}
         </p>
       )}
@@ -1231,10 +1231,10 @@ function VoiceSettings({ settings, set, voice }) {
       {wake && voice?.wakeError && (
         <p className="fine" role="status">
           {voice.wakeError === 'no-recogniser'
-            ? "“Hey Glowtide” needs Windows' English speech recogniser: Settings → Time & language → Language & region, add English (United States), and include its speech options."
+            ? "“Hey Glow” needs Windows' English speech recogniser: Settings → Time & language → Language & region, add English (United States), and include its speech options."
             : voice.wakeError === 'no-microphone'
-              ? "“Hey Glowtide” can't hear you: no microphone was found (Stereo Mix and the like record the PC, not you)."
-              : `“Hey Glowtide” can't hear you: ${voice.wakeError}`}
+              ? "“Hey Glow” can't hear you: no microphone was found (Stereo Mix and the like record the PC, not you)."
+              : `“Hey Glow” can't hear you: ${voice.wakeError}`}
         </p>
       )}
     </Fold>

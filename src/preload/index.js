@@ -71,6 +71,8 @@ contextBridge.exposeInMainWorld('glowtide', {
   onVoiceFeed: on('voice:feed'),
   voiceFeedWanted: () => ipcRenderer.invoke('voice:feedWanted'),
   voiceMics: () => ipcRenderer.invoke('voice:mics'),
+  onVoiceCheck: on('voice:check'),
+  voiceChecked: (id, text) => ipcRenderer.invoke('voice:checked', id, text),
   voicePcm: (buf) => ipcRenderer.send('voice:pcm', buf),
   voiceFeedError: (msg) => ipcRenderer.invoke('voice:feedError', msg),
   onWindowVisible: on('window:visible'),

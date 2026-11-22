@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { api, useGlowtide } from '../lib/store'
 import { parseCommand } from '../../../shared/commands.mjs'
-import { MODEL_BYTES, cleanTranscript, voiceToCommand } from '../../../shared/voice.mjs'
+import { MODEL_BYTES, cleanTranscript, isWakeText, voiceToCommand } from '../../../shared/voice.mjs'
 import { listen, transcribe, warmUp } from '../lib/voice'
 import { wakeFeed } from '../lib/mic'
 
@@ -56,7 +56,7 @@ export default function CommandBar() {
     listening.current = null
   }
 
-  async function startListening(modelReady = model?.ready) {
+  async function startListening(modelReady = model?.ready, again = false) {
     if (listening.current) return
     if (!modelReady) return setMic('model')
     const ac = new AbortController()
@@ -101,6 +101,8 @@ export default function CommandBar() {
     if (ac.signal.aborted) return
     if (problem) return setNote(problem)
     const v = voiceToCommand(said)
+    // only "Hey Glowtide" was caught (you waited for the chime): listen for the command
+    if (!v.text && !again && isWakeText(said)) return startListening(true, true)
     if (!v.text)
       return setNote(
         samples ? "Didn't catch that. Try again, or type it." : "Didn't hear anything."
@@ -135,6 +137,25 @@ export default function CommandBar() {
     []
   )
   useEffect(() => api.onCommandListen(() => listenRef.current()), [])
+  // An unsure "Hey Glowtide": what Whisper makes of the last few seconds of sound
+  useEffect(
+    () =>
+      api.onVoiceCheck(async ({ id, pcm }) => {
+        let text = null
+        try {
+          // a copy of its own, so the samples line up on two bytes
+          const bytes = new Uint8Array(pcm).slice(0, pcm.byteLength & ~1)
+          const i16 = new Int16Array(bytes.buffer)
+          const f = new Float32Array(i16.length)
+          for (let i = 0; i < i16.length; i++) f[i] = i16[i] / 32768
+          text = await transcribe(f)
+        } catch {
+          /* not understood: not the wake word */
+        }
+        api.voiceChecked(id, text)
+      }),
+    []
+  )
   // While "Hey Glowtide" is on, this window (hidden or not) is its ears: the chosen
   // microphone, streamed to Windows' recogniser in the main process.
   useEffect(() => {

@@ -29,8 +29,10 @@ import {
   MODEL,
   MODEL_BYTES,
   MODEL_HOSTS,
-  WAKE_MIN_CONFIDENCE,
-  WAKE_PHRASE,
+  WAKE_MAYBE,
+  WAKE_PHRASES,
+  WAKE_SURE,
+  isWakeText,
   modelFile,
   modelUrl,
   parseWakeLine
@@ -66,11 +68,12 @@ export async function microphones() {
   return inputLabels(states, descs, names)
 }
 
-// The wake helper: Windows' speech recogniser, one phrase. It hears the microphone Glowtide
-// chose (not Windows' default recording device, which can be Stereo Mix: the music, not
-// you), as 16 kHz 16-bit mono PCM on its input, sent by the command bar window. It prints
-// "ready <culture>", then "wake <confidence>" each time the phrase is heard, and ends when
-// its input closes.
+// The wake helper: Windows' speech recogniser, with a grammar of the wake phrases only. It
+// hears the microphone Glowtide chose (not Windows' default recording device, which can be
+// Stereo Mix: the music, not you), as 16 kHz 16-bit mono PCM on its input, sent by the
+// command bar window. It prints "ready <culture>", then "wake <confidence>" when a phrase is
+// matched and "maybe <confidence>" when something like one was heard but not matched, and
+// ends when its input closes.
 const WAKE_CS = String.raw`
 using System;
 using System.IO;
@@ -104,7 +107,7 @@ public class GlowtideLiveAudio : Stream {
   }
 }
 public static class GlowtideWake {
-  public static void Run(string phrase, string wav) {
+  public static void Run(string phrases, string wav) {
     RecognizerInfo info = null;
     string ui = CultureInfo.CurrentUICulture.Name;
     foreach (RecognizerInfo r in SpeechRecognitionEngine.InstalledRecognizers()) {
@@ -113,7 +116,7 @@ public static class GlowtideWake {
     }
     if (info == null) { Console.WriteLine("error no-recogniser"); return; }
     using (SpeechRecognitionEngine eng = new SpeechRecognitionEngine(info)) {
-      GrammarBuilder gb = new GrammarBuilder(phrase);
+      GrammarBuilder gb = new GrammarBuilder(new Choices(phrases.Split('|')));
       gb.Culture = info.Culture;
       eng.LoadGrammar(new Grammar(gb));
       if (wav.Length > 0) eng.SetInputToWaveFile(wav);
@@ -123,6 +126,10 @@ public static class GlowtideWake {
       eng.RecognizeCompleted += (s, e) => done.Set();
       eng.SpeechRecognized += (s, e) =>
         Console.WriteLine("wake " + e.Result.Confidence.ToString("0.00", CultureInfo.InvariantCulture));
+      eng.SpeechRecognitionRejected += (s, e) => {
+        if (e.Result != null && e.Result.Text.Length > 0)
+          Console.WriteLine("maybe " + e.Result.Confidence.ToString("0.00", CultureInfo.InvariantCulture));
+      };
       eng.RecognizeAsync(RecognizeMode.Multiple);
       Console.WriteLine("ready " + info.Culture.Name);
       done.WaitOne();
@@ -133,7 +140,8 @@ public static class GlowtideWake {
 
 /**
  * dir: where the model is kept; onStatus(status) when the download moves on;
- * onWake() when the wake phrase is heard; log(where, message).
+ * onWake() when the wake phrase is heard; log(where, message);
+ * check(pcm): Whisper's text of some 16 kHz 16-bit mono sound (a Buffer), or null.
  */
 /** testWav: development runs only, a recording to listen to instead of the microphone. */
 export function createVoice({
@@ -141,7 +149,9 @@ export function createVoice({
   onStatus = () => {},
   onWake = () => {},
   log = () => {},
-  testWav = ''
+  check = async () => null,
+  testWav = '',
+  sure = WAKE_SURE
 }) {
   const modelDir = join(dir, MODEL.name)
   let downloading = null // the download under way
@@ -177,7 +187,8 @@ export function createVoice({
       bytes: MODEL_BYTES,
       error: failed,
       wakeOn: !!helper,
-      wakeError
+      wakeError,
+      lastHeard
     }
   }
 
@@ -290,11 +301,79 @@ export function createVoice({
   let restarts = 0
   let restartTimer = null
   let wakeError = null
+  let lastHeard = null // { text, sure, opened, at }: shown in Settings, to see it hears you
+  let logged = 0 // what it heard goes in the log, the first few times a run
+
+  // the last 3 seconds of sound, for Whisper to check an unsure match against
+  const RING = 16000 * 2 * 3
+  const ring = Buffer.alloc(RING)
+  let ringAt = 0 // where the next byte goes
+  let ringFull = false
+  function keep(buf) {
+    const b = buf.length > RING ? buf.subarray(buf.length - RING) : buf
+    const first = Math.min(b.length, RING - ringAt)
+    b.copy(ring, ringAt, 0, first)
+    if (first < b.length) b.copy(ring, 0, first) // wrapped round to the start
+    if (ringAt + b.length >= RING) ringFull = true
+    ringAt = (ringAt + b.length) % RING
+  }
+  const lastSound = () =>
+    ringFull
+      ? Buffer.concat([ring.subarray(ringAt), ring.subarray(0, ringAt)])
+      : ring.subarray(0, ringAt)
+
+  // Checks are paced, so music playing out loud can't keep Whisper busy.
+  let checking = false
+  let lastCheck = 0
+  const recent = [] // times of checks that came to nothing
+  function heard(text, confidence, opened) {
+    lastHeard = { text: String(text || '').slice(0, 80), sure: confidence, opened, at: Date.now() }
+    onStatus(status())
+    if (logged++ < 40)
+      log(
+        'voice',
+        `heard ${text ? `"${lastHeard.text}"` : 'something'} (${Math.round(confidence * 100)}% sure): ${opened ? 'opened' : 'not the wake word'}`
+      )
+  }
+  async function candidate(confidence) {
+    if (Date.now() - lastWake < 2500) return
+    if (confidence >= sure) {
+      lastWake = Date.now()
+      heard('', confidence, true)
+      return onWake(confidence)
+    }
+    if (confidence < WAKE_MAYBE) {
+      // too unsure even to check, but noted, to see whether it reacts to your voice at all
+      if (logged++ < 40)
+        log('voice', `heard something like it (${Math.round(confidence * 100)}% sure): too unsure`)
+      return
+    }
+    if (checking) return
+    const now = Date.now()
+    while (recent.length && now - recent[0] > 30000) recent.shift()
+    if (now - lastCheck < (recent.length >= 4 ? 6000 : 1500)) return
+    checking = true
+    lastCheck = now
+    // the phrase has just finished: a little more of the sound after it, then look
+    await new Promise((r) => setTimeout(r, 250))
+    let text = null
+    try {
+      text = await check(lastSound())
+    } catch {
+      /* not checked: not the wake word */
+    }
+    checking = false
+    const yes = isWakeText(text)
+    heard(text || '', confidence, yes)
+    if (!yes) return void recent.push(now)
+    lastWake = Date.now()
+    onWake(confidence)
+  }
 
   function startWake() {
     wakeWanted = true
     if (helper) return
-    const script = `Add-Type -AssemblyName System.Speech\nAdd-Type -ReferencedAssemblies System.Speech -TypeDefinition @'\n${WAKE_CS}\n'@\n[GlowtideWake]::Run('${WAKE_PHRASE}', '${testWav.replace(/'/g, "''")}')`
+    const script = `Add-Type -AssemblyName System.Speech\nAdd-Type -ReferencedAssemblies System.Speech -TypeDefinition @'\n${WAKE_CS}\n'@\n[GlowtideWake]::Run('${WAKE_PHRASES.join('|')}', '${testWav.replace(/'/g, "''")}')`
     const p = spawn(
       POWERSHELL,
       [
@@ -325,10 +404,8 @@ export function createVoice({
           wakeError = msg.error
           log('voice', `wake word unavailable: ${msg.error}`)
           onStatus(status())
-        } else if (msg.wake >= WAKE_MIN_CONFIDENCE && Date.now() - lastWake > 2500) {
-          lastWake = Date.now()
-          onWake(msg.wake)
-        }
+        } else if (msg.wake != null) candidate(msg.wake)
+        else if (msg.maybe != null) candidate(Math.min(msg.maybe, sure - 0.01))
       }
     })
     p.on('error', () => {})
@@ -377,6 +454,7 @@ export function createVoice({
   function feed(buf) {
     const p = helper
     // a helper that has stopped reading (starting up, or stuck) isn't sent more than ~16 s
+    keep(buf)
     if (!p || testWav || p.stdin.destroyed || p.stdin.writableLength > 512 * 1024) return
     try {
       p.stdin.write(buf)

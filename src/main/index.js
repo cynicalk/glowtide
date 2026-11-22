@@ -251,10 +251,30 @@ function syncWake(opts) {
   if (commandWin && !commandWin.isDestroyed()) commandWin.webContents.send('voice:feed', want)
 }
 
+// Whisper's text of a few seconds of sound, from the command bar window (which has the model)
+const wakeChecks = new Map()
+let wakeCheckN = 0
+function checkWake(pcm) {
+  if (!commandWin || commandWin.isDestroyed()) return Promise.resolve(null)
+  const id = ++wakeCheckN
+  return new Promise((resolve) => {
+    const t = setTimeout(() => {
+      wakeChecks.delete(id)
+      resolve(null)
+    }, 8000)
+    wakeChecks.set(id, (text) => {
+      clearTimeout(t)
+      wakeChecks.delete(id)
+      resolve(text)
+    })
+    commandWin.webContents.send('voice:check', { id, pcm: new Uint8Array(pcm) })
+  })
+}
+
 let voiceSent = ''
 function sendVoice(s) {
   // the download reports every chunk: pass on only what the page would show differently
-  const key = `${s.ready}${s.downloading}${s.percent}${s.error}${s.wakeOn}${s.wakeError}`
+  const key = `${s.ready}${s.downloading}${s.percent}${s.error}${s.wakeOn}${s.wakeError}${s.lastHeard?.at}`
   if (key === voiceSent) return
   voiceSent = key
   state.voice = s
@@ -1693,6 +1713,10 @@ function registerIpc() {
   // the wake word's microphone, from the command bar window only
   handle('voice:feedWanted', () => wakeFeedWanted())
   handle('voice:mics', () => microphones())
+  handle('voice:checked', (e, id, text) => {
+    if (e.sender !== commandWin?.webContents) return
+    wakeChecks.get(id)?.(typeof text === 'string' ? text.slice(0, 300) : null)
+  })
   handle('voice:feedError', (_, msg) => voice?.feedError(msg))
   on('voice:pcm', (e, buf) => {
     if (e.sender !== commandWin?.webContents) return
@@ -2582,8 +2606,14 @@ else {
         toggleCommand({ listen: true })
       },
       log: (where, m) => logError(where, m),
+      // an unsure wake word is checked by Whisper, in the command bar window
+      check: (pcm) => checkWake(pcm),
       // GLOWTIDE_WAKE_WAV (development only): the wake word listens to this file
-      testWav: (DEV && process.env.GLOWTIDE_WAKE_WAV) || ''
+      testWav: (DEV && process.env.GLOWTIDE_WAKE_WAV) || '',
+      // GLOWTIDE_WAKE_SURE (development only): how sure counts as sure (1.01: always check)
+      ...(DEV && process.env.GLOWTIDE_WAKE_SURE
+        ? { sure: Number(process.env.GLOWTIDE_WAKE_SURE) }
+        : {})
     })
     state.voice = voice.status()
     syncWake()

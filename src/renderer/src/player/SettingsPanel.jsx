@@ -1175,6 +1175,13 @@ function VoiceSettings({ settings, set, voice }) {
         Stereo Mix and similar inputs aren&apos;t listed: they record what the PC plays, not your
         voice.
       </p>
+      {wake && voice?.lastHeard && (
+        <p className="fine" role="status">
+          Last heard{' '}
+          {voice.lastHeard.text ? <>&ldquo;{voice.lastHeard.text}&rdquo;</> : '“Hey Glowtide”'}{' '}
+          {voice.lastHeard.opened ? '— opened the command bar' : '— not the wake word, ignored'}
+        </p>
+      )}
       <div className="srow">
         <span>
           Speech model{' '}

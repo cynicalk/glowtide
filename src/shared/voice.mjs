@@ -63,15 +63,42 @@ export const modelFile = (path) => MODEL.files.find((f) => f.path === path) || n
 
 // ---------- the wake word ----------
 
-/** Heard by Windows' own speech recogniser; written as words it knows how to say. */
-export const WAKE_PHRASE = 'hey glow tide'
-export const WAKE_MIN_CONFIDENCE = 0.6
+/**
+ * Heard first by Windows' own speech recogniser (cheap, always on), written as words it
+ * knows how to say. It's strict with accents it wasn't trained on, so it only proposes: a
+ * match it's sure of (WAKE_SURE) opens the command bar at once; one it isn't sure of
+ * (down to WAKE_MAYBE) is checked by Whisper on the last few seconds of sound first.
+ */
+export const WAKE_PHRASES = ['hey glow tide', 'hi glow tide', 'okay glow tide']
+export const WAKE_PHRASE = WAKE_PHRASES[0]
+export const WAKE_SURE = 0.85
+export const WAKE_MAYBE = 0.12
 
-/** A line from the wake helper: { wake: confidence } | { ready: culture } | { error } | null. */
+// "Hey Glowtide" at the start of what was said, however Whisper spelled it
+const WAKE_LEAD =
+  /^(?:(?:hey|hi|okay|ok)[,.!]?\s+)?(?:glow\s?(?:tide|tides|tied|ties|tight|time|type|side|ride|died|dyed|tired|tile)|glo\s?tide|blow\s?tide|go\s?tide)[,.!?]*(?:\s+|$)/i
+
+/** Whether Whisper's text of the last few seconds has the wake word in it. */
+export function isWakeText(text) {
+  const s = ` ${String(text ?? '')
+    .toLowerCase()
+    .replace(/[^a-z]+/g, ' ')
+    .trim()} `
+  return / glow ?(tide|tides|tied|ties|tight|time|type|side|ride|died|dyed|tired|tile) | glo ?tide | glowtide | blow ?tide | go ?tide /.test(
+    s
+  )
+}
+
+/**
+ * A line from the wake helper: { wake: confidence } (the phrase, matched), { maybe:
+ * confidence } (something like it, not matched), { ready: culture }, { error }, or null.
+ */
 export function parseWakeLine(line) {
   const s = String(line ?? '').trim()
   let m = s.match(/^wake ([01](?:\.\d+)?)$/)
   if (m) return { wake: Number(m[1]) }
+  m = s.match(/^maybe ([01](?:\.\d+)?)$/)
+  if (m) return { maybe: Number(m[1]) }
   m = s.match(/^ready ([a-z]{2}-[A-Z]{2})$/)
   if (m) return { ready: m[1] }
   m = s.match(/^error ([\w-]{1,40})$/)
@@ -182,8 +209,8 @@ export function cleanTranscript(text) {
     .trim()
   if (NOT_SPEECH.test(s)) return ''
   s = s.replace(/^[\s,.!?;:"'-]+|[\s,.!?;:"'-]+$/g, '')
-  // the wake word, if the end of it was caught
-  s = s.replace(/^(hey,? )?glow ?tide,? /i, '')
+  // the wake word (as Whisper may spell it), if it was caught
+  s = s.replace(WAKE_LEAD, '')
   return s.trim()
 }
 

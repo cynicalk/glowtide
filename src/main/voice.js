@@ -142,8 +142,9 @@ public static class GlowtideWake {
  * dir: where the model is kept; onStatus(status) when the download moves on;
  * onWake() when the wake phrase is heard; log(where, message);
  * check(pcm): Whisper's text of some 16 kHz 16-bit mono sound (a Buffer), or null.
+ * testWav, sure: development runs only (a recording to listen to instead of the microphone;
+ * how sure counts as sure).
  */
-/** testWav: development runs only, a recording to listen to instead of the microphone. */
 export function createVoice({
   dir,
   onStatus = () => {},
@@ -203,12 +204,17 @@ export function createVoice({
     const hash = createHash('sha256')
     let got = 0
     const body = Readable.fromWeb(r.body)
+    let shown = -1
     body.on('data', (chunk) => {
       hash.update(chunk)
       got += chunk.length
       progress += chunk.length
-      if (got > f.size) body.destroy(new Error(`${f.path} is larger than it should be`))
-      else onStatus(status())
+      if (got > f.size) return body.destroy(new Error(`${f.path} is larger than it should be`))
+      const pct = Math.floor((100 * progress) / MODEL_BYTES)
+      if (pct !== shown) {
+        shown = pct
+        onStatus(status())
+      }
     })
     try {
       await pipeline(body, createWriteStream(part))
@@ -301,8 +307,10 @@ export function createVoice({
   let restarts = 0
   let restartTimer = null
   let wakeError = null
-  let lastHeard = null // { text, sure, opened, at }: shown in Settings, to see it hears you
-  let logged = 0 // what it heard goes in the log, the first few times a run
+  // { text, sure, opened, at }: shown in Settings, to see it hears you. Kept in memory only:
+  // what was said is never written to the log or anywhere else.
+  let lastHeard = null
+  let logged = 0 // how sure it was goes in the log (never the words), the first few times a run
 
   // the last 3 seconds of sound, for Whisper to check an unsure match against
   const RING = 16000 * 2 * 3
@@ -332,7 +340,7 @@ export function createVoice({
     if (logged++ < 40)
       log(
         'voice',
-        `heard ${text ? `"${lastHeard.text}"` : 'something'} (${Math.round(confidence * 100)}% sure): ${opened ? 'opened' : 'not the wake word'}`
+        `heard the wake word or something like it (${Math.round(confidence * 100)}% sure)${text ? ', checked' : ''}: ${opened ? 'opened' : 'not the wake word'}`
       )
   }
   async function candidate(confidence) {

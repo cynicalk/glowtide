@@ -33,7 +33,8 @@ import {
   statSync,
   cpSync,
   existsSync,
-  readdirSync
+  readdirSync,
+  readFileSync
 } from 'fs'
 import { is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -126,6 +127,25 @@ function logError(kind, e) {
   }
 }
 process.on('uncaughtException', (e) => logError('uncaught', e))
+
+// 1.0.26 and 1.0.27 wrote what the wake word heard (the words) into the log; nothing said is
+// meant to be kept, so those lines are taken out.
+function forgetHeardWords() {
+  try {
+    const file = join(app.getPath('userData'), 'glowtide.log')
+    const text = readFileSync(file, 'utf8')
+    if (!/ voice heard "/.test(text)) return
+    writeFileSync(
+      file,
+      text
+        .split('\n')
+        .filter((l) => !/ voice heard "/.test(l))
+        .join('\n')
+    )
+  } catch {
+    /* no log */
+  }
+}
 // The GPU and other helper processes: when windows die together, this says which one went.
 app.on('child-process-gone', (_e, d) => {
   if (d.reason !== 'clean-exit')
@@ -1445,9 +1465,10 @@ function toggleCommand({ listen = false } = {}) {
     createCommandWin().once('ready-to-show', () => showCommand({ listen }))
     return
   }
-  // made hidden for the wake word, and perhaps still loading
+  // made hidden for the wake word, and perhaps still loading ('ready-to-show' may already
+  // have gone by, so wait for the load itself)
   if (commandWin.webContents.isLoading())
-    return commandWin.once('ready-to-show', () => showCommand({ listen }))
+    return commandWin.webContents.once('did-finish-load', () => showCommand({ listen }))
   showCommand({ listen })
 }
 
@@ -2503,6 +2524,7 @@ else {
   })
 
   app.whenReady().then(async () => {
+    forgetHeardWords()
     app.setAppUserModelId('io.github.cynicalk.glowtide')
     // No application menu in an installed copy: it would carry Reload and Developer Tools.
     if (!DEV) Menu.setApplicationMenu(null)

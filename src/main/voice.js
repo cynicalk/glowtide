@@ -31,13 +31,43 @@ import {
 
 export const VOICE_SCHEME = 'glowtide-voice'
 
-// The wake helper: Windows' speech recogniser, one phrase, reading the default microphone.
-// It prints "ready <culture>", then "wake <confidence>" each time the phrase is heard, and
-// ends when its input closes.
+// The wake helper: Windows' speech recogniser, one phrase. It hears the microphone Glowtide
+// chose (not Windows' default recording device, which can be Stereo Mix: the music, not
+// you), as 16 kHz 16-bit mono PCM on its input, sent by the command bar window. It prints
+// "ready <culture>", then "wake <confidence>" each time the phrase is heard, and ends when
+// its input closes.
 const WAKE_CS = String.raw`
 using System;
+using System.IO;
 using System.Globalization;
+using System.Threading;
+using System.Speech.AudioFormat;
 using System.Speech.Recognition;
+// Live audio from a pipe, as the recogniser wants it: it asks to seek, which a pipe can't, and
+// expects each read filled (a short read would end recognition).
+public class GlowtideLiveAudio : Stream {
+  Stream inner; long pos;
+  public GlowtideLiveAudio(Stream s) { inner = s; }
+  public override bool CanRead { get { return true; } }
+  public override bool CanSeek { get { return true; } }
+  public override bool CanWrite { get { return false; } }
+  public override long Length { get { return -1; } }
+  public override long Position { get { return pos; } set { } }
+  public override long Seek(long offset, SeekOrigin origin) { return pos; }
+  public override void SetLength(long v) { }
+  public override void Flush() { }
+  public override void Write(byte[] b, int o, int c) { throw new NotSupportedException(); }
+  public override int Read(byte[] buffer, int offset, int count) {
+    int got = 0;
+    while (got < count) {
+      int n = inner.Read(buffer, offset + got, count - got);
+      if (n <= 0) break;
+      got += n;
+    }
+    pos += got;
+    return got;
+  }
+}
 public static class GlowtideWake {
   public static void Run(string phrase, string wav) {
     RecognizerInfo info = null;
@@ -51,14 +81,16 @@ public static class GlowtideWake {
       GrammarBuilder gb = new GrammarBuilder(phrase);
       gb.Culture = info.Culture;
       eng.LoadGrammar(new Grammar(gb));
-      try { if (wav.Length > 0) eng.SetInputToWaveFile(wav); else eng.SetInputToDefaultAudioDevice(); }
-      catch (Exception) { Console.WriteLine("error no-microphone"); return; }
+      if (wav.Length > 0) eng.SetInputToWaveFile(wav);
+      else eng.SetInputToAudioStream(new GlowtideLiveAudio(Console.OpenStandardInput()),
+        new SpeechAudioFormatInfo(16000, AudioBitsPerSample.Sixteen, AudioChannel.Mono));
+      ManualResetEvent done = new ManualResetEvent(false);
+      eng.RecognizeCompleted += (s, e) => done.Set();
       eng.SpeechRecognized += (s, e) =>
         Console.WriteLine("wake " + e.Result.Confidence.ToString("0.00", CultureInfo.InvariantCulture));
       eng.RecognizeAsync(RecognizeMode.Multiple);
       Console.WriteLine("ready " + info.Culture.Name);
-      while (Console.In.ReadLine() != null) { }
-      eng.RecognizeAsyncCancel();
+      done.WaitOne();
     }
   }
 }
@@ -265,6 +297,7 @@ export function createVoice({
       }
     })
     p.on('error', () => {})
+    p.stdin.on('error', () => {}) // writing as it ends
     p.on('exit', () => {
       if (helper === p) helper = null
       onStatus(status())
@@ -305,12 +338,35 @@ export function createVoice({
     else startWake()
   }
 
+  /** The microphone, for the wake word: PCM from the command bar window. */
+  function feed(buf) {
+    const p = helper
+    // a helper that has stopped reading (starting up, or stuck) isn't sent more than ~16 s
+    if (!p || testWav || p.stdin.destroyed || p.stdin.writableLength > 512 * 1024) return
+    try {
+      p.stdin.write(buf)
+    } catch {
+      /* it's ending */
+    }
+  }
+
+  /** The command bar couldn't open the microphone for the wake word. */
+  function feedError(msg) {
+    const m = String(msg || 'microphone').slice(0, 200)
+    if (wakeError === m) return
+    wakeError = m
+    log('voice', `wake word can't hear: ${m}`)
+    onStatus(status())
+  }
+
   return {
     status,
     download,
     remove,
     serve,
     setWake,
+    feed,
+    feedError,
     get wakeOn() {
       return !!helper
     },

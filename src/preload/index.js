@@ -67,6 +67,11 @@ contextBridge.exposeInMainWorld('glowtide', {
   voiceDownload: () => ipcRenderer.invoke('voice:download'),
   voiceRemove: () => ipcRenderer.invoke('voice:remove'),
   voiceHold: (on) => ipcRenderer.invoke('voice:hold', !!on),
+  // the wake word's microphone feed (the command bar window)
+  onVoiceFeed: on('voice:feed'),
+  voiceFeedWanted: () => ipcRenderer.invoke('voice:feedWanted'),
+  voicePcm: (buf) => ipcRenderer.send('voice:pcm', buf),
+  voiceFeedError: (msg) => ipcRenderer.invoke('voice:feedError', msg),
   onWindowVisible: on('window:visible'),
   share: () => ipcRenderer.invoke('share'),
   recordingShortcut: (on) => ipcRenderer.invoke('shortcuts:recording', !!on)

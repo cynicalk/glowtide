@@ -11,6 +11,7 @@ import {
   prettyAccelerator
 } from '../../../shared/shortcuts.mjs'
 import ColourWheel from './ColourWheel'
+import { micList } from '../lib/mic'
 import { ANIMATION_HINTS, ANIMATION_OPTIONS, GRADIENTS } from './glowOptions'
 
 // Fonts that ship with Windows 10/11, so every choice renders.
@@ -1118,7 +1119,19 @@ export function OverrideWheels({ c, g, set }) {
 /** Speaking to the command bar: the wake word, and the speech model it needs. */
 function VoiceSettings({ settings, set, voice }) {
   const wake = !!settings.voice?.wake
+  const mic = settings.voice?.mic || ''
   const [sure, setSure] = useState(false)
+  const [mics, setMics] = useState([])
+  useEffect(() => {
+    let live = true
+    const load = () => micList().then((m) => live && setMics(m))
+    load()
+    navigator.mediaDevices?.addEventListener('devicechange', load)
+    return () => {
+      live = false
+      navigator.mediaDevices?.removeEventListener('devicechange', load)
+    }
+  }, [])
   const mb = Math.round((voice?.bytes || 0) / 1e6)
   const turn = async (v) => {
     if (v && !voice?.ready) {
@@ -1143,6 +1156,24 @@ function VoiceSettings({ settings, set, voice }) {
         Everything is understood on this PC and nothing you say is kept or sent anywhere. While
         &ldquo;Hey Glowtide&rdquo; is on, Windows shows its microphone icon: Windows&apos; own
         speech recogniser is listening for that phrase, and only that phrase.
+      </p>
+      <div className="srow">
+        <span>Microphone</span>
+        <select value={mic} onChange={(e) => set({ voice: { mic: e.target.value } })}>
+          <option value="">Automatic</option>
+          {mics.map((m) => (
+            <option key={m.label} value={m.label}>
+              {m.loopback ? `${m.label} (records the PC, not you)` : m.label}
+            </option>
+          ))}
+          {mic && !mics.some((m) => m.label === mic) && (
+            <option value={mic}>{mic} (not connected)</option>
+          )}
+        </select>
+      </div>
+      <p className="fine">
+        Automatic uses Windows&apos; default microphone, but never Stereo Mix or a sound
+        enhancer&apos;s input: those record what the PC plays, not your voice.
       </p>
       <div className="srow">
         <span>
@@ -1195,8 +1226,8 @@ function VoiceSettings({ settings, set, voice }) {
           {voice.wakeError === 'no-recogniser'
             ? "“Hey Glowtide” needs Windows' English speech recogniser: Settings → Time & language → Language & region, add English (United States), and include its speech options."
             : voice.wakeError === 'no-microphone'
-              ? "“Hey Glowtide” can't hear you: no microphone was found."
-              : `“Hey Glowtide” didn't start (${voice.wakeError}).`}
+              ? "“Hey Glowtide” can't hear you: no microphone was found (Stereo Mix and the like record the PC, not you)."
+              : `“Hey Glowtide” can't hear you: ${voice.wakeError}`}
         </p>
       )}
     </Fold>

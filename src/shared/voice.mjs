@@ -266,3 +266,37 @@ export function voiceToCommand(transcript) {
   // anything else is searched, and waits for a choice
   return { text: raw, autorun: false }
 }
+
+// ---------- which microphone ----------
+
+// Inputs that record what the PC plays, not a voice: Windows' Stereo Mix, sound "enhancers"
+// and virtual cables. Windows can have one of these as its default recording device, and
+// then listening would hear the music instead of you.
+const LOOPBACK =
+  /stereo mix|what ?u ?hear|wave ?out|loopback|cable output|voicemeeter|vb-?audio|fxsound|virtual (audio|cable)|steam streaming|wave link stream/i
+
+/** True for an input that records the PC's own sound rather than a microphone. */
+export const isLoopbackMic = (label) => LOOPBACK.test(String(label || ''))
+
+/**
+ * The microphone to listen with, from the browser's audio inputs ([{ deviceId, label }]):
+ * the one picked in Settings (by name) if it's there, else Windows' default unless that is
+ * a loopback input, else the first real microphone. 'default', a device id, or null when
+ * there is no real microphone at all.
+ */
+export function chooseMic(devices, prefer = '') {
+  const list = Array.isArray(devices) ? devices : []
+  const real = list.filter(
+    (d) => d?.deviceId && !['default', 'communications'].includes(d.deviceId)
+  )
+  if (prefer) {
+    const picked = real.find((d) => d.label === prefer)
+    if (picked) return picked.deviceId
+  }
+  const def = list.find((d) => d?.deviceId === 'default')
+  // no names (no permission yet): Windows' default is all there is to go on
+  if (!list.some((d) => d?.label)) return list.length ? 'default' : null
+  if (def && !isLoopbackMic(def.label)) return 'default'
+  const mic = real.find((d) => !isLoopbackMic(d.label))
+  return mic ? mic.deviceId : null
+}

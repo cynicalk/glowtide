@@ -14,6 +14,7 @@ import { api, useGlowtide } from '../lib/store'
 import { parseCommand } from '../../../shared/commands.mjs'
 import { MODEL_BYTES, cleanTranscript, voiceToCommand } from '../../../shared/voice.mjs'
 import { listen, transcribe, warmUp } from '../lib/voice'
+import { wakeFeed } from '../lib/mic'
 
 const REPEAT_NEXT = { off: 'context', context: 'track', track: 'off' }
 const MB = Math.round(MODEL_BYTES / 1e6)
@@ -72,6 +73,7 @@ export default function CommandBar() {
     try {
       samples = await listen({
         signal: ac.signal,
+        mic: settings?.voice?.mic || '',
         onLevel: setLevel,
         onSpeech: () => setMic('hearing'),
         onPartial: (t) => {
@@ -133,6 +135,28 @@ export default function CommandBar() {
     []
   )
   useEffect(() => api.onCommandListen(() => listenRef.current()), [])
+  // While "Hey Glowtide" is on, this window (hidden or not) is its ears: the chosen
+  // microphone, streamed to Windows' recogniser in the main process.
+  useEffect(() => {
+    let stop = null
+    const apply = (o) => {
+      stop?.()
+      stop = null
+      if (o?.on)
+        stop = wakeFeed({
+          mic: o.mic || '',
+          send: (buf) => api.voicePcm(buf),
+          onError: (e) =>
+            api.voiceFeedError(e?.name === 'NotFoundError' ? 'no-microphone' : micError(e))
+        })
+    }
+    api.voiceFeedWanted().then(apply)
+    const off = api.onVoiceFeed(apply)
+    return () => {
+      off()
+      stop?.()
+    }
+  }, [])
   // hidden (Esc, or clicking elsewhere): the microphone is let go at once
   useEffect(() => {
     const vis = () => document.hidden && stopListening()

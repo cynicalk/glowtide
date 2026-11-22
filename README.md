@@ -178,12 +178,16 @@ per song. **Wrong lyrics?** under the lyrics shows other versions to pick from.
 </details>
 
 <details>
-<summary><b>"Hey Glowtide" doesn't hear me</b></summary>
+<summary><b>Glowtide doesn't hear me</b></summary>
 
-It needs Windows' English speech recogniser, which comes with the English (United States or
-UK) language pack: Settings → Time & language → Language & region. Check that Windows lets
-apps use the microphone (Settings → Privacy & security → Microphone). Over loud speakers,
-headphones or speaking closer to the mic help.
+- **Pick your microphone** in Settings → App → Voice → Microphone. **Automatic** uses Windows'
+  default microphone but skips inputs like **Stereo Mix**, which record what the PC plays rather
+  than your voice.
+- **"Hey Glowtide"** is off until you turn it on (Settings → App → Voice). It needs Windows'
+  English speech recogniser, which comes with the English (United States or UK) language pack:
+  Settings → Time & language → Language & region.
+- Check that Windows lets apps use the microphone: Settings → Privacy & security → Microphone.
+- Over loud speakers, headphones or speaking closer to the mic help.
 
 </details>
 

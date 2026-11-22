@@ -148,3 +148,32 @@ test("Glowtide's own listening, and its wake word helper, are never a call", () 
   assert.deepEqual(callers(users, 'any'), users)
   assert.deepEqual(callers(users, 'calls', ['glowtide']), [users[2]])
 })
+
+test("the microphone: never Stereo Mix or another 'what the PC plays' input", async () => {
+  const { chooseMic, isLoopbackMic } = await import('../src/shared/voice.mjs')
+  const pc = [
+    { deviceId: 'default', label: 'Default - Stereo Mix (Realtek(R) Audio)' },
+    { deviceId: 'communications', label: 'Communications - Stereo Mix (Realtek(R) Audio)' },
+    { deviceId: 'sm', label: 'Stereo Mix (Realtek(R) Audio)' },
+    { deviceId: 'fx', label: 'Internal AUX Jack (FxSound Audio Enhancer)' },
+    { deviceId: 'mic', label: 'Microphone Array (Realtek(R) Audio)' }
+  ]
+  // Windows' default is Stereo Mix: the real microphone is used instead
+  assert.equal(chooseMic(pc), 'mic')
+  // a default that is a microphone is kept
+  const ok = [{ deviceId: 'default', label: 'Default - Headset (WH-1000XM4)' }, ...pc.slice(2)]
+  assert.equal(chooseMic(ok), 'default')
+  // the one picked in Settings wins, by name
+  assert.equal(chooseMic(pc, 'Internal AUX Jack (FxSound Audio Enhancer)'), 'fx')
+  // a picked one that's gone falls back to choosing
+  assert.equal(chooseMic(pc, 'USB mic that was unplugged'), 'mic')
+  // only loopback inputs: nothing to listen with
+  assert.equal(chooseMic(pc.slice(0, 4)), null)
+  // no names yet: Windows' default
+  assert.equal(chooseMic([{ deviceId: 'default', label: '' }]), 'default')
+  assert.equal(chooseMic([]), null)
+  assert.ok(isLoopbackMic('CABLE Output (VB-Audio Virtual Cable)'))
+  assert.ok(isLoopbackMic('Steam Streaming Microphone'))
+  assert.ok(!isLoopbackMic('Microphone (NVIDIA Broadcast)'))
+  assert.ok(!isLoopbackMic('Headset Microphone (Jabra)'))
+})

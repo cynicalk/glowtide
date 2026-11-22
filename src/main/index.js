@@ -234,11 +234,21 @@ let headphones = null // pause when headphones come out
 let remote = null // the phone remote (a page on your home network)
 let voice = null // speaking to the command bar: the speech model and the wake word
 
+/** Whether the wake word wants the microphone, and which one (its name; '' to choose). */
+function wakeFeedWanted() {
+  const v = loadSettings().voice || {}
+  const testing = DEV && !!process.env.GLOWTIDE_WAKE_WAV // the helper reads a file instead
+  return { on: !!v.wake && !!voice?.status().ready && !testing, mic: v.mic || '' }
+}
+
 /** The wake word listens only while it's turned on (and the model is there to understand
- * what's said after it). */
+ * what's said after it). The command bar window, created hidden if need be, is its ears. */
 function syncWake(opts) {
   if (!voice) return
   voice.setWake(!!loadSettings().voice?.wake && voice.status().ready, opts)
+  const want = wakeFeedWanted()
+  if (want.on && (!commandWin || commandWin.isDestroyed())) createCommandWin()
+  if (commandWin && !commandWin.isDestroyed()) commandWin.webContents.send('voice:feed', want)
 }
 
 let voiceSent = ''
@@ -1373,6 +1383,38 @@ function placeQuick(show) {
 // ---------- the command bar (Ctrl+Alt+G): type a song or a command ----------
 const COMMAND = { width: 620, height: 460 }
 
+/** The command bar's window, hidden until it's shown. */
+function createCommandWin() {
+  commandWin = new BrowserWindow({
+    ...COMMAND,
+    show: false,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    backgroundColor: '#141116',
+    title: 'Glowtide',
+    icon,
+    webPreferences: { ...prefs, backgroundThrottling: true }
+  })
+  commandWin.on('blur', () => {
+    if (DEV && process.env.GLOWTIDE_COMMAND) return // a test run keeps it open to photograph it
+    commandWin?.hide()
+  })
+  commandWin.on('close', (e) => {
+    if (!quitting) {
+      e.preventDefault()
+      commandWin.hide()
+    }
+  })
+  commandWin.on('closed', () => (commandWin = null))
+  load(commandWin, 'command')
+  return commandWin
+}
+
 /** listen: open it listening (the wake word, or the voice shortcut). */
 function toggleCommand({ listen = false } = {}) {
   if (commandWin && !commandWin.isDestroyed() && commandWin.isVisible()) {
@@ -1380,36 +1422,12 @@ function toggleCommand({ listen = false } = {}) {
     return commandWin.hide()
   }
   if (!commandWin || commandWin.isDestroyed()) {
-    commandWin = new BrowserWindow({
-      ...COMMAND,
-      show: false,
-      frame: false,
-      resizable: false,
-      maximizable: false,
-      minimizable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      alwaysOnTop: true,
-      backgroundColor: '#141116',
-      title: 'Glowtide',
-      icon,
-      webPreferences: { ...prefs, backgroundThrottling: true }
-    })
-    commandWin.on('blur', () => {
-      if (DEV && process.env.GLOWTIDE_COMMAND) return // a test run keeps it open to photograph it
-      commandWin?.hide()
-    })
-    commandWin.on('close', (e) => {
-      if (!quitting) {
-        e.preventDefault()
-        commandWin.hide()
-      }
-    })
-    commandWin.on('closed', () => (commandWin = null))
-    load(commandWin, 'command')
-    commandWin.once('ready-to-show', () => showCommand({ listen }))
+    createCommandWin().once('ready-to-show', () => showCommand({ listen }))
     return
   }
+  // made hidden for the wake word, and perhaps still loading
+  if (commandWin.webContents.isLoading())
+    return commandWin.once('ready-to-show', () => showCommand({ listen }))
   showCommand({ listen })
 }
 
@@ -1625,7 +1643,8 @@ function setSettings(patch) {
   }
   if (next.startWithWindows !== before.startWithWindows) syncLoginItem()
   if (!!next.remote?.enabled !== !!before.remote?.enabled) syncRemote()
-  if (!!next.voice?.wake !== !!before.voice?.wake) syncWake()
+  if (!!next.voice?.wake !== !!before.voice?.wake || next.voice?.mic !== before.voice?.mic)
+    syncWake()
   if (JSON.stringify(next.mini) !== JSON.stringify(before.mini)) {
     syncFullscreenWatch()
     syncMini()
@@ -1671,6 +1690,19 @@ function registerIpc() {
     return voice?.remove()
   })
   handle('voice:hold', (_, on) => (on ? calls?.voiceHold() : calls?.voiceRelease()))
+  // the wake word's microphone, from the command bar window only
+  handle('voice:feedWanted', () => wakeFeedWanted())
+  handle('voice:feedError', (_, msg) => voice?.feedError(msg))
+  on('voice:pcm', (e, buf) => {
+    if (e.sender !== commandWin?.webContents) return
+    const b =
+      buf instanceof ArrayBuffer
+        ? Buffer.from(buf)
+        : ArrayBuffer.isView(buf)
+          ? Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength)
+          : null
+    if (b && b.length <= 64 * 1024) voice?.feed(b)
+  })
   handle('share', () => copyShare())
   // while a shortcut is being recorded, Glowtide's own are off so the keys reach the page
   handle('shortcuts:recording', (_, on) => {
@@ -2539,10 +2571,7 @@ else {
       control: (action, arg) => control(action, arg),
       log: (m) => DEV && console.log(m),
       // Glowtide listening to you (and its wake word helper) isn't a call
-      ignore: () => [
-        basename(process.execPath).replace(/\.exe$/i, ''),
-        ...(voice?.wakeOn ? ['powershell'] : [])
-      ]
+      ignore: () => [basename(process.execPath).replace(/\.exe$/i, '')]
     })
     voice = createVoice({
       dir: join(app.getPath('userData'), 'voice'),

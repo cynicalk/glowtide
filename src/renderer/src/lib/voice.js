@@ -3,6 +3,7 @@
 // dropped once it's been understood; nothing is saved or sent anywhere.
 
 import VoiceWorker from './voiceWorker.js?worker'
+import { micStream } from './mic'
 
 const RATE = 16000 // what Whisper takes
 const IDLE_MS = 3 * 60 * 1000 // the model is let go (about 150 MB) after this long unused
@@ -95,16 +96,17 @@ const concat = (parts) => {
  *   onSpeech()       talking has started
  *   onPartial(text)  what's been understood so far (every second or so while talking)
  *   signal           an AbortSignal to stop listening
+ *   mic              the microphone picked in Settings (its name), or '' to choose
  */
-export async function listen({ onLevel, onSpeech, onPartial, signal, sound = true } = {}) {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      channelCount: 1,
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true
-    }
-  })
+export async function listen({
+  onLevel,
+  onSpeech,
+  onPartial,
+  signal,
+  sound = true,
+  mic = ''
+} = {}) {
+  const stream = await micStream(mic)
   const ctx = new AudioContext({ sampleRate: RATE })
   const src = ctx.createMediaStreamSource(stream)
   const proc = ctx.createScriptProcessor(2048, 1, 1) // 128 ms a block

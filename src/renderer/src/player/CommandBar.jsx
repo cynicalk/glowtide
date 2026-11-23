@@ -38,7 +38,9 @@ export default function CommandBar() {
   const { state, settings } = useGlowtide()
   const [text, setText] = useState('')
   const [sel, setSel] = useState(0)
-  const [found, setFound] = useState(null) // { q, rows }
+  const [found, setFound] = useState(null) // { q, rows }: the source's own results
+  // YouTube's, while another source is in use: searched on Enter, as each search spends quota
+  const [ytFound, setYtFound] = useState(null)
   const [devices, setDevices] = useState(null)
   const [note, setNote] = useState('')
   const input = useRef(null)
@@ -125,6 +127,7 @@ export default function CommandBar() {
         auto.current = null
         setText('')
         setFound(null)
+        setYtFound(null)
         setDevices(null)
         setNote('')
         setSel(0)
@@ -187,6 +190,8 @@ export default function CommandBar() {
   const parsed = useMemo(() => parseCommand(text), [text])
   const source = state?.source
   const query = parsed.query
+  // YouTube's catalogue, from any source, once Google is signed in
+  const ytOK = source === 'youtube' || !!state?.google
 
   // Spotify: search as you type (10 results a type, the most Spotify now allows)
   useEffect(() => {
@@ -205,10 +210,17 @@ export default function CommandBar() {
   const close = () => api.closeCommand()
   const done = (r) => {
     if (r?.error) setNote(r.error)
+    else if (r?.note) setNote(r.note)
     else close()
   }
 
-  const run = async (row) => {
+  // a song asked for out loud that Spotify can't play (not found, or a Free account): YouTube
+  const toYouTube = () => {
+    auto.current = { text, at: Date.now(), youtube: true, searching: true }
+    run({ kind: 'ytsearch' })
+  }
+
+  const run = async (row, { fallback = false } = {}) => {
     if (!row) return
     setNote('')
     if (row.kind === 'device') return done(await api.control('transfer', row.id))
@@ -219,14 +231,24 @@ export default function CommandBar() {
         else setNote(r.error)
         return
       }
-      return done(await api.control('playItems', row.play))
+      if (row.yt && source !== 'youtube') {
+        setNote('Playing it on YouTube…')
+        return done(await api.control('playYouTube', row.play))
+      }
+      const r = await api.control('playItems', row.play)
+      if (r?.error && fallback) return toYouTube()
+      return done(r)
     }
     if (row.kind === 'ytsearch') {
       setNote('Searching YouTube…')
       const r = await api.query('ytSearch', query)
-      if (r?.error) return setNote(r.error)
+      if (r?.error) {
+        if (auto.current?.youtube) auto.current = null
+        return setNote(r.error)
+      }
       setNote('')
-      return setFound({ q: query, rows: ytRows(r) })
+      if (source === 'youtube') return setFound({ q: query, rows: ytRows(r) })
+      return setYtFound({ q: query, rows: ytRows(r, true) })
     }
     // a command
     const id = row.cmd.id
@@ -247,6 +269,8 @@ export default function CommandBar() {
     if (id === 'mini') return done(api.setSettings({ mini: { enabled: !settings.mini?.enabled } }))
     if (id === 'fullscreen') return done(api.stage('open'))
     if (id === 'player') return done(api.showPlayer())
+    if (id === 'useSpotify') return done(await api.setSource('spotify'))
+    if (id === 'useYouTube') return done(await api.setSource('youtube'))
     if (id === 'shuffle') return done(await api.control('shuffle', !pb?.shuffle))
     if (id === 'repeat') return done(await api.control('repeat', REPEAT_NEXT[pb?.repeat || 'off']))
     if (id === 'like') return done(await api.control('like', !state?.liked))
@@ -268,8 +292,13 @@ export default function CommandBar() {
     if (query && source === 'youtube' && found?.q !== query)
       out.push({ kind: 'ytsearch', title: `Search YouTube for “${query}”` })
     if (found?.q === query) out.push(...found.rows)
+    // YouTube's catalogue too, below the source's own results
+    if (query && source !== 'youtube' && ytOK && !parsed.queue) {
+      if (ytFound?.q === query) out.push(...ytFound.rows)
+      else out.push({ kind: 'ytsearch', title: `Search YouTube for “${query}”` })
+    }
     return out
-  }, [devices, parsed, query, source, found])
+  }, [devices, parsed, query, source, found, ytFound, ytOK])
 
   // something said that runs by itself: a command at once, a song once it's been found
   useEffect(() => {
@@ -278,17 +307,30 @@ export default function CommandBar() {
     if (Date.now() - a.at > 10000) return void (auto.current = null)
     const first = rows[0]
     let row = null
+    let fallback = false
     if (parsed.command && !parsed.query) {
       if (first?.kind === 'cmd' && !first.invalid) row = first
       else auto.current = null
     } else if (!parsed.query || !first) return
-    else if (first.kind === 'ytsearch') {
+    else if (a.youtube || (source !== 'youtube' && source !== 'spotify')) {
+      // from YouTube's catalogue: Spotify had nothing (or no Spotify), searched once
+      if (ytFound?.q === parsed.query) {
+        row = ytFound.rows[0] || null
+        if (!row) auto.current = null
+      } else if (!ytOK || parsed.queue) auto.current = null
+      else if (!a.searching) row = { kind: 'ytsearch' }
+    } else if (first.kind === 'ytsearch' && source === 'youtube') {
       // YouTube is searched once (each search spends quota); its results come back as songs
       if (a.searching) return
       row = first
     } else if (found?.q === parsed.query) {
-      row = rows.find((r) => r.kind === 'song') || null
-      if (!row) auto.current = null // nothing found: the list says so
+      // Spotify first; YouTube if it finds nothing, or can't play what it found
+      row = rows.find((r) => r.kind === 'song' && !r.yt) || null
+      if (row) fallback = ytOK && !parsed.queue
+      else if (ytOK && !parsed.queue) {
+        a.youtube = true
+        row = { kind: 'ytsearch' }
+      } else auto.current = null // nothing found: the list says so
     }
     if (!row) return
     // run after this render, as a click would
@@ -296,11 +338,11 @@ export default function CommandBar() {
       if (auto.current !== a) return
       if (row.kind === 'ytsearch') a.searching = true
       else auto.current = null
-      run(row)
+      run(row, { fallback })
     })
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, text, found])
+  }, [rows, text, found, ytFound])
 
   // keep the chosen row in range and in view
   const chosen = Math.min(sel, Math.max(0, rows.length - 1))
@@ -320,7 +362,7 @@ export default function CommandBar() {
     e.preventDefault()
   }
 
-  const searchable = source === 'spotify' || source === 'youtube'
+  const searchable = source === 'spotify' || ytOK
   const live = mic === 'listening' || mic === 'hearing'
   return (
     <div className="cmd">
@@ -449,7 +491,8 @@ export default function CommandBar() {
         )}
         {query && !searchable && !parsed.command && !parsed.suggestions.length && (
           <div className="cmd-empty">
-            Searching for songs needs Spotify or YouTube Music. Commands work with any app.
+            Searching for songs needs Spotify, or a Google sign-in for YouTube (Library). Commands
+            work with any app.
           </div>
         )}
       </div>
@@ -500,12 +543,13 @@ function spotifyRows(r) {
   return rows
 }
 
-function ytRows(r) {
+function ytRows(r, labelled = false) {
   return (Array.isArray(r) ? r : []).map((v, i, all) => ({
     kind: 'song',
+    yt: true,
     uri: v.videoId,
     title: v.name,
-    sub: v.artists || v.channel || '',
+    sub: labelled ? `YouTube · ${v.artists || v.channel || ''}` : v.artists || v.channel || '',
     thumb: v.thumb,
     play: { items: all, index: i }
   }))

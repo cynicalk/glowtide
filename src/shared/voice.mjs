@@ -283,6 +283,10 @@ export function voiceToCommand(transcript) {
   if (said(/^((show|hide|open|turn (on|off)|toggle) )?(the )?mini( player)?( (on|off))?$/, s))
     return cmd('mini')
   if (said(/^(open|show)( the)? player$/, s)) return cmd('player')
+  const m0 = s.match(
+    /^(?:switch to|switch over to|use|play from|go to|change to) (spotify|youtube(?: music)?)$/
+  )
+  if (m0) return cmd(m0[1].startsWith('youtube') ? 'youtube' : 'spotify')
   if (said(/^(change|switch|choose)( the)? (device|speaker)$|^(devices|speakers)$/, s))
     return cmd('device')
 

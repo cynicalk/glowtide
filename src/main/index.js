@@ -784,7 +784,35 @@ function onSystemAck(m) {
   flashError(`${state.systemApp?.label || 'The app'} didn't accept that from outside.`)
 }
 
+/**
+ * The command bar plays a YouTube song while another source is in use (Spotify, or any app):
+ * that source is paused, Glowtide switches to YouTube, and its player is asked to play once
+ * it's ready (asked before, it wouldn't hear). YouTube's terms want its player on screen, so
+ * the player window is shown, without taking the focus from what you're doing.
+ */
+async function playOnYouTube(arg) {
+  let note = null
+  if (state.source !== 'youtube') {
+    if (state.playback?.isPlaying) {
+      const r = await control('pause').catch(() => ({ error: true }))
+      if (r?.error)
+        note = `Glowtide couldn't pause ${state.source === 'spotify' ? 'Spotify' : 'the other app'}: pause it to hear YouTube.`
+    }
+    state.ytReady = false
+    setSource('youtube')
+  }
+  if (player && !player.isDestroyed()) {
+    if (player.isMinimized()) player.restore()
+    if (!player.isVisible()) player.showInactive()
+  }
+  for (let i = 0; i < 75 && !state.ytReady; i++) await new Promise((r) => setTimeout(r, 200))
+  if (!state.ytReady) return { error: "YouTube's player didn't start. Try again." }
+  const r = await control('playItems', arg)
+  return r?.error ? r : { ok: true, note }
+}
+
 async function control(action, arg) {
+  if (action === 'playYouTube') return playOnYouTube(arg)
   if (state.source === 'system') {
     const c = state.caps || {}
     const allowed = {

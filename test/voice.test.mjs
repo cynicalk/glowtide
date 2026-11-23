@@ -312,3 +312,21 @@ test('the sound handed to the model is cut to the speech', async () => {
   assert.equal(speechSpan(new Float32Array(rate)).length, 0)
   assert.equal(speechSpan(new Float32Array(0)).length, 0)
 })
+
+test('switching where songs come from, out loud', async () => {
+  const { voiceToCommand } = await import('../src/shared/voice.mjs')
+  const { parseCommand } = await import('../src/shared/commands.mjs')
+  for (const [said, typed] of [
+    ['Switch to Spotify.', 'spotify'],
+    ['Use YouTube Music', 'youtube'],
+    ['Play from YouTube.', 'youtube']
+  ]) {
+    const v = voiceToCommand(said)
+    assert.deepEqual(v, { text: typed, autorun: true }, said)
+    assert.ok(parseCommand(v.text).command, said)
+  }
+  assert.equal(parseCommand('spotify').command.id, 'useSpotify')
+  assert.equal(parseCommand('youtube').command.id, 'useYouTube')
+  // "play X on YouTube" is still a song
+  assert.equal(voiceToCommand('Play Kesariya on YouTube').text, 'play Kesariya')
+})

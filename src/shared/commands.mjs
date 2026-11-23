@@ -23,7 +23,9 @@ export const COMMANDS = [
   { id: 'fullscreen', words: ['fullscreen', 'full'], label: 'Full-screen view' },
   { id: 'mini', words: ['mini'], label: 'Mini player on or off' },
   { id: 'device', words: ['device', 'devices', 'speaker'], label: 'Play on another device' },
-  { id: 'player', words: ['player', 'open', 'show'], label: 'Open the player' }
+  { id: 'player', words: ['player', 'open', 'show'], label: 'Open the player' },
+  { id: 'useSpotify', words: ['spotify'], label: 'Play from Spotify' },
+  { id: 'useYouTube', words: ['youtube', 'yt'], label: 'Play from YouTube Music' }
 ]
 
 /** "1:30", "90", "1m30s", "2m" → milliseconds, or null. */

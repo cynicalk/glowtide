@@ -137,7 +137,7 @@ export default function CommandBar() {
     []
   )
   useEffect(() => api.onCommandListen(() => listenRef.current()), [])
-  // An unsure "Hey Glow": what Whisper makes of the last few seconds of sound
+  // An unsure "Hey Glow": what the speech model makes of the last few seconds of sound
   useEffect(
     () =>
       api.onVoiceCheck(async ({ id, pcm }) => {

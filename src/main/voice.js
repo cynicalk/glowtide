@@ -1,9 +1,9 @@
 // Voice: the speech model's download, the files it's served from, and the wake word.
 //
-// - The model (whisper-tiny.en, about 41 MB) is downloaded when someone first asks for voice,
+// - The model (moonshine-base, about 67 MB) is downloaded when someone first asks for voice,
 //   from Hugging Face at a pinned revision. Each file is checked against its SHA-256 (in
 //   shared/voice.mjs) before it's kept, so a changed or damaged file is never used.
-// - Glowtide's pages read it as glowtide-voice://model/whisper-tiny.en/<file>; only the files in the
+// - Glowtide's pages read it as glowtide-voice://model/moonshine-base/<file>; only the files in the
 //   manifest are served, never any other path.
 // - The wake word ("Hey Glow") is heard by Windows' own speech recogniser in a
 //   PowerShell helper, with a grammar of that one phrase: it can't turn anything else said
@@ -28,6 +28,7 @@ import {
 import {
   MODEL,
   MODEL_BYTES,
+  OLD_MODELS,
   MODEL_HOSTS,
   WAKE_MAYBE,
   WAKE_PHRASES,
@@ -141,9 +142,9 @@ public static class GlowtideWake {
 /**
  * dir: where the model is kept; onStatus(status) when the download moves on;
  * onWake() when the wake phrase is heard; log(where, message);
- * check(pcm): Whisper's text of some 16 kHz 16-bit mono sound (a Buffer), or null.
- * testWav, sure: development runs only (a recording to listen to instead of the microphone;
- * how sure counts as sure).
+ * check(pcm): the speech model's text of some 16 kHz 16-bit mono sound (a Buffer), or null.
+ * testWav, sure, logWords: development runs only (a recording to listen to instead of the
+ * microphone; how sure counts as sure; the words heard, in the log).
  */
 export function createVoice({
   dir,
@@ -152,7 +153,8 @@ export function createVoice({
   log = () => {},
   check = async () => null,
   testWav = '',
-  sure = WAKE_SURE
+  sure = WAKE_SURE,
+  logWords = false
 }) {
   const modelDir = join(dir, MODEL.name)
   let downloading = null // the download under way
@@ -292,6 +294,22 @@ export function createVoice({
     })
   }
 
+  /**
+   * Someone who downloaded a model an earlier version used gets this one in its place (they
+   * chose voice already), and the old one is deleted once this one is here.
+   */
+  async function upgrade() {
+    const old = OLD_MODELS.map((n) => join(dir, n)).filter((p) => existsSync(p))
+    if (!old.length) return false
+    if (!present()) {
+      log('voice', `replacing the old speech model with ${MODEL.name}`)
+      await download()
+      if (!present()) return false // tried again next start
+    }
+    for (const p of old) rmSync(p, { recursive: true, force: true })
+    return true
+  }
+
   function remove() {
     if (downloading) return false
     rmSync(modelDir, { recursive: true, force: true })
@@ -312,7 +330,7 @@ export function createVoice({
   let lastHeard = null
   let logged = 0 // how sure it was goes in the log (never the words), the first few times a run
 
-  // the last 3 seconds of sound, for Whisper to check an unsure match against
+  // the last 3 seconds of sound, for the speech model to check an unsure match against
   const RING = 16000 * 2 * 3
   const ring = Buffer.alloc(RING)
   let ringAt = 0 // where the next byte goes
@@ -330,7 +348,7 @@ export function createVoice({
       ? Buffer.concat([ring.subarray(ringAt), ring.subarray(0, ringAt)])
       : ring.subarray(0, ringAt)
 
-  // Checks are paced, so music playing out loud can't keep Whisper busy.
+  // Checks are paced, so music playing out loud can't keep the speech model busy.
   let checking = false
   let lastCheck = 0
   const recent = [] // times of checks that came to nothing
@@ -340,7 +358,7 @@ export function createVoice({
     if (logged++ < 40)
       log(
         'voice',
-        `heard the wake word or something like it (${Math.round(confidence * 100)}% sure)${text ? ', checked' : ''}: ${opened ? 'opened' : 'not the wake word'}`
+        `heard the wake word or something like it (${Math.round(confidence * 100)}% sure)${text ? ', checked' : ''}${logWords ? ` ${JSON.stringify(text)}` : ''}: ${opened ? 'opened' : 'not the wake word'}`
       )
   }
   async function candidate(confidence) {
@@ -483,6 +501,7 @@ export function createVoice({
   return {
     status,
     download,
+    upgrade,
     remove,
     serve,
     setWake,

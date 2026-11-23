@@ -1,4 +1,4 @@
-// Speech to text for the command bar, off the page's thread: Whisper (tiny, English) run by
+// Speech to text for the command bar, off the page's thread: Moonshine (base, English) run by
 // transformers.js on the CPU. The model is read from glowtide-voice:// (downloaded and checked
 // by the main process), never fetched from the internet here.
 //
@@ -6,6 +6,7 @@
 // out: { id, ok: true, text? } | { id, ok: false, error }
 
 import { env, pipeline } from '@huggingface/transformers'
+import { MODEL } from '../../../shared/voice.mjs'
 import wasmUrl from 'onnxruntime-web/ort-wasm-simd-threaded.wasm?url'
 
 env.allowRemoteModels = false
@@ -18,7 +19,7 @@ env.backends.onnx.wasm.numThreads = 1 // threads need cross-origin isolation, wh
 
 let asr = null
 const load = () =>
-  (asr ??= pipeline('automatic-speech-recognition', 'whisper-tiny.en', {
+  (asr ??= pipeline('automatic-speech-recognition', MODEL.name, {
     dtype: 'q8',
     device: 'wasm'
   }).catch((e) => {

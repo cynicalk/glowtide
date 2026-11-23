@@ -21,10 +21,10 @@ test('the model is pinned: a revision, and a size and SHA-256 for every file', (
     assert.match(f.sha256, /^[0-9a-f]{64}$/, f.path)
     assert.ok(f.size > 0, f.path)
   }
-  assert.ok(MODEL_BYTES > 40e6 && MODEL_BYTES < 46e6)
+  assert.ok(MODEL_BYTES > 60e6 && MODEL_BYTES < 70e6)
   assert.equal(
     modelUrl('config.json'),
-    `https://huggingface.co/onnx-community/whisper-tiny.en/resolve/${MODEL.revision}/config.json`
+    `https://huggingface.co/onnx-community/moonshine-base-ONNX/resolve/${MODEL.revision}/config.json`
   )
 })
 
@@ -71,7 +71,7 @@ test('spoken numbers and times', () => {
   assert.equal(spokenTime('the chorus'), null)
 })
 
-test("what Whisper writes for silence or music isn't taken as speech", () => {
+test("what a speech model writes for silence or music isn't taken as speech", () => {
   assert.equal(cleanTranscript(' [BLANK_AUDIO]'), '')
   assert.equal(cleanTranscript(' you'), '')
   assert.equal(cleanTranscript(' Thank you.'), '')
@@ -223,7 +223,7 @@ test("the registry's recording inputs, named as Windows names them", async () =>
   assert.deepEqual(inputLabels(states, descs, names), ['Microphone Array (Realtek(R) Audio)'])
 })
 
-test('an unsure "Hey Glow" is checked against what Whisper heard', async () => {
+test('an unsure "Hey Glow" is checked against what the speech model heard', async () => {
   const { isWakeText, parseWakeLine } = await import('../src/shared/voice.mjs')
   for (const t of [
     'Hey Glow.',
@@ -254,7 +254,7 @@ test('an unsure "Hey Glow" is checked against what Whisper heard', async () => {
   assert.deepEqual(parseWakeLine('maybe 0.34'), { maybe: 0.34 })
 })
 
-test('the wake word is taken off what was said, however Whisper spelled it', async () => {
+test('the wake word is taken off what was said, however the model spelled it', async () => {
   const { voiceToCommand } = await import('../src/shared/voice.mjs')
   assert.deepEqual(voiceToCommand('Hey Glow, next song.'), { text: 'next', autorun: true })
   assert.deepEqual(voiceToCommand('Hey, gloated. Next song.'), { text: 'next', autorun: true })
@@ -263,4 +263,52 @@ test('the wake word is taken off what was said, however Whisper spelled it', asy
   assert.deepEqual(voiceToCommand('Hey Glowtide.'), { text: '', autorun: false })
   // a song that merely starts with "glow" is left alone
   assert.equal(voiceToCommand('Glow by Ellie Goulding').text, 'Glow by Ellie Goulding')
+})
+
+test('words a speech model hears in place of a command still work', async () => {
+  const { voiceToCommand } = await import('../src/shared/voice.mjs')
+  for (const [heard, typed] of [
+    ['Post the music.', 'pause'],
+    ['Post a music', 'pause'],
+    ['For the music.', 'pause'],
+    ['Said the volume to forty.', 'volume 40'],
+    ['Skip this so.', 'next'],
+    ['Ad levitating to the queue', 'queue levitating'],
+    ['and levitating to the tube.', 'queue levitating'],
+    ['Played Shape of You', 'play Shape of You'],
+    ['Please shape of you by Ed Sheeran.', 'play shape of you Ed Sheeran']
+  ]) {
+    const v = voiceToCommand(heard)
+    assert.equal(v.text, typed, heard)
+    assert.equal(v.autorun, true, heard)
+  }
+  // still not commands
+  assert.equal(voiceToCommand('Post Malone').autorun, false)
+  assert.equal(voiceToCommand("For What It's Worth").autorun, false)
+  assert.equal(voiceToCommand('Please').autorun, false)
+})
+
+test('the sound handed to the model is cut to the speech', async () => {
+  const { speechSpan } = await import('../src/shared/voice.mjs')
+  const rate = 16000
+  // 2 s of near-quiet, 0.5 s of "speech", 0.5 s of near-quiet
+  const a = new Float32Array(rate * 3)
+  for (let i = 0; i < a.length; i++) a[i] = (Math.random() - 0.5) * 0.002
+  for (let i = rate * 2; i < rate * 2.5; i++) a[i] = Math.sin(i / 7) * 0.3
+  const s = speechSpan(a, rate)
+  // the speech and a little either side, not the 2 s before it
+  assert.ok(s.length > rate * 0.5 && s.length < rate * 1.1, String(s.length / rate))
+  assert.ok(
+    s.byteOffset / 4 > rate * 1.7 && s.byteOffset / 4 < rate * 2,
+    String(s.byteOffset / 4 / rate)
+  )
+  // given to the model with half a second of silence either side
+  const { forModel } = await import('../src/shared/voice.mjs')
+  const m = forModel(a, rate)
+  assert.equal(m.length, s.length + rate)
+  assert.equal(m[rate / 4], 0)
+  assert.equal(forModel(new Float32Array(rate), rate).length, 0)
+  // all quiet: nothing
+  assert.equal(speechSpan(new Float32Array(rate)).length, 0)
+  assert.equal(speechSpan(new Float32Array(0)).length, 0)
 })

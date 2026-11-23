@@ -42,6 +42,5 @@ Bundled in the app:
 
 Downloaded at run time, when voice is first used (not part of this repository or the installer):
 
-- Whisper tiny.en, © OpenAI, MIT License (https://github.com/openai/whisper), as converted to
-  ONNX by onnx-community and published under the Apache License 2.0:
-  https://huggingface.co/onnx-community/whisper-tiny.en
+- Moonshine base, © Useful Sensors, MIT License (https://github.com/usefulsensors/moonshine),
+  as converted to ONNX by onnx-community: https://huggingface.co/onnx-community/moonshine-base-ONNX

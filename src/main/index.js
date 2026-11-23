@@ -271,7 +271,7 @@ function syncWake(opts) {
   if (commandWin && !commandWin.isDestroyed()) commandWin.webContents.send('voice:feed', want)
 }
 
-// Whisper's text of a few seconds of sound, from the command bar window (which has the model)
+// The speech model's text of a few seconds of sound, from the command bar window (which has it)
 const wakeChecks = new Map()
 let wakeCheckN = 0
 function checkWake(pcm) {
@@ -2628,17 +2628,21 @@ else {
         toggleCommand({ listen: true })
       },
       log: (where, m) => logError(where, m),
-      // an unsure wake word is checked by Whisper, in the command bar window
+      // an unsure wake word is checked by the speech model, in the command bar window
       check: (pcm) => checkWake(pcm),
       // GLOWTIDE_WAKE_WAV (development only): the wake word listens to this file
       testWav: (DEV && process.env.GLOWTIDE_WAKE_WAV) || '',
       // GLOWTIDE_WAKE_SURE (development only): how sure counts as sure (1.01: always check)
+      // GLOWTIDE_VOICE_DEBUG (development only): the words the check heard, in the log
+      logWords: DEV && !!process.env.GLOWTIDE_VOICE_DEBUG,
       ...(DEV && process.env.GLOWTIDE_WAKE_SURE
         ? { sure: Number(process.env.GLOWTIDE_WAKE_SURE) }
         : {})
     })
     state.voice = voice.status()
     syncWake()
+    // an earlier version's model: the new one comes down in the background, then voice is back
+    setTimeout(() => voice?.upgrade().then((done) => done && syncWake()), 15000)
     // a microphone plugged in while asleep, or a helper that stopped: start listening afresh
     powerMonitor.on('resume', () => syncWake({ restart: true }))
     remote = createRemote({

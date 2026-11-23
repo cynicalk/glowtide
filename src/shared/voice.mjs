@@ -1,53 +1,59 @@
 // Voice in the command bar: the speech model Glowtide downloads, and what a spoken line means.
 // Pure: no Electron, no DOM.
 //
-// Speech is turned into text on the PC by Whisper (tiny, English), run by transformers.js.
+// Speech is turned into text on the PC by Moonshine (base, English), run by transformers.js:
+// in a test of spoken commands in Indian, British and American voices, clean and with
+// background noise, it got as many right as Whisper base, and far more than Whisper tiny
+// (which Glowtide used before), in an eighth of Whisper base's time.
 // The model is downloaded once from Hugging Face, at a fixed revision, and every file is
 // checked against the SHA-256 below before it's used. Nothing that's said leaves the PC.
 
 export const MODEL = {
-  name: 'whisper-tiny.en',
-  repo: 'onnx-community/whisper-tiny.en',
-  revision: '794207fec2761281fe63a23a94b7e9f53a4efbc1',
-  licence: 'Apache-2.0',
+  name: 'moonshine-base',
+  repo: 'onnx-community/moonshine-base-ONNX',
+  revision: 'b1e9b6aae3c3c7298f10c3798393fdf38e8fbbad',
+  licence: 'MIT',
   files: [
     {
       path: 'config.json',
-      size: 2197,
-      sha256: '251ea843b5901a99efa58c0b99b8052c6019aa3e7d2baf46693a1128ff606233'
+      size: 922,
+      sha256: 'fab7241d1e9fc6c2370c4c6dfb5da79bb54d67ed9ab6b507ac51d29d2abe01d1'
     },
     {
       path: 'generation_config.json',
-      size: 1646,
-      sha256: '7b2e8451ed5f118e75fdd991409d72119d21d2fef1eba9723f68fb9c57fe5dc9'
+      size: 147,
+      sha256: 'f9b3f711b57be7def2e50a8942f64f36ee0a55fad5b84ff93a687b6c5bcc1d44'
     },
     {
       path: 'preprocessor_config.json',
-      size: 339,
-      sha256: 'a6a76d28c93edb273669eb9e0b0636a2bddbb1272c3261e47b7ca6dfdbac1b8d'
+      size: 128,
+      sha256: 'fa43a7017ef85cd1d0fba0d9aae77c8adb16990ae6f11115631f41ec5d8aa679'
     },
     {
       path: 'tokenizer.json',
-      size: 2405679,
-      sha256: '5eb60cec1e77aeeb6869a2bb5a8e01a84c3fe5d072d75369343021fe6f5310d0'
+      size: 3761754,
+      sha256: '7b913404bdd039af4756783218af4440bc07fb7d6d8258d677e34f95b3ec416f'
     },
     {
       path: 'tokenizer_config.json',
-      size: 282662,
-      sha256: '93879c3dccdd4b976f709acd85b44778873f30c275e67026f30ca1e4c975230c'
+      size: 135735,
+      sha256: 'edaee394565d428ea98a663ae7209cdcfeefc5585c42d7a570ff7c986df2cd15'
     },
     {
       path: 'onnx/encoder_model_quantized.onnx',
-      size: 10124993,
-      sha256: 'e93ec822f16a8fd264e7de972ad17d615ea7334b75a52d54c50c2e18dd503a25'
+      size: 20513063,
+      sha256: '1dd9ab0a7f987113d30affcba5a068d11c8f90fa0223caa3e491ade431ad9751'
     },
     {
       path: 'onnx/decoder_model_merged_quantized.onnx',
-      size: 30718858,
-      sha256: 'c0592d0749413c960569e1c7fb806b060d5d18f3ebad4a95cbf9a77dc6e9be52'
+      size: 42498870,
+      sha256: 'cc9f3cd6698a369c6008b41aa60aa3fb3322e7f03c9bdf19d8e6b7200afca4f3'
     }
   ]
 }
+
+/** Models earlier versions downloaded: replaced by MODEL, then deleted. */
+export const OLD_MODELS = ['whisper-tiny.en']
 
 export const MODEL_BYTES = MODEL.files.reduce((n, f) => n + f.size, 0)
 
@@ -69,8 +75,8 @@ export const modelFile = (path) => MODEL.files.find((f) => f.path === path) || n
  *
  * Heard first by Windows' own speech recogniser (cheap, always on). It's strict with accents
  * it wasn't trained on, so it only proposes: a match it's very sure of (WAKE_SURE) opens the
- * command bar at once; one it's less sure of (down to WAKE_MAYBE) is checked by Whisper on
- * the last few seconds of sound first.
+ * command bar at once; one it's less sure of (down to WAKE_MAYBE) is checked by the speech
+ * model on the last few seconds of sound first.
  */
 export const WAKE_WORD = 'Hey Glow'
 export const WAKE_PHRASES = ['hey glow', 'hi glow', 'okay glow', 'hey glow tide']
@@ -78,16 +84,16 @@ export const WAKE_PHRASE = WAKE_PHRASES[0]
 export const WAKE_SURE = 0.93
 export const WAKE_MAYBE = 0.12
 
-// a greeting, then a word starting "glo" (glow, Glowtide, and how Whisper may hear them)
+// a greeting, then a word starting "glo" (glow, Glowtide, and how the model may hear them)
 const GREETING = '(?:hey|hi|hay|okay|ok)'
 const WAKE_LEAD = new RegExp(`^${GREETING}[,.!]?\\s+glo[a-z]*(?:\\s+tide)?[,.!?]*(?:\\s+|$)`, 'i')
 const WAKE_IN = new RegExp(` ${GREETING} glo[a-z]* `)
 
-// how Whisper (tiny) hears a quick "Hey Glow" said on its own; only taken when it's all it
+// how a speech model may hear a quick "Hey Glow" said on its own; only taken when it's all it
 // heard, so the word "halo" in a song can't wake it
 const WAKE_ALONE = /^ (halo|hey low|hay low|hey glo|a glow) $/
 
-/** Whether Whisper's text of the last few seconds has the wake word in it. */
+/** Whether the model's text of the last few seconds has the wake word in it. */
 export function isWakeText(text) {
   const s = ` ${String(text ?? '')
     .toLowerCase()
@@ -204,11 +210,11 @@ export function spokenTime(s) {
   return null
 }
 
-// What Whisper writes for silence, noise or music, rather than speech.
+// What speech models write for silence, noise or music, rather than speech.
 const NOT_SPEECH =
   /^(you|thank you\.?|thanks for watching!?|thank you for watching\.?|bye\.?|\.+|\[[^\]]*\]|\([^)]*\)|♪+)$/i
 
-/** Whisper's text, tidied: no [BLANK_AUDIO], music notes or end punctuation; '' if not speech. */
+/** The model's text, tidied: no [BLANK_AUDIO], music notes or end punctuation; '' if not speech. */
 export function cleanTranscript(text) {
   let s = String(text ?? '')
     .replace(/\[[^\]]*\]|\([^)]*\)|♪/g, ' ')
@@ -216,7 +222,7 @@ export function cleanTranscript(text) {
     .trim()
   if (NOT_SPEECH.test(s)) return ''
   s = s.replace(/^[\s,.!?;:"'-]+|[\s,.!?;:"'-]+$/g, '')
-  // the wake word (as Whisper may spell it), if it was caught
+  // the wake word (as the model may spell it), if it was caught
   s = s.replace(WAKE_LEAD, '')
   return s.trim()
 }
@@ -229,8 +235,17 @@ const said = (re, s) => re.test(s)
  * which plays or queues the first song found).
  */
 export function voiceToCommand(transcript) {
-  const raw = cleanTranscript(transcript)
+  let raw = cleanTranscript(transcript)
   if (!raw) return { text: '', autorun: false }
+  // Words a speech model often hears in place of a command's first word (especially with an
+  // Indian or British accent): "post the music" is "pause the music", "said the volume" is
+  // "set the volume", "ad Levitating to the queue" is "add", "played X" is "play X".
+  raw = raw
+    .replace(/^(?:post|pose|paws|pours|for)(?= (?:the|a) (?:music|song)\b)/i, 'pause')
+    .replace(/^(?:said|sat|sit)(?= the volume\b)/i, 'set')
+    .replace(/ to (the|my) (?:cue|q|tube)$/i, ' to $1 queue')
+    .replace(/^(?:ad|and|at)(?= .+ to (?:the|my) queue$)/i, 'add')
+    .replace(/^played(?= )/i, 'play')
   const s = raw
     .toLowerCase()
     .replace(/[,.!?]/g, '')
@@ -240,12 +255,12 @@ export function voiceToCommand(transcript) {
     .trim()
   const cmd = (text) => ({ text, autorun: true })
 
-  if (said(/^(next|skip)( (it|this|this one|song|track|this song|this track))?$/, s))
+  if (said(/^(next|skip)( (it|this|this one|so|song|track|this so|this song|this track))?$/, s))
     return cmd('next')
   if (said(/^(play )?(the )?next (song|track|one)$/, s)) return cmd('next')
   if (said(/^(previous|prev|back|go back|last)( (song|track|one))?$/, s)) return cmd('previous')
   if (said(/^(play )?(the )?(previous|last) (song|track|one)$/, s)) return cmd('previous')
-  if (said(/^(pause|stop)( (it|this|the music|music|the song|playing|playback))?$/, s))
+  if (said(/^(pause|stop)( (it|this|the music|a music|music|the song|playing|playback))?$/, s))
     return cmd('pause')
   if (said(/^(play|resume|continue|unpause)( (it|the music|music|playing|playback))?$/, s))
     return cmd('play')
@@ -296,6 +311,9 @@ export function voiceToCommand(transcript) {
   m = raw.match(
     /^(?:play|put on|listen to|i want to (?:hear|listen to))\s+(?:me\s+)?(?:some\s+)?(.+)$/i
   )
+  if (m) return { text: `play ${song(m[1])}`, autorun: true }
+  // "please Shape of You by Ed Sheeran": a "play" heard as "please", with nothing else it could be
+  m = raw.match(/^please\s+(.+\s+by\s+.+)$/i)
   if (m) return { text: `play ${song(m[1])}`, autorun: true }
   // anything else is searched, and waits for a choice
   return { text: raw, autorun: false }
@@ -349,4 +367,52 @@ export function micOptions(labels, picked = '', lastUsed = '') {
   )
   const value = [picked, lastUsed].find((l) => l && options.includes(l)) || options[0] || ''
   return { options, value }
+}
+
+// ---------- the sound handed to the model ----------
+
+/**
+ * The part of a recording that has speech in it, with a little room either side: Moonshine
+ * hears nothing in a clip that's mostly quiet (it was trained on clips cut to the speech).
+ * samples: 16 kHz mono Float32Array. Returns a view of it, or an empty one if it's all quiet.
+ */
+export function speechSpan(samples, rate = 16000) {
+  const frame = Math.round(rate * 0.02)
+  const n = Math.floor(samples.length / frame)
+  if (!n) return samples.subarray(0, 0)
+  const level = new Float32Array(n)
+  let peak = 0
+  for (let f = 0; f < n; f++) {
+    let s = 0
+    for (let i = f * frame; i < (f + 1) * frame; i++) s += samples[i] * samples[i]
+    level[f] = Math.sqrt(s / frame)
+    if (level[f] > peak) peak = level[f]
+  }
+  const loud = Math.max(0.006, peak * 0.15)
+  let first = -1
+  let last = -1
+  for (let f = 0; f < n; f++)
+    if (level[f] > loud) {
+      if (first < 0) first = f
+      last = f
+    }
+  if (first < 0) return samples.subarray(0, 0)
+  const from = Math.max(0, first * frame - Math.round(rate * 0.2))
+  const to = Math.min(samples.length, (last + 1) * frame + Math.round(rate * 0.3))
+  return samples.subarray(from, to)
+}
+
+/**
+ * What the speech model is given: the speech (speechSpan) with half a second of silence
+ * either side, which is what Moonshine hears best (in a test of Indian, British and American
+ * voices: every wake word and command, where tighter or looser room lost some).
+ * Empty if there's no speech.
+ */
+export function forModel(samples, rate = 16000) {
+  const s = speechSpan(samples, rate)
+  if (!s.length) return new Float32Array(0)
+  const room = Math.round(rate * 0.5)
+  const out = new Float32Array(room + s.length + room)
+  out.set(s, room)
+  return out
 }

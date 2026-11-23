@@ -1,11 +1,12 @@
 // Listening in the command bar: the microphone, when you start and stop talking, and the
-// Whisper worker that turns it into text. The recording stays in this page's memory and is
+// speech worker that turns it into text. The recording stays in this page's memory and is
 // dropped once it's been understood; nothing is saved or sent anywhere.
 
 import VoiceWorker from './voiceWorker.js?worker'
 import { micStream } from './mic'
+import { forModel } from '../../../shared/voice.mjs'
 
-const RATE = 16000 // what Whisper takes
+const RATE = 16000 // what the speech model takes
 const IDLE_MS = 3 * 60 * 1000 // the model is let go (about 150 MB) after this long unused
 
 let worker = null
@@ -50,10 +51,13 @@ function ask(msg, transfer) {
 /** Loads the model ahead of the first words (it takes a second or two). */
 export const warmUp = () => ask({ type: 'load' }).catch(() => {})
 
-/** 16 kHz mono samples → what was said (Whisper's raw text). */
+/** 16 kHz mono samples → what was said (the model's raw text). */
 export const transcribe = (samples) => {
-  const copy = new Float32Array(samples) // the worker takes its own copy
-  return ask({ type: 'transcribe', audio: copy }, [copy.buffer])
+  // the part with speech in it, in a little silence (Moonshine hears nothing in a mostly
+  // quiet clip, and drops words in one cut too tight); a copy the worker takes over
+  const audio = forModel(samples)
+  if (!audio.length) return Promise.resolve('')
+  return ask({ type: 'transcribe', audio }, [audio.buffer])
 }
 
 // A soft rising tone: listening has started.

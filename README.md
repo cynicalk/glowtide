@@ -148,7 +148,7 @@ shortcuts in Settings → App → Shortcuts.
 ## Your privacy
 
 - **No account, no tracking, no Glowtide server.** Everything runs on your PC.
-- **Voice** is understood on your PC by a speech model downloaded once (44 MB). Nothing you
+- **Voice** is understood on your PC by a speech model downloaded once (67 MB). Nothing you
   say is recorded, kept or sent anywhere. "Hey Glow" is off unless you turn it on; while
   it's on, Windows shows its microphone icon.
 - **The beat** comes from your PC's sound output, never the microphone.
@@ -316,10 +316,10 @@ Lyrics are fetched while a song plays from [LRCLIB](https://lrclib.net) and the
 [AMLL TTML DB](https://github.com/amll-dev/amll-ttml-db) (CC0), and kept only in memory or in your
 own settings folder. None are stored in this repository; they belong to their songwriters and
 publishers. Constellation figures come from [d3-celestial](https://github.com/ofrohn/d3-celestial)
-© 2015 Olaf Frohn (BSD 3-Clause). Speech: OpenAI's Whisper (MIT) as converted by
-[onnx-community/whisper-tiny.en](https://huggingface.co/onnx-community/whisper-tiny.en)
-(Apache-2.0), run by [transformers.js](https://github.com/huggingface/transformers.js) and ONNX
-Runtime Web.
+© 2015 Olaf Frohn (BSD 3-Clause). Speech: [Moonshine](https://github.com/usefulsensors/moonshine)
+by Useful Sensors (MIT), as converted by
+[onnx-community](https://huggingface.co/onnx-community/moonshine-base-ONNX), run by
+[transformers.js](https://github.com/huggingface/transformers.js) and ONNX Runtime Web.
 
 Spotify, YouTube and YouTube Music are trademarks of their owners. Glowtide is not affiliated
 with them.

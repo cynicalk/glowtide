@@ -363,6 +363,7 @@ export function createVoice({
   }
   async function candidate(confidence) {
     if (Date.now() - lastWake < 2500) return
+    // (development runs only: a recogniser this sure opens at once, to test without a check)
     if (confidence >= sure) {
       lastWake = Date.now()
       heard('', confidence, true)

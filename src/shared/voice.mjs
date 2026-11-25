@@ -73,33 +73,32 @@ export const modelFile = (path) => MODEL.files.find((f) => f.path === path) || n
  * The wake word is "Hey Glow": two everyday words both speech models know ("Glowtide", a
  * made-up word, was heard as "gloated" and the like). "Hey Glowtide" still works.
  *
- * Heard first by Windows' own speech recogniser (cheap, always on). It's strict with accents
- * it wasn't trained on, so it only proposes: a match it's very sure of (WAKE_SURE) opens the
- * command bar at once; one it's less sure of (down to WAKE_MAYBE) is checked by the speech
- * model on the last few seconds of sound first.
+ * Heard first by Windows' own speech recogniser (cheap, always on). It only proposes: with a
+ * grammar of just these phrases it fits almost any speech or music to them, 90 to 94% "sure"
+ * every few seconds, so every proposal (down to WAKE_MAYBE) is checked by the speech model on
+ * the last few seconds of sound, and only that decides.
  */
 export const WAKE_WORD = 'Hey Glow'
 export const WAKE_PHRASES = ['hey glow', 'hi glow', 'okay glow', 'hey glow tide']
 export const WAKE_PHRASE = WAKE_PHRASES[0]
-export const WAKE_SURE = 0.93
+export const WAKE_SURE = Infinity // never opened on the recogniser's word alone
 export const WAKE_MAYBE = 0.12
 
-// a greeting, then a word starting "glo" (glow, Glowtide, and how the model may hear them)
+// a greeting, then "Glow" or "Glowtide" (as the model writes them)
 const GREETING = '(?:hey|hi|hay|okay|ok)'
-const WAKE_LEAD = new RegExp(`^${GREETING}[,.!]?\\s+glo[a-z]*(?:\\s+tide)?[,.!?]*(?:\\s+|$)`, 'i')
-const WAKE_IN = new RegExp(` ${GREETING} glo[a-z]* `)
+const GLOW = '(?:glow tide|glow tied|glowtide|glowtied|glowed|glows|glow|gloe|glo)' // longest first
+const WAKE_LEAD = new RegExp(`^${GREETING}[,.!]?\\s+${GLOW}[,.!?]*(?:\\s+|$)`, 'i')
+// ... and the last thing said (at most two words after it): you say it, then wait for the
+// chime, so talk that merely has "hey glow" somewhere in it doesn't count
+const WAKE_END = new RegExp(` ${GREETING} ${GLOW}((?: [a-z]+){0,2}) $`)
 
-// how a speech model may hear a quick "Hey Glow" said on its own; only taken when it's all it
-// heard, so the word "halo" in a song can't wake it
-const WAKE_ALONE = /^ (halo|hey low|hay low|hey glo|a glow) $/
-
-/** Whether the model's text of the last few seconds has the wake word in it. */
+/** Whether the model's text of the last few seconds ends with the wake word. */
 export function isWakeText(text) {
   const s = ` ${String(text ?? '')
     .toLowerCase()
     .replace(/[^a-z]+/g, ' ')
     .trim()} `
-  return WAKE_IN.test(s) || WAKE_ALONE.test(s)
+  return WAKE_END.test(s)
 }
 
 /**

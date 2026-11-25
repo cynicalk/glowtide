@@ -2660,7 +2660,8 @@ else {
       check: (pcm) => checkWake(pcm),
       // GLOWTIDE_WAKE_WAV (development only): the wake word listens to this file
       testWav: (DEV && process.env.GLOWTIDE_WAKE_WAV) || '',
-      // GLOWTIDE_WAKE_SURE (development only): how sure counts as sure (1.01: always check)
+      // GLOWTIDE_WAKE_SURE (development only): how sure the recogniser must be to open
+      // without the check (by default it never does)
       // GLOWTIDE_VOICE_DEBUG (development only): the words the check heard, in the log
       logWords: DEV && !!process.env.GLOWTIDE_VOICE_DEBUG,
       ...(DEV && process.env.GLOWTIDE_WAKE_SURE

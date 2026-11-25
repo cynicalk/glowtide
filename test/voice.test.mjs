@@ -223,18 +223,18 @@ test("the registry's recording inputs, named as Windows names them", async () =>
   assert.deepEqual(inputLabels(states, descs, names), ['Microphone Array (Realtek(R) Audio)'])
 })
 
-test('an unsure "Hey Glow" is checked against what the speech model heard', async () => {
+test('"Hey Glow" is checked against what the speech model heard', async () => {
   const { isWakeText, parseWakeLine } = await import('../src/shared/voice.mjs')
   for (const t of [
     'Hey Glow.',
     'Hey, glow!',
     'Hi Glow',
     'okay glow',
-    ' Hey, gloated.',
     'Hey Glowtide.',
     'hey glow tide',
-    ' Halo',
-    'Hey low.'
+    // said at the end of a little talk, or with a word after it
+    'right, so hey glow',
+    'Hey glow, please'
   ])
     assert.ok(isWakeText(t), t)
   for (const t of [
@@ -246,9 +246,12 @@ test('an unsure "Hey Glow" is checked against what the speech model heard', asyn
     'hello',
     'glow',
     'the glow of it',
-    // "halo" in a song is not the wake word
-    'a halo of light around the moon',
-    'hey low down'
+    ' Halo',
+    'Hey low.',
+    'Hey, look!',
+    'hey global warming is getting worse',
+    // "hey glow" in the middle of talk isn't the wake word
+    'hey glow is a nice name for an app I think'
   ])
     assert.ok(!isWakeText(t), String(t))
   assert.deepEqual(parseWakeLine('maybe 0.34'), { maybe: 0.34 })
@@ -257,7 +260,6 @@ test('an unsure "Hey Glow" is checked against what the speech model heard', asyn
 test('the wake word is taken off what was said, however the model spelled it', async () => {
   const { voiceToCommand } = await import('../src/shared/voice.mjs')
   assert.deepEqual(voiceToCommand('Hey Glow, next song.'), { text: 'next', autorun: true })
-  assert.deepEqual(voiceToCommand('Hey, gloated. Next song.'), { text: 'next', autorun: true })
   assert.deepEqual(voiceToCommand('Hi glow tide, pause'), { text: 'pause', autorun: true })
   assert.deepEqual(voiceToCommand('Hey Glow.'), { text: '', autorun: false })
   assert.deepEqual(voiceToCommand('Hey Glowtide.'), { text: '', autorun: false })

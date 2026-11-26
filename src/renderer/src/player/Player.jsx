@@ -54,7 +54,8 @@ import { Seg } from './SettingsPanel'
 import Connect from './Connect'
 import SettingsPanel from './SettingsPanel'
 import StatsPanel from './StatsPanel'
-import YouTubeStage from './YouTubeStage'
+import YouTubeStage, { YtGrip } from './YouTubeStage'
+import { useYtFloat } from '../lib/ytFloat'
 import { SearchPanel, LibraryPanel, QueuePanel, DevicesPanel } from './Panels'
 import { YtSearch, YtLibrary, YtQueue } from './YtPanels'
 import SmallPlayerBar from './SmallPlayerBar'
@@ -413,6 +414,7 @@ function NowPlaying({
   const synced = state.lyricsStatus === 'synced' && lyrics.length > 0
   const yt = state.source === 'youtube'
   const ytCover = yt && !!track?.cover && settings.ytView !== 'video'
+  const ytFloat = useYtFloat(settings, ytCover)
   // Free Spotify: Spotify won't take remote control, so Glowtide follows along instead.
   const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
   const sys = state.source === 'system'
@@ -490,7 +492,16 @@ function NowPlaying({
                 {ytCover && (
                   <img className="yt-art" src={track.cover} alt={`${track.name} cover`} />
                 )}
-                <YouTubeStage state={state} onOpenLibrary={() => setPanel('library')} />
+                <YouTubeStage
+                  state={state}
+                  onOpenLibrary={() => setPanel('library')}
+                  style={
+                    ytCover
+                      ? { transform: `translate(${ytFloat.off.x}px, ${ytFloat.off.y}px)` }
+                      : undefined
+                  }
+                />
+                {ytCover && <YtGrip {...ytFloat} />}
                 {track && (
                   <button
                     className="yt-view"

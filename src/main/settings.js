@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS = {
   ytSearch: 'innertube',
   // YouTube in the player: 'cover' (the song's art, with the video small in a corner) or 'video'
   ytView: 'cover',
+  // where you dragged the video in the cover view: how far from its corner, in pixels
+  ytFloat: { x: 0, y: 0 },
   // minimising while YouTube plays: 'small' (a small video window in the corner, still playing)
   // or 'pause' (minimised, and YouTube pauses: its terms don't allow play with the video hidden)
   ytMinimize: 'small',

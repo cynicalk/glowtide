@@ -4365,6 +4365,7 @@ html[data-route='showcase'] body {
 .yt-wrap.as-cover {
   width: min(340px, 86vw, 52vh);
   aspect-ratio: 1;
+  --yt-size: 200px;
 }
 .yt-art {
   width: 100%;
@@ -4381,8 +4382,9 @@ html[data-route='showcase'] body {
   position: absolute;
   right: -14px;
   bottom: -14px;
-  width: 200px;
-  height: 200px;
+  width: var(--yt-size);
+  height: var(--yt-size);
+  z-index: 5;
   aspect-ratio: auto;
   border-radius: 12px;
   box-shadow:
@@ -4415,9 +4417,38 @@ html[data-route='showcase'] body {
 .player.max .yt-wrap.as-cover {
   width: min(56vw, 70vh, 820px);
 }
-.player.max .yt-wrap.as-cover .yt-stage {
-  width: 260px;
-  height: 260px;
+.player.max .yt-wrap.as-cover {
+  --yt-size: 260px;
+}
+/* the grip that moves the video in the cover view, on its top edge (the video can't be
+   dragged itself: the pointer belongs to YouTube's player there) */
+.yt-grip {
+  position: absolute;
+  right: calc(-14px + var(--yt-size) / 2 - 26px);
+  bottom: calc(-14px + var(--yt-size) + 2px);
+  z-index: 5;
+  width: 52px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px 8px 0 0;
+  background: rgba(10, 9, 12, 0.7);
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+.yt-grip:hover,
+.yt-wrap:hover .yt-grip {
+  opacity: 1;
+  color: var(--text);
+}
+.yt-grip:active {
+  cursor: grabbing;
+}
+.player.small .yt-grip {
+  display: none;
 }
 
 /* ---------- the small player: YouTube, minimised, still on screen ---------- */

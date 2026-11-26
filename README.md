@@ -98,20 +98,25 @@ Your history stays on your PC, and you can turn it off or clear it any time.
 
 ## Pick your music
 
-| Source                    | Cost           | What you get                                                                                |
-| ------------------------- | -------------- | ------------------------------------------------------------------------------------------- |
-| **Any app** (recommended) | Free, no setup | Glowtide follows whatever is playing, with play, pause and skip where the app allows it     |
-| **YouTube Music**         | Free           | Plays inside Glowtide. Paste any link, or sign in with Google for your playlists and search |
-| **Spotify Premium**       | Premium        | Your library, playlists, search, queue and devices, controlled from Glowtide                |
-| **Spotify Free**          | Free           | Glow, lyrics and colours follow along (Spotify doesn't allow remote control on Free)        |
-| **Demo**                  | Free           | Built-in songs, to try every style without an account                                       |
+| Source                    | Cost           | What you get                                                                                      |
+| ------------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
+| **Any app** (recommended) | Free, no setup | Glowtide follows whatever is playing, with play, pause and skip where the app allows it           |
+| **YouTube Music**         | Free           | Plays inside Glowtide: search songs, albums and playlists, a library, queue and likes, no sign-in |
+| **Spotify Premium**       | Premium        | Your library, playlists, search, queue and devices, controlled from Glowtide                      |
+| **Spotify Free**          | Free           | Glow, lyrics and colours follow along (Spotify doesn't allow remote control on Free)              |
+| **Demo**                  | Free           | Built-in songs, to try every style without an account                                             |
 
 Switch any time from Settings → Music source, or the tray icon.
 
 <details>
-<summary><b>Connecting YouTube (for your playlists and search)</b></summary>
+<summary><b>YouTube's library in Glowtide, and connecting your YouTube account (optional)</b></summary>
 
-Pasting a link needs no setup. To see your own library, you make a free Google Cloud
+With no setup at all, YouTube has what Spotify has in Glowtide: **Search** finds songs, albums
+and playlists as you type; **Library** keeps your **Liked songs** (the ♥ while a song plays),
+the albums and playlists you **Save**, and what you played lately (**Recent**); the **+** beside
+any song adds it to the queue. That library is kept on your PC, and comes along in a backup.
+
+To also see the playlists and likes on your own YouTube account, you make a free Google Cloud
 "client" once, about 5 minutes (Glowtide shows the steps too):
 
 1. In [Google Cloud](https://console.cloud.google.com/), enable **YouTube Data API v3**.

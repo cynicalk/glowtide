@@ -30,7 +30,7 @@ test('a backup carries your setup but never sign-in secrets', () => {
   const r = readBackup(JSON.stringify(b))
   assert.equal(r.error, undefined)
   assert.equal(r.settings.lyrics.style, 'constellation')
-  assert.deepEqual(r.counts, { lyrics: 1, choices: 0, offsets: 0, plays: 1, favs: 0 })
+  assert.deepEqual(r.counts, { lyrics: 1, choices: 0, offsets: 0, plays: 1, favs: 0, ytLiked: 0 })
 })
 
 test('anything that is not a Glowtide backup is turned away', () => {

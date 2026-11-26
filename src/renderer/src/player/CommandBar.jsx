@@ -227,7 +227,8 @@ export default function CommandBar() {
     if (row.kind === 'device') return done(await api.control('transfer', row.id))
     if (row.kind === 'song') {
       if (parsed.queue) {
-        const r = await api.control('queue', row.uri)
+        // a YouTube song goes with its name, so the queue can show it
+        const r = await api.control('queue', row.yt ? row.play.items[row.play.index] : row.uri)
         if (!r?.error) setNote(`Queued: ${row.title}`)
         else setNote(r.error)
         return

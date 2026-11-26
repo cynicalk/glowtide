@@ -4,8 +4,13 @@
 // songs' ids, titles and artists, never run.
 
 import {
+  LIST_ID,
+  listSearchBody,
+  parseListSearch,
   parseMusicSearch,
+  parsePlaylistSongs,
   parseVideoSearch,
+  playlistBody,
   searchBody,
   videoSearchBody
 } from '../shared/innertube.mjs'
@@ -13,6 +18,7 @@ import { parseYouTubeTitle } from '../shared/youtube.mjs'
 
 const URL_SEARCH = 'https://music.youtube.com/youtubei/v1/search?prettyPrint=false'
 const URL_VIDEO_SEARCH = 'https://www.youtube.com/youtubei/v1/search?prettyPrint=false'
+const URL_NEXT = 'https://www.youtube.com/youtubei/v1/next?prettyPrint=false'
 const WEB_VERSION = '2.20241106.01.00'
 // The website's client version: YouTube accepts older ones for a long while; if a search is
 // refused, this is what wants bringing up to date.
@@ -73,4 +79,30 @@ export async function searchVideos(query, { fetcher = fetch } = {}) {
     fetcher
   )
   return parseVideoSearch(json, parseYouTubeTitle)
+}
+
+/** Albums or playlists on YouTube Music for a search: kind 'album' | 'playlist'. */
+export async function searchLists(query, kind, { fetcher = fetch } = {}) {
+  const q = String(query ?? '').trim()
+  if (!q) return []
+  const json = await ask(
+    URL_SEARCH,
+    listSearchBody(q, CLIENT_VERSION, kind === 'album' ? 'album' : 'playlist'),
+    'https://music.youtube.com',
+    fetcher
+  )
+  return parseListSearch(json, kind === 'album' ? 'album' : 'playlist')
+}
+
+/** The songs of a public (or unlisted) playlist or album, first 200: { name, total, items }. */
+export async function playlistSongs(playlistId, { fetcher = fetch } = {}) {
+  if (typeof playlistId !== 'string' || !LIST_ID.test(playlistId))
+    throw new Error('Not a YouTube playlist.')
+  const json = await ask(
+    URL_NEXT,
+    playlistBody(playlistId, WEB_VERSION),
+    'https://www.youtube.com',
+    fetcher
+  )
+  return parsePlaylistSongs(json, parseYouTubeTitle)
 }

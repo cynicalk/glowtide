@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronLeft, Play, Link2, ExternalLink } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronDown,
+  Play,
+  Link2,
+  ExternalLink,
+  ListPlus,
+  Bookmark,
+  BookmarkCheck
+} from 'lucide-react'
 import { api } from '../lib/store'
 import { parseYouTubeLink } from '../../../shared/youtube.mjs'
 
-function useQuery(kind, arg) {
-  const key = JSON.stringify([kind, arg])
+/** undefined while loading; results are keyed so a changed request never shows stale data. */
+function useQuery(kind, arg, deps = []) {
+  const key = JSON.stringify([kind, arg, ...deps])
   const [res, setRes] = useState({ key: null, data: undefined })
   useEffect(() => {
     let alive = true
@@ -16,26 +26,64 @@ function useQuery(kind, arg) {
   return res.key === key ? res.data : undefined
 }
 
-function Row({ v, active, onPlay }) {
+function Loading() {
+  return <div className="muted pad">Loading…</div>
+}
+
+function Row({ thumb, title, sub, active, onPlay, onQueue, square }) {
+  // a picture YouTube won't serve: the plain square instead of a broken image
+  const [failed, setFailed] = useState(null)
   return (
-    <div className={`row ${active ? 'active' : ''}`}>
-      <img src={v.thumb} alt="" className="wide" />
+    <div className={`row ${active ? 'active' : ''}`} onDoubleClick={onPlay}>
+      {thumb && failed !== thumb ? (
+        <img src={thumb} alt="" className={square ? '' : 'wide'} onError={() => setFailed(thumb)} />
+      ) : (
+        <div className="thumb-ph" />
+      )}
       <div className="row-text" onClick={onPlay} role="button" tabIndex={0}>
-        <div className="t">{v.name}</div>
-        <div className="s">{v.artists}</div>
+        <div className="t">{title}</div>
+        {sub && <div className="s">{sub}</div>}
       </div>
+      {onQueue && (
+        <button
+          className="rd sm ghost"
+          aria-label="Add to queue"
+          title="Add to queue"
+          onClick={onQueue}
+        >
+          <ListPlus size={13} />
+        </button>
+      )}
     </div>
   )
 }
 
-function TrackList({ items, state }) {
-  if (!items.length) return <div className="muted pad">Nothing here</div>
+/** Songs: click one to play the list from it; the + adds it to the queue. */
+function TrackList({ items, state, empty = 'Nothing here' }) {
+  if (!items?.length) return <div className="muted pad">{empty}</div>
   return items.map((v, i) => (
     <Row
       key={v.videoId + i}
-      v={v}
-      active={state.track?.id === v.id}
+      thumb={v.thumb}
+      title={v.name}
+      sub={v.artists || v.channel}
+      active={state.track?.videoId === v.videoId}
       onPlay={() => api.control('playItems', { items, index: i })}
+      onQueue={() => api.control('queue', v)}
+    />
+  ))
+}
+
+/** Albums and playlists: click one to see its songs. */
+function ListRows({ lists, onOpen }) {
+  return lists.map((p) => (
+    <Row
+      key={p.id}
+      square={p.kind === 'album'}
+      thumb={p.thumb}
+      title={p.name}
+      sub={[p.kind === 'album' ? 'Album' : 'Playlist', p.by, p.year].filter(Boolean).join(' · ')}
+      onPlay={() => onOpen(p)}
     />
   ))
 }
@@ -180,38 +228,62 @@ export function GoogleSetup({ settings }) {
 export function YtLibrary({ state, settings }) {
   const [tab, setTab] = useState('liked')
   const [open, setOpen] = useState(null)
-  if (open) return <PlaylistView playlist={open} state={state} onBack={() => setOpen(null)} />
+  if (open) return <ListView list={open} state={state} onBack={() => setOpen(null)} />
   return (
     <>
       <PasteLink />
-      {!state.google ? (
-        <>
-          <div className="sect">Your YouTube Music library</div>
-          <GoogleSetup settings={settings} />
-        </>
-      ) : (
-        <>
-          <div className="seg">
-            {[
-              ['liked', 'Liked music'],
-              ['playlists', 'Playlists']
-            ].map(([k, l]) => (
-              <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
-                {l}
-              </button>
-            ))}
-          </div>
-          {tab === 'liked' && <Liked state={state} />}
-          {tab === 'playlists' && <Playlists onOpen={setOpen} />}
-        </>
-      )}
+      <div className="seg">
+        {[
+          ['liked', 'Liked songs'],
+          ['playlists', 'Playlists'],
+          ['recent', 'Recent']
+        ].map(([k, l]) => (
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {tab === 'liked' && <Liked state={state} />}
+      {tab === 'playlists' && <Playlists state={state} settings={settings} onOpen={setOpen} />}
+      {tab === 'recent' && <Recent state={state} />}
     </>
   )
 }
 
+/** The library kept in Glowtide, reloaded whenever it changes. */
+const useMine = (state) => useQuery('ytMine', null, [state.ytLibRev])
+
 function Liked({ state }) {
+  const mine = useMine(state)
+  if (mine === undefined) return <Loading />
+  return (
+    <>
+      <TrackList
+        items={mine.liked}
+        state={state}
+        empty="Press ♥ while a YouTube song plays, and it's kept here."
+      />
+      {state.google && <AccountLiked state={state} />}
+    </>
+  )
+}
+
+/** Liked on your YouTube account (Google sign-in): shown when asked for. */
+function AccountLiked({ state }) {
+  const [show, setShow] = useState(false)
+  return (
+    <>
+      <button className="sect link-sect" onClick={() => setShow(!show)}>
+        <ChevronDown size={12} className={show ? '' : 'turned'} /> Liked on your YouTube account
+      </button>
+      {show && <AccountLikedList state={state} />}
+    </>
+  )
+}
+
+function AccountLikedList({ state }) {
   const d = useQuery('ytLiked')
-  if (d === undefined) return <div className="muted pad">Loading…</div>
+  if (d === undefined) return <Loading />
   if (d?.error) return <div className="error">{d.error}</div>
   return (
     <>
@@ -224,82 +296,182 @@ function Liked({ state }) {
   )
 }
 
-function Playlists({ onOpen }) {
-  const d = useQuery('ytPlaylists')
-  if (d === undefined) return <div className="muted pad">Loading…</div>
-  if (d?.error) return <div className="error">{d.error}</div>
-  if (!d.length) return <div className="muted pad">No playlists on this account</div>
-  return d.map((p) => (
-    <div key={p.id} className="row">
-      {p.thumb ? <img src={p.thumb} alt="" className="wide" /> : <div className="thumb-ph" />}
-      <div className="row-text" onClick={() => onOpen(p)} role="button" tabIndex={0}>
-        <div className="t">{p.name}</div>
-        <div className="s">{p.count != null ? `${p.count} items` : ''}</div>
-      </div>
-    </div>
-  ))
+function Playlists({ state, settings, onOpen }) {
+  const mine = useMine(state)
+  const [setup, setSetup] = useState(false)
+  if (mine === undefined) return <Loading />
+  return (
+    <>
+      {mine.lists.length ? (
+        <ListRows lists={mine.lists} onOpen={onOpen} />
+      ) : (
+        <div className="muted pad">
+          Albums and playlists you save show here. Find them in Search, or paste a playlist link
+          above, then press Save.
+        </div>
+      )}
+      {state.google ? (
+        <AccountPlaylists onOpen={onOpen} />
+      ) : (
+        <>
+          <button className="sect link-sect" onClick={() => setSetup(!setup)}>
+            <ChevronDown size={12} className={setup ? '' : 'turned'} /> Your YouTube account’s
+            playlists (optional)
+          </button>
+          {setup && <GoogleSetup settings={settings} />}
+        </>
+      )}
+    </>
+  )
 }
 
-function PlaylistView({ playlist, state, onBack }) {
-  const d = useQuery('ytPlaylistItems', playlist.id)
+function AccountPlaylists({ onOpen }) {
+  const d = useQuery('ytPlaylists')
+  return (
+    <>
+      <div className="sect">On your YouTube account</div>
+      {d === undefined && <Loading />}
+      {d?.error && <div className="error">{d.error}</div>}
+      {Array.isArray(d) && !d.length && (
+        <div className="muted pad">No playlists on this account</div>
+      )}
+      {Array.isArray(d) &&
+        d.map((p) => (
+          <Row
+            key={p.id}
+            thumb={p.thumb}
+            title={p.name}
+            sub={p.count != null ? `${p.count} items` : ''}
+            onPlay={() => onOpen({ ...p, playlistId: p.id, kind: 'playlist', mine: true })}
+          />
+        ))}
+    </>
+  )
+}
+
+function Recent({ state }) {
+  const mine = useMine(state)
+  if (mine === undefined) return <Loading />
+  return (
+    <TrackList items={mine.recent} state={state} empty="Songs you play on YouTube show here." />
+  )
+}
+
+/** An album's or playlist's songs, with Play and Save (to Library → Playlists). */
+function ListView({ list, state, onBack }) {
+  const id = list.playlistId || list.id
+  const d = useQuery('ytListSongs', { playlistId: id, mine: !!list.mine })
+  const mine = useMine(state)
+  const saved = !!mine?.lists?.some((p) => p.id === id)
+  const items = d?.items || []
   return (
     <>
       <div className="pl-head">
         <button className="rd sm" aria-label="Back" onClick={onBack}>
           <ChevronLeft size={14} />
         </button>
-        <span className="t">{playlist.name}</span>
-        {Array.isArray(d) && d.length > 0 && (
-          <button className="pill" onClick={() => api.control('playItems', { items: d, index: 0 })}>
+        <span className="t">{list.name}</span>
+        {items.length > 0 && (
+          <button className="pill" onClick={() => api.control('playItems', { items, index: 0 })}>
             <Play size={12} /> Play
           </button>
         )}
+        {!list.mine && (
+          <button
+            className={`pill ${saved ? 'on' : ''}`}
+            title={saved ? 'Saved in Library → Playlists · click to remove' : 'Save to Library'}
+            onClick={() =>
+              api.control('ytSave', {
+                list: { ...list, count: d?.total ?? list.count },
+                on: !saved
+              })
+            }
+          >
+            {saved ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}
+            {saved ? 'Saved' : 'Save'}
+          </button>
+        )}
       </div>
-      {d === undefined && <div className="muted pad">Loading…</div>}
+      {d === undefined && <Loading />}
       {d?.error && <div className="error">{d.error}</div>}
-      {Array.isArray(d) && <TrackList items={d} state={state} />}
+      {d && !d.error && (
+        <TrackList
+          items={items}
+          state={state}
+          empty="YouTube didn't list its songs. It may be private."
+        />
+      )}
     </>
   )
 }
 
-export function YtSearch({ state }) {
+export function YtSearch({ state, settings }) {
   const [q, setQ] = useState('')
   const [found, setFound] = useState({ q: '', data: null })
-  if (!state.google)
-    return (
-      <>
-        <div className="muted pad">
-          Searching YouTube needs Google sign-in (Library → Sign in with Google). You can still
-          paste a link:
-        </div>
-        <PasteLink />
-      </>
-    )
-  const run = () => {
-    const term = q.trim()
-    if (term) api.query('ytSearch', term).then((data) => setFound({ q: term, data }))
+  const [open, setOpen] = useState(null)
+  // YouTube's own search has no daily limit: results come as you type. The official API
+  // spends quota on every search, so it waits for Enter.
+  const live = settings?.ytSearch !== 'official'
+  const run = (term) => {
+    if (term) api.query('ytFind', term).then((data) => setFound({ q: term, data }))
   }
-  const res = found.q ? found.data : null
+  useEffect(() => {
+    const term = q.trim()
+    if (!live || !term) return
+    const id = setTimeout(
+      () => api.query('ytFind', term).then((data) => setFound({ q: term, data })),
+      400
+    )
+    return () => clearTimeout(id)
+  }, [q, live])
+  if (open) return <ListView list={open} state={state} onBack={() => setOpen(null)} />
+  const res = q.trim() && found.q ? found.data : null
+  const none =
+    res && !res.error && !res.songs?.length && !res.albums?.length && !res.playlists?.length
   return (
     <>
       <div className="paste-row">
         <input
           className="field"
           autoFocus
-          placeholder="Search songs on YouTube"
+          placeholder="Songs, albums or playlists on YouTube"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && run()}
+          onKeyDown={(e) => e.key === 'Enter' && run(q.trim())}
         />
-        <button className="pill" onClick={run}>
-          Search
-        </button>
+        {!live && (
+          <button className="pill" onClick={() => run(q.trim())}>
+            Search
+          </button>
+        )}
       </div>
-      <p className="fine">
-        Press Enter to search. Each search uses 1% of your project’s free daily YouTube quota.
-      </p>
+      {!live && (
+        <p className="fine">
+          Press Enter to search. Each search uses 1% of your project’s free daily YouTube quota
+          (Settings → App → Search YouTube with).
+        </p>
+      )}
       {res?.error && <div className="error">{res.error}</div>}
-      {Array.isArray(res) && <TrackList items={res} state={state} />}
+      {res?.songs?.length > 0 && (
+        <>
+          <div className="sect">Songs</div>
+          <TrackList items={res.songs.slice(0, 10)} state={state} />
+        </>
+      )}
+      {res?.albums?.length > 0 && (
+        <>
+          <div className="sect">Albums</div>
+          <ListRows lists={res.albums.slice(0, 6)} onOpen={setOpen} />
+        </>
+      )}
+      {res?.playlists?.length > 0 && (
+        <>
+          <div className="sect">Playlists</div>
+          <ListRows lists={res.playlists.slice(0, 6)} onOpen={setOpen} />
+        </>
+      )}
+      {none && <div className="muted pad">No matches</div>}
+      {!q.trim() && <PasteLink />}
     </>
   )
 }
@@ -308,7 +480,9 @@ export function YtQueue({ state }) {
   const q = state.ytQueue
   if (!q?.items?.length)
     return (
-      <div className="muted pad">Playing a single video. Play a playlist to see what’s next.</div>
+      <div className="muted pad">
+        Nothing lined up. Press + beside any song in Search or Library to add it.
+      </div>
     )
   const upcoming = q.items.slice(q.index + 1, q.index + 41)
   return (

@@ -67,8 +67,9 @@ import { createCallDucker } from './calls'
 import { createHeadphoneWatch } from './headphones'
 import { createRemote, fetchAllowed } from './remote'
 import { createVoice, microphones, VOICE_SCHEME } from './voice'
-import { searchMusic, searchVideos } from './innertube'
-import { pickAnotherUpload } from '../shared/innertube.mjs'
+import { searchMusic, searchVideos, searchLists, playlistSongs } from './innertube'
+import { pickAnotherUpload, cleanSong } from '../shared/innertube.mjs'
+import { ytLibrary } from './ytLibrary'
 
 // where the share card may fetch a cover from: the music services' picture hosts
 const CARD_COVER_HOSTS =
@@ -208,6 +209,7 @@ const state = {
   ytHostOrigin: YT_HOST_ORIGIN,
   ytPageUrl: YT_PAGE_URL,
   ytQueue: null,
+  ytLibRev: 0, // changes with the YouTube library kept in Glowtide (ytLibrary.js)
   track: null,
   palette: null,
   playback: null,
@@ -736,6 +738,11 @@ function onYtMessage(raw) {
     // An error for this very video (it often arrives just before its metadata) must survive.
     if (ytErrorVideo !== m.videoId) state.error = null
     onTrackChange(track)
+    // the heart: liked in Glowtide (another upload standing in counts as the song it replaces)
+    const origin = altOf.get(m.videoId)
+    state.liked = ytLibrary.isLiked(m.videoId) || ytLibrary.isLiked(origin)
+    ytLibrary.played({ ...meta, ...track, videoId: origin || m.videoId })
+    state.ytLibRev = ytLibrary.rev()
   }
   broadcast()
 }
@@ -930,20 +937,51 @@ async function control(action, arg) {
     if (action === 'repeat') ytRepeat = arg
     if (action === 'playItems') {
       // YouTube ids only: 11 characters for a video, a short token for a playlist
-      const items = (Array.isArray(arg?.items) ? arg.items : []).filter((v) =>
+      let items = (Array.isArray(arg?.items) ? arg.items : []).filter((v) =>
         /^[\w-]{11}$/.test(v?.videoId)
       )
       const playlistId = /^[\w-]{2,64}$/.test(arg?.playlistId) ? arg.playlistId : undefined
+      // a playlist by its id (a pasted link): its songs, so they're named in the queue and
+      // can be added to; YouTube's player plays the playlist itself if they can't be listed
+      if (!items.length && playlistId)
+        items = (await playlistSongs(playlistId).catch(() => null))?.items || []
       for (const v of items) ytMeta.set(v.videoId, v)
       ytCommand('load', {
         videoIds: items.length ? items.map((v) => v.videoId) : undefined,
-        playlistId,
+        playlistId: items.length ? undefined : playlistId,
         index: Number.isInteger(arg?.index) ? arg.index : 0
       })
       return { ok: true }
     }
-    if (['queue', 'transfer', 'like'].includes(action))
-      return { error: "That isn't available for YouTube yet." }
+    if (action === 'queue') {
+      const song = cleanSong(arg)
+      if (!song) return { error: "That isn't a YouTube song." }
+      if (!ytMeta.has(song.videoId) || song.name) ytMeta.set(song.videoId, song)
+      // nothing playing: it plays now
+      if (!state.track) return control('playItems', { items: [song], index: 0 })
+      ytCommand('add', { videoId: song.videoId })
+      return { ok: true }
+    }
+    if (action === 'like') {
+      const t = state.track
+      if (!t?.videoId) return { error: 'Nothing is playing.' }
+      const origin = altOf.get(t.videoId)
+      const meta = ytMeta.get(origin) || ytMeta.get(t.videoId) || {}
+      const song = { ...meta, ...t, videoId: origin || t.videoId }
+      ytLibrary.setLiked(song, !!arg)
+      if (!arg && origin) ytLibrary.setLiked({ ...song, videoId: t.videoId }, false)
+      state.liked = !!arg
+      state.ytLibRev = ytLibrary.rev()
+      broadcast()
+      return { ok: true }
+    }
+    if (action === 'ytSave') {
+      if (!ytLibrary.setSaved(arg?.list, !!arg?.on)) return { error: "That isn't a playlist." }
+      state.ytLibRev = ytLibrary.rev()
+      broadcast()
+      return { ok: true }
+    }
+    if (action === 'transfer') return { error: 'YouTube plays here, in Glowtide.' }
     ytCommand(action, arg)
     if (state.playback && (action === 'play' || action === 'pause')) {
       state.playback = { ...state.playback, isPlaying: action === 'play', at: Date.now() }
@@ -996,23 +1034,56 @@ async function spotifyControl(action, arg) {
   return { ok: true }
 }
 
+/**
+ * YouTube songs for a search: the search chosen in Settings first (YouTube's own, InnerTube:
+ * no sign-in, no quota; or the official API: Google sign-in, a daily quota), the other behind
+ * it, and YouTube Music's own search last.
+ */
+async function ytSongs(q) {
+  const official = async () =>
+    googleAuth.isConnected() ? await yt.search(q).catch(() => null) : null
+  const own = () => searchVideos(q).catch(() => null)
+  const order = loadSettings().ytSearch === 'official' ? [official, own] : [own, official]
+  for (const search of order) {
+    const found = await search()
+    if (found?.length) return found
+  }
+  return await searchMusic(q)
+}
+
 async function query(kind, arg) {
   if (kind === 'demoTracks') return demo.tracks.map(({ palette, ...t }) => t) // eslint-disable-line no-unused-vars
   try {
-    // YouTube search: the one chosen in Settings first (YouTube's own search, InnerTube: no
-    // sign-in, no quota; or the official API: Google sign-in, a daily quota), the other behind
-    // it, and YouTube Music's own search last
-    if (kind === 'ytSearch') {
-      const official = async () =>
-        googleAuth.isConnected() ? await yt.search(arg).catch(() => null) : null
-      const own = () => searchVideos(arg).catch(() => null)
-      const order = loadSettings().ytSearch === 'official' ? [official, own] : [own, official]
-      for (const search of order) {
-        const found = await search()
-        if (found?.length) return found
-      }
-      return await searchMusic(arg)
+    if (kind === 'ytSearch') return await ytSongs(arg)
+    // the YouTube search panel: songs, albums and playlists at once
+    if (kind === 'ytFind') {
+      const q = String(arg ?? '').slice(0, 200)
+      const [songs, albums, playlists] = await Promise.all([
+        ytSongs(q).catch((e) => ({ error: e.message })),
+        searchLists(q, 'album').catch(() => []),
+        searchLists(q, 'playlist').catch(() => [])
+      ])
+      if (songs?.error && !albums.length && !playlists.length) return { error: songs.error }
+      return { songs: Array.isArray(songs) ? songs : [], albums, playlists }
     }
+    // a playlist's or album's songs: YouTube's own list (no sign-in) for public ones; your own
+    // playlists, which may be private, from your account first when you're signed in
+    if (kind === 'ytListSongs') {
+      const id = typeof arg?.playlistId === 'string' ? arg.playlistId : ''
+      if (!/^[\w-]{2,64}$/.test(id)) return { error: "That isn't a YouTube playlist." }
+      const official = async () =>
+        googleAuth.isConnected()
+          ? { items: await yt.playlistItems(id).catch(() => null) }
+          : { items: null }
+      const own = () => playlistSongs(id).catch(() => ({ items: null }))
+      for (const get of arg?.mine ? [official, own] : [own, official]) {
+        const d = await get()
+        if (d.items?.length) return { ...d, saved: ytLibrary.isSaved(id) }
+      }
+      return { items: [], saved: ytLibrary.isSaved(id) }
+    }
+    // the library kept in Glowtide
+    if (kind === 'ytMine') return ytLibrary.all()
     if (kind.startsWith('yt')) {
       if (!googleAuth.isConnected())
         return { error: 'Sign in with Google to load your YouTube library.', needsGoogle: true }

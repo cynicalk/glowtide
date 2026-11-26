@@ -133,7 +133,7 @@ export default function Player() {
                   (sys ? (
                     <SystemInfo state={state} what="Search" />
                   ) : yt ? (
-                    <YtSearch state={state} />
+                    <YtSearch state={state} settings={settings} />
                   ) : (
                     <SearchPanel state={state} />
                   ))}
@@ -739,13 +739,17 @@ function NowPlaying({
             className={`rd ${state.liked ? 'on' : ''}`}
             aria-label={state.liked ? 'Remove from liked songs' : 'Save to liked songs'}
             data-tip={
-              state.source !== 'spotify'
-                ? 'Like · with Spotify connected'
+              state.source !== 'spotify' && state.source !== 'youtube'
+                ? 'Like · with Spotify or YouTube'
                 : state.liked
                   ? 'Liked · click to remove'
-                  : 'Like · save to your liked songs'
+                  : state.source === 'youtube'
+                    ? 'Like · keep it in Library → Liked songs'
+                    : 'Like · save to your liked songs'
             }
-            disabled={state.source !== 'spotify' || state.liked == null}
+            disabled={
+              (state.source !== 'spotify' && state.source !== 'youtube') || state.liked == null
+            }
             onClick={() => api.control('like', !state.liked)}
           >
             <Heart size={15} fill={state.liked ? 'currentColor' : 'none'} />

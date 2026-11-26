@@ -28,7 +28,8 @@ export function makeBackup({
   choices,
   offsets,
   plays,
-  favs
+  favs,
+  ytLibrary
 }) {
   const s = { ...(settings || {}) }
   for (const k of LEAVE_OUT) delete s[k]
@@ -48,7 +49,8 @@ export function makeBackup({
     choices: choices || {},
     offsets: offsets || {},
     plays: plays || [],
-    favs: favs || []
+    favs: favs || [],
+    ytLibrary: ytLibrary || { liked: [], lists: [], recent: [] }
   }
 }
 
@@ -124,6 +126,14 @@ export function readBackup(raw) {
       })
     }
 
+  // the YouTube library: each song and list is checked again as it's added (ytLibrary.merge)
+  const yl = isObj(b.ytLibrary) ? b.ytLibrary : {}
+  const ytLibrary = {
+    liked: Array.isArray(yl.liked) ? yl.liked.slice(0, 2000) : [],
+    lists: Array.isArray(yl.lists) ? yl.lists.slice(0, 300) : [],
+    recent: Array.isArray(yl.recent) ? yl.recent.slice(0, 50) : []
+  }
+
   return {
     created: typeof b.created === 'string' ? b.created.slice(0, 40) : '',
     app: typeof b.app === 'string' ? b.app.slice(0, 20) : '',
@@ -133,12 +143,14 @@ export function readBackup(raw) {
     offsets,
     plays,
     favs,
+    ytLibrary,
     counts: {
       lyrics: Object.keys(myLyrics).length,
       choices: Object.keys(choices).length,
       offsets: Object.keys(offsets).length,
       plays: plays.length,
-      favs: favs.length
+      favs: favs.length,
+      ytLiked: ytLibrary.liked.length
     }
   }
 }

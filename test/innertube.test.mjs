@@ -208,3 +208,160 @@ test('another upload of a song that will not play', async () => {
   })
   assert.equal(live?.videoId, 'BBBBBBBBBB2')
 })
+
+// ---------- albums, playlists and their songs ----------
+
+const listItem = ({ name, second, play, browse, thumbs = [] }) => ({
+  musicResponsiveListItemRenderer: {
+    flexColumns: [col(name), col(...second)],
+    navigationEndpoint: browse ? { browseEndpoint: { browseId: browse } } : undefined,
+    overlay: play
+      ? {
+          musicItemThumbnailOverlayRenderer: {
+            content: {
+              musicPlayButtonRenderer: {
+                playNavigationEndpoint: { watchPlaylistEndpoint: { playlistId: play } }
+              }
+            }
+          }
+        }
+      : undefined,
+    thumbnail: { musicThumbnailRenderer: { thumbnail: { thumbnails: thumbs } } }
+  }
+})
+
+test('album and playlist search answers', async () => {
+  const { parseListSearch, listSearchBody, ALBUMS_FILTER, PLAYLISTS_FILTER } =
+    await import('../src/shared/innertube.mjs')
+  assert.equal(listSearchBody('x', '1', 'album').params, ALBUMS_FILTER)
+  assert.equal(listSearchBody('x', '1', 'playlist').params, PLAYLISTS_FILTER)
+  const albums = parseListSearch(
+    answer([
+      listItem({
+        name: 'Kiss Land',
+        second: ['Album', ' • ', 'The Weeknd', ' • ', '2013'],
+        play: 'OLAK5uy_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        browse: 'MPREb_abc',
+        thumbs: [
+          { url: 'https://yt3.googleusercontent.com/a=w60', width: 60 },
+          { url: 'https://yt3.googleusercontent.com/a=w120', width: 120 },
+          { url: 'https://yt3.googleusercontent.com/a=w544', width: 544 }
+        ]
+      }),
+      // no way to play it: left out
+      listItem({ name: 'Broken', second: ['Album', ' • ', 'Nobody'], browse: 'MPREb_x' }),
+      // a picture from anywhere else isn't kept
+      listItem({
+        name: 'Trilogy',
+        second: ['Album', ' • ', 'The Weeknd', ' • ', '2012'],
+        play: 'OLAK5uy_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        thumbs: [{ url: 'https://evil.example/x.jpg', width: 120 }]
+      })
+    ]),
+    'album'
+  )
+  assert.equal(albums.length, 2)
+  assert.deepEqual(albums[0], {
+    id: 'OLAK5uy_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    playlistId: 'OLAK5uy_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    kind: 'album',
+    name: 'Kiss Land',
+    by: 'The Weeknd',
+    year: '2013',
+    thumb: 'https://yt3.googleusercontent.com/a=w120'
+  })
+  assert.equal(albums[1].thumb, null)
+
+  // a playlist found by its page (VL + its id) when there's no play button
+  const lists = parseListSearch(
+    answer([
+      listItem({ name: 'Best Of', second: ['Felipe', ' • ', '5.2M views'], browse: 'VLPLabc123' })
+    ]),
+    'playlist'
+  )
+  assert.equal(lists[0].playlistId, 'PLabc123')
+  assert.equal(lists[0].by, 'Felipe')
+  assert.equal(lists[0].year, '')
+  assert.deepEqual(parseListSearch({}, 'album'), [])
+})
+
+test("a playlist's songs from the watch page's list", async () => {
+  const { parsePlaylistSongs } = await import('../src/shared/innertube.mjs')
+  const { parseYouTubeTitle } = await import('../src/shared/youtube.mjs')
+  const v = (videoId, title, by, length) => ({
+    playlistPanelVideoRenderer: {
+      videoId,
+      title: { simpleText: title },
+      longBylineText: { runs: [{ text: by }] },
+      lengthText: length ? { simpleText: length } : undefined
+    }
+  })
+  const json = {
+    contents: {
+      twoColumnWatchNextResults: {
+        playlist: {
+          playlist: {
+            title: 'Album - Kiss Land',
+            totalVideos: 4,
+            contents: [
+              v('tcLr-GIJQfI', 'Professional', 'The Weeknd', '6:09'),
+              v('XXXXXXXXXX2', '[Private video]', '', null), // no length: left out
+              v('bad', 'Not an id', 'x', '1:00'),
+              v('YYYYYYYYYY3', 'The Weeknd - Kiss Land (Official Audio)', 'The Weeknd', '7:35')
+            ]
+          }
+        }
+      }
+    }
+  }
+  const d = parsePlaylistSongs(json, parseYouTubeTitle)
+  assert.equal(d.name, 'Album - Kiss Land')
+  assert.equal(d.total, 4)
+  assert.deepEqual(
+    d.items.map((s) => [s.videoId, s.name, s.artist, s.durationMs]),
+    [
+      ['tcLr-GIJQfI', 'Professional', 'The Weeknd', 369000],
+      ['YYYYYYYYYY3', 'Kiss Land', 'The Weeknd', 455000]
+    ]
+  )
+  assert.deepEqual(parsePlaylistSongs({}, parseYouTubeTitle), { name: '', total: 0, items: [] })
+})
+
+test('what the window hands over to keep is checked', async () => {
+  const { cleanSong, cleanList } = await import('../src/shared/innertube.mjs')
+  const s = cleanSong({
+    videoId: 'tcLr-GIJQfI',
+    name: 'Professional',
+    artists: 'The Weeknd',
+    durationMs: 369000,
+    cover: 'https://evil.example/x.jpg', // never kept: covers come from the id
+    extra: 'dropped'
+  })
+  assert.equal(s.cover, 'https://i.ytimg.com/vi/tcLr-GIJQfI/mqdefault.jpg')
+  assert.equal(s.extra, undefined)
+  assert.equal(s.artist, 'The Weeknd')
+  assert.equal(cleanSong('yt:tcLr-GIJQfI').videoId, 'tcLr-GIJQfI')
+  assert.equal(cleanSong({ videoId: 'nope' }), null)
+  assert.equal(cleanSong({ videoId: 'tcLr-GIJQfI', name: 'x'.repeat(1000) }).name.length, 300)
+  assert.equal(cleanSong({ videoId: 'tcLr-GIJQfI', durationMs: 'a lot' }).durationMs, 0)
+
+  const p = cleanList({
+    id: 'PLabc123',
+    name: 'Mine',
+    kind: 'weird',
+    thumb: 'javascript:alert(1)',
+    count: 3
+  })
+  assert.deepEqual(p, {
+    id: 'PLabc123',
+    playlistId: 'PLabc123',
+    kind: 'playlist',
+    name: 'Mine',
+    by: '',
+    year: '',
+    thumb: null,
+    count: 3
+  })
+  assert.equal(cleanList({ id: 'has spaces' }), null)
+  assert.equal(cleanList({ id: '../../etc' }), null)
+})

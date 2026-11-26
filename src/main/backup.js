@@ -11,6 +11,7 @@ import * as mine from './myLyrics'
 import * as choices from './lyricChoice'
 import * as offsets from './offsets'
 import { allFavs, mergeFavs } from './favLines'
+import { ytLibrary } from './ytLibrary'
 
 const MAX_FILE = 60e6 // years of history is a few MB; anything this big isn't a backup
 
@@ -36,7 +37,8 @@ export async function exportBackup({ win, settings, history }) {
     choices: choices.allSaved(),
     offsets: offsets.allSaved(),
     plays: history ? history.saved() : [],
-    favs: allFavs()
+    favs: allFavs(),
+    ytLibrary: ytLibrary.dump()
   })
   writeFileSync(filePath, JSON.stringify(b))
   return { path: filePath }
@@ -68,7 +70,10 @@ export async function importBackup({ win, history, apply, after }) {
   const what = [
     'your settings',
     `${b.counts.lyrics} timed ${b.counts.lyrics === 1 ? 'song' : 'songs'}`,
-    `${b.counts.plays} ${b.counts.plays === 1 ? 'play' : 'plays'} of history`
+    `${b.counts.plays} ${b.counts.plays === 1 ? 'play' : 'plays'} of history`,
+    ...(b.counts.ytLiked
+      ? [`${b.counts.ytLiked} liked YouTube ${b.counts.ytLiked === 1 ? 'song' : 'songs'}`]
+      : [])
   ].join(', ')
   const { response } = await dialog.showMessageBox(win, {
     type: 'question',
@@ -88,6 +93,7 @@ export async function importBackup({ win, history, apply, after }) {
   choices.mergeSaved(b.choices)
   offsets.mergeSaved(b.offsets)
   mergeFavs(b.favs)
+  ytLibrary.merge(b.ytLibrary)
   if (history && b.plays.length) history.replace(mergePlays(history.saved(), b.plays))
   after?.()
   return { ok: true, counts: b.counts }

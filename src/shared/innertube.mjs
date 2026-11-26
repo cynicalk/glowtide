@@ -183,3 +183,176 @@ export function pickAnotherUpload(results, { name, durationMs = 0, tried = [] } 
   const ok = (results || []).filter(fits)
   return ok.find((r) => LIKELY.test(r.rawTitle || r.name || '')) || ok[0] || null
 }
+
+// ---------- albums, playlists and the songs in them ----------
+// YouTube Music's search for albums and for playlists (its own filters), and the songs of any
+// public playlist or album from the watch page's list (the "next" answer): no sign-in.
+
+/** Albums only, and playlists only (YouTube Music's filters). */
+export const ALBUMS_FILTER = 'EgWKAQIYAWoMEA4QChADEAQQCRAF'
+export const PLAYLISTS_FILTER = 'EgeKAQQoAEABagwQDhAKEAMQBBAJEAU='
+
+/** The request body for an album or playlist search: kind 'album' | 'playlist'. */
+export function listSearchBody(query, clientVersion, kind) {
+  return {
+    context: { client: { clientName: 'WEB_REMIX', clientVersion, hl: 'en' } },
+    query: String(query ?? '').slice(0, 200),
+    params: kind === 'album' ? ALBUMS_FILTER : PLAYLISTS_FILTER
+  }
+}
+
+/** The request body for a playlist's songs. */
+export function playlistBody(playlistId, clientVersion) {
+  return {
+    context: { client: { clientName: 'WEB', clientVersion, hl: 'en' } },
+    playlistId: String(playlistId ?? '').slice(0, 64)
+  }
+}
+
+export const LIST_ID = /^[\w-]{2,64}$/
+const IMAGE = /^https:\/\/(i\.ytimg\.com|yt3\.ggpht\.com|(yt3|lh3)\.googleusercontent\.com)\//
+/** A picture address from YouTube's own image hosts, or null. */
+export const safeImage = (u) =>
+  typeof u === 'string' && u.length < 1000 && IMAGE.test(u) ? u : null
+
+/** The picture closest to 120 px wide (a row's size, sharp on a 2x screen). */
+function pickImage(thumbs) {
+  const list = (Array.isArray(thumbs) ? thumbs : []).filter((t) => safeImage(t?.url))
+  if (!list.length) return null
+  const best = list.find((t) => (t.width || 0) >= 120) || list[list.length - 1]
+  return best.url
+}
+
+/**
+ * An album or playlist search answer → [{ id, playlistId, kind, name, by, year, thumb }].
+ * id is the playlist id that plays it (an album plays as its own playlist).
+ */
+export function parseListSearch(json, kind, max = 8) {
+  const out = []
+  const sections =
+    json?.contents?.tabbedSearchResultsRenderer?.tabs?.[0]?.tabRenderer?.content
+      ?.sectionListRenderer?.contents || []
+  for (const section of sections) {
+    for (const item of section?.musicShelfRenderer?.contents || []) {
+      const r = item?.musicResponsiveListItemRenderer
+      if (!r) continue
+      const play =
+        r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer
+          ?.playNavigationEndpoint?.watchPlaylistEndpoint?.playlistId
+      const browse = r.navigationEndpoint?.browseEndpoint?.browseId
+      const playlistId =
+        typeof play === 'string' && LIST_ID.test(play)
+          ? play
+          : typeof browse === 'string' && /^VL[\w-]{2,64}$/.test(browse)
+            ? browse.slice(2)
+            : null
+      if (!playlistId) continue
+      const name = runsText(r.flexColumns?.[0]).trim()
+      if (!name) continue
+      // album: "Album • The Weeknd • 2013"; playlist: "Felipe • 5.2M views"
+      const parts = runsText(r.flexColumns?.[1])
+        .split(' • ')
+        .map((x) => x.trim())
+      const by = (kind === 'album' ? parts[1] : parts[0]) || ''
+      const year = kind === 'album' && /^\d{4}$/.test(parts[2] || '') ? parts[2] : ''
+      out.push({
+        id: playlistId,
+        playlistId,
+        kind,
+        name: name.slice(0, 300),
+        by: by.slice(0, 200),
+        year,
+        thumb: pickImage(r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails)
+      })
+      if (out.length >= max) return out
+    }
+  }
+  return out
+}
+
+/**
+ * A playlist's "next" answer → { name, total, items }: its songs in the search's shape.
+ * title(raw, channel) gives { artist, title } (parseYouTubeTitle). Private and deleted videos
+ * (no length) are left out.
+ */
+export function parsePlaylistSongs(json, title, max = 200) {
+  const pl = json?.contents?.twoColumnWatchNextResults?.playlist?.playlist
+  const items = []
+  for (const x of pl?.contents || []) {
+    const v = x?.playlistPanelVideoRenderer
+    const videoId = v?.videoId
+    if (typeof videoId !== 'string' || !VIDEO_ID.test(videoId)) continue
+    const raw = text(v.title).trim()
+    const ms = durationMs(text(v.lengthText))
+    if (!raw || !ms) continue
+    const channel = text(v.longBylineText || v.shortBylineText).trim()
+    const parsed = title(raw, channel)
+    const artist = String(parsed?.artist || channel || '')
+    items.push({
+      id: `yt:${videoId}`,
+      videoId,
+      uri: `yt:${videoId}`,
+      name: String(parsed?.title || raw).slice(0, 300),
+      rawTitle: raw.slice(0, 300),
+      channel: channel.slice(0, 200),
+      artists: artist.slice(0, 200),
+      artist: artist.slice(0, 200),
+      album: '',
+      cover: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+      thumb: `https://i.ytimg.com/vi/${videoId}/default.jpg`,
+      durationMs: ms,
+      unavailable: false
+    })
+    if (items.length >= max) break
+  }
+  const total = Number(pl?.totalVideos)
+  return {
+    name: typeof pl?.title === 'string' ? pl.title.slice(0, 300) : '',
+    total: Number.isFinite(total) ? total : items.length,
+    items
+  }
+}
+
+// ---------- what the window hands over to keep ----------
+// The library is kept from what the player window sends: nothing is taken on trust.
+
+const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '')
+
+/** A song to keep (liked, recent, queued) → its tidy shape, or null. */
+export function cleanSong(v) {
+  const videoId = typeof v === 'string' ? v.replace(/^yt:/, '') : v?.videoId
+  if (typeof videoId !== 'string' || !VIDEO_ID.test(videoId)) return null
+  const artist = str(v?.artists || v?.artist, 200)
+  const ms = Number(v?.durationMs)
+  return {
+    id: `yt:${videoId}`,
+    videoId,
+    uri: `yt:${videoId}`,
+    name: str(v?.name, 300),
+    rawTitle: str(v?.rawTitle, 300),
+    channel: str(v?.channel, 200),
+    artists: artist,
+    artist,
+    album: str(v?.album, 300),
+    cover: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+    thumb: `https://i.ytimg.com/vi/${videoId}/default.jpg`,
+    durationMs: Number.isFinite(ms) && ms > 0 ? Math.min(ms, 864e5) : 0
+  }
+}
+
+/** An album or playlist to keep → its tidy shape, or null. */
+export function cleanList(p) {
+  const playlistId = p?.playlistId || p?.id
+  if (typeof playlistId !== 'string' || !LIST_ID.test(playlistId)) return null
+  const count = Number(p?.count)
+  return {
+    id: playlistId,
+    playlistId,
+    kind: p?.kind === 'album' ? 'album' : 'playlist',
+    name: str(p?.name, 300) || 'Playlist',
+    by: str(p?.by, 200),
+    year: /^\d{4}$/.test(p?.year || '') ? p.year : '',
+    thumb: safeImage(p?.thumb),
+    count: Number.isInteger(count) && count >= 0 ? count : null
+  }
+}

@@ -113,8 +113,8 @@ Switch any time from Settings → Music source, or the tray icon.
 
 With no setup at all, YouTube has what Spotify has in Glowtide: **Search** finds songs, albums
 and playlists as you type; **Library** keeps your **Liked songs** (the ♥ while a song plays),
-the albums and playlists you **Save**, **your own playlists** (New playlist, or ⋯ → Add to
-playlist), and what you played lately (**Recent**); the **+** beside any song adds it to the
+the albums and playlists you **Save**, **your own playlists** (New playlist, ⋯ → Add to
+playlist, or copy one of your Spotify playlists in), and what you played lately (**Recent**); the **+** beside any song adds it to the
 queue, ⋯ → **Play next** puts it next, and in **Queue** you can reorder, remove or jump. That library is kept on your PC, and comes along in a backup.
 
 To also see the playlists and likes on your own YouTube account, you make a free Google Cloud

@@ -444,6 +444,7 @@ function Playlists({ state, settings, onOpen }) {
       {!mine.own.length && !naming && (
         <div className="muted pad">Make one with New playlist, or from the ⋯ beside any song.</div>
       )}
+      <FromSpotify state={state} />
       <div className="sect">Saved from YouTube</div>
       {mine.lists.length ? (
         <ListRows lists={mine.lists} onOpen={onOpen} />
@@ -464,6 +465,81 @@ function Playlists({ state, settings, onOpen }) {
           {setup && <GoogleSetup settings={settings} />}
         </>
       )}
+    </>
+  )
+}
+
+/** Copy one of your Spotify playlists into one of yours here, its songs found on YouTube. */
+function FromSpotify({ state }) {
+  const [open, setOpen] = useState(false)
+  const [err, setErr] = useState(null)
+  const run = state.ytImport
+  if (run) {
+    const pct = run.total ? Math.round((run.done / run.total) * 100) : 0
+    return (
+      <div className="copy-box">
+        <div className="copy-line">
+          {run.finished
+            ? `${run.cancelled ? 'Stopped copying' : 'Copied'} “${run.name}”: ${run.found} of ${run.total} songs found on YouTube.`
+            : `Copying “${run.name}”: ${run.done} of ${run.total} · ${run.found} found`}
+        </div>
+        {!run.finished && (
+          <div className="copy-bar">
+            <i style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        {run.finished && run.missing.length > 0 && (
+          <details className="fine">
+            <summary>Not found ({run.missing.length})</summary>
+            {run.missing.map((m, i) => (
+              <div key={i}>{m}</div>
+            ))}
+          </details>
+        )}
+        <button
+          className="pill"
+          onClick={() => api.control(run.finished ? 'copySpotifyDone' : 'copySpotifyStop')}
+        >
+          {run.finished ? 'OK' : 'Stop'}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <>
+      <button className="sect link-sect" onClick={() => setOpen(!open)}>
+        <ChevronDown size={12} className={open ? '' : 'turned'} /> Copy a Spotify playlist
+      </button>
+      {open && <SpotifyLists onErr={setErr} />}
+      {err && <div className="error">{err}</div>}
+    </>
+  )
+}
+
+function SpotifyLists({ onErr }) {
+  const d = useQuery('spotifyLists', null, [])
+  if (d === undefined) return <Loading />
+  if (d?.error) return <div className="muted pad">{d.error}</div>
+  return (
+    <>
+      <p className="fine">
+        Glowtide finds each song on YouTube and makes a playlist of yours here. Spotify only lets
+        apps read playlists you made or collaborate on.
+      </p>
+      {d.map((p) => (
+        <Row
+          key={p.id}
+          square
+          thumb={p.thumb}
+          title={p.name}
+          sub={p.count != null ? `${p.count} songs` : 'Your liked songs on Spotify'}
+          onPlay={async () => {
+            onErr(null)
+            const r = await api.control('copySpotify', { spotifyId: p.id, name: p.name })
+            if (r?.error) onErr(r.error)
+          }}
+        />
+      ))}
     </>
   )
 }

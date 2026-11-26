@@ -210,6 +210,9 @@ const state = {
   ytPageUrl: YT_PAGE_URL,
   ytQueue: null,
   ytLibRev: 0, // changes with the YouTube library kept in Glowtide (ytLibrary.js)
+  // a Spotify playlist being copied into one of yours: { id, name, total, done, found,
+  // missing, finished, error }
+  ytImport: null,
   track: null,
   palette: null,
   playback: null,
@@ -274,6 +277,11 @@ function syncWake(opts) {
   voice.setWake(!!loadSettings().voice?.wake && voice.status().ready, opts)
   const want = wakeFeedWanted()
   if (want.on && (!commandWin || commandWin.isDestroyed())) createCommandWin()
+  // "Hey Glow" turned off, and the command bar not open: nothing for it to do
+  if (!want.on && commandWin && !commandWin.isDestroyed() && !commandWin.isVisible()) {
+    commandWin.destroy()
+    return
+  }
   if (commandWin && !commandWin.isDestroyed()) commandWin.webContents.send('voice:feed', want)
 }
 
@@ -927,6 +935,117 @@ async function playOnYouTube(arg) {
   return r?.error ? r : { ok: true, note }
 }
 
+// ---------- a Spotify playlist copied into one of yours, its songs found on YouTube ----------
+const SPOTIFY_ID = /^[A-Za-z0-9]{10,40}$/
+const MAX_COPY = 500
+let copying = null // { cancelled }
+
+/** The songs of one of your Spotify playlists ('liked': your Liked Songs), up to MAX_COPY. */
+async function spotifySongs(source) {
+  const out = []
+  for (let offset = 0; offset < MAX_COPY; offset += 50) {
+    const page =
+      source === 'liked'
+        ? await spotify.likedTracks(offset)
+        : await spotify.playlistTracks(source, offset)
+    for (const x of page?.items || []) {
+      const t = x?.item || x?.track
+      if (!t || t.type === 'episode' || t.is_local || !t.name) continue
+      out.push({
+        name: String(t.name).slice(0, 300),
+        artist: (t.artists || [])
+          .map((a) => a?.name)
+          .filter(Boolean)
+          .join(', ')
+          .slice(0, 200),
+        durationMs: Number(t.duration_ms) || 0
+      })
+    }
+    if (!page?.next || !page?.items?.length) break
+  }
+  return out.slice(0, MAX_COPY)
+}
+
+/** Your Spotify playlists that can be copied: yours or ones you collaborate on, Liked first. */
+async function spotifyPlaylistsToCopy() {
+  if (!spotifyAuth.isConnected() || !loadSettings().clientId)
+    return { error: 'Connect Spotify first: Settings → Music source → Spotify.' }
+  const me = await spotify.me()
+  const lists = []
+  for (let offset = 0; offset < 200; offset += 50) {
+    const page = await spotify.playlists(offset)
+    lists.push(...(page?.items || []).filter(Boolean))
+    if (!page?.next) break
+  }
+  return [
+    { id: 'liked', name: 'Liked Songs', count: null },
+    ...lists
+      .filter((p) => p.owner?.id === me?.id || p.collaborative)
+      .map((p) => ({
+        id: p.id,
+        name: String(p.name || 'Playlist').slice(0, 100),
+        count: p.items?.total ?? p.tracks?.total ?? null,
+        thumb: p.images?.at(-1)?.url || null
+      }))
+  ]
+}
+
+/**
+ * Copies one of your Spotify playlists into a new playlist of yours in Glowtide, finding each
+ * song on YouTube (lyric and audio uploads first: they're likeliest to play). It runs on its
+ * own; state.ytImport says how far it is and what wasn't found.
+ */
+async function copySpotifyPlaylist(arg) {
+  if (copying) return { error: 'A playlist is already being copied.' }
+  const source = arg?.spotifyId === 'liked' ? 'liked' : arg?.spotifyId
+  if (source !== 'liked' && !SPOTIFY_ID.test(source || ''))
+    return { error: "That isn't a Spotify playlist." }
+  if (!spotifyAuth.isConnected() || !loadSettings().clientId)
+    return { error: 'Connect Spotify first: Settings → Music source → Spotify.' }
+  let songs
+  try {
+    songs = await spotifySongs(source)
+  } catch (e) {
+    return { error: e.message }
+  }
+  if (!songs.length) return { error: 'That playlist has no songs to copy.' }
+  const name = (typeof arg?.name === 'string' && arg.name.trim().slice(0, 90)) || 'From Spotify'
+  const id = ytLibrary.newList(name)
+  if (!id) return { error: "Glowtide couldn't make a new playlist (you have 100)." }
+  const run = { cancelled: false }
+  copying = run
+  state.ytImport = { id, name, total: songs.length, done: 0, found: 0, missing: [] }
+  state.ytLibRev = ytLibrary.rev()
+  broadcast()
+  ;(async () => {
+    for (const t of songs) {
+      if (run.cancelled) break
+      const found = await searchVideos(`${t.name} ${t.artist}`).catch(() => [])
+      const pick = pickAnotherUpload(found, { name: t.name, durationMs: t.durationMs, tried: [] })
+      if (pick) {
+        // shown with Spotify's own name and artist, which are cleaner than a video's title
+        ytLibrary.addTo(id, {
+          ...pick,
+          name: t.name,
+          artists: t.artist || pick.artists,
+          artist: t.artist || pick.artist,
+          durationMs: t.durationMs || pick.durationMs
+        })
+        state.ytImport.found++
+      } else if (state.ytImport.missing.length < 100)
+        state.ytImport.missing.push(t.artist ? `${t.name} · ${t.artist}` : t.name)
+      state.ytImport.done++
+      state.ytLibRev = ytLibrary.rev()
+      broadcast()
+      await new Promise((r) => setTimeout(r, 150)) // one search at a time, gently
+    }
+    state.ytImport = { ...state.ytImport, finished: true, cancelled: run.cancelled }
+    copying = null
+    broadcast()
+  })()
+  return { ok: true, id }
+}
+
 /** Your own playlists in Glowtide: new, add, remove a song, rename, delete. */
 function ownPlaylist(arg) {
   const op = arg?.op
@@ -968,6 +1087,16 @@ function ytQueueEdit(action, arg) {
 async function control(action, arg) {
   if (action === 'playYouTube') return playOnYouTube(arg)
   if (action === 'ytPlaylist') return ownPlaylist(arg)
+  if (action === 'copySpotify') return copySpotifyPlaylist(arg)
+  if (action === 'copySpotifyStop') {
+    if (copying) copying.cancelled = true
+    return { ok: true }
+  }
+  if (action === 'copySpotifyDone') {
+    if (!copying) state.ytImport = null
+    broadcast()
+    return { ok: true }
+  }
   if (QUEUE_EDITS[action]) {
     if (state.source !== 'youtube') return { error: 'That works while YouTube plays.' }
     return ytQueueEdit(action, arg)
@@ -1164,6 +1293,7 @@ async function query(kind, arg) {
     }
     // the library kept in Glowtide
     if (kind === 'ytMine') return ytLibrary.all()
+    if (kind === 'spotifyLists') return await spotifyPlaylistsToCopy()
     if (kind.startsWith('yt')) {
       if (!googleAuth.isConnected())
         return { error: 'Sign in with Google to load your YouTube library.', needsGoogle: true }
@@ -1739,6 +1869,22 @@ function syncOverlays() {
   rebuildTray()
 }
 
+// A hidden window that's quick to make again (the tray panel, the command bar) is closed
+// after a while unused, for its memory (about 100 MB each); keep() says when it mustn't be.
+const IDLE_MS = (DEV && Number(process.env.GLOWTIDE_IDLE_MS)) || 2 * 60 * 1000 // a test run may shorten it
+function freeWhenIdle(win, keep = () => false) {
+  let t = null
+  const later = () => {
+    clearTimeout(t)
+    t = setTimeout(() => {
+      if (!win.isDestroyed() && !win.isVisible() && !keep()) win.destroy()
+    }, IDLE_MS)
+  }
+  win.on('hide', later)
+  win.on('show', () => clearTimeout(t))
+  win.on('closed', () => clearTimeout(t))
+}
+
 // ---------- the tray's quick settings panel ----------
 const QUICK = { width: 320, height: 640 }
 let quickHiddenAt = 0
@@ -1776,6 +1922,7 @@ function toggleQuick() {
       }
     })
     quickWin.on('closed', () => (quickWin = null))
+    freeWhenIdle(quickWin)
     load(quickWin, 'quick')
     quickWin.once('ready-to-show', () => placeQuick(true))
     return
@@ -1836,6 +1983,8 @@ function createCommandWin() {
     }
   })
   commandWin.on('closed', () => (commandWin = null))
+  // kept while "Hey Glow" is on: this window does the listening
+  freeWhenIdle(commandWin, () => wakeFeedWanted().on)
   load(commandWin, 'command')
   return commandWin
 }
@@ -2755,11 +2904,16 @@ function scheduleSnapshot() {
         ['lyrics', lyricsWin],
         ['mini', miniWin],
         ['command', commandWin],
+        ['quick', quickWin],
         ...glowWins.map((w, i) => [`glow${i}`, w]),
         ...(widgets ? widgets.windows() : []).map((w) => [w.widgetKind || 'stage', w])
       ]
       for (const [n, w] of named)
         if (w && !w.isDestroyed()) names.set(w.webContents.getOSProcessId(), n)
+      // frames inside the player (the player page, YouTube's player) run in their own processes
+      for (const f of player?.webContents.mainFrame.framesInSubtree || [])
+        if (f !== player.webContents.mainFrame && !names.has(f.osProcessId))
+          names.set(f.osProcessId, `frame ${new URL(f.url).host}`)
       app.getAppMetrics() // the first reading only starts the clock
       await wait(Number(process.env.GLOWTIDE_PERF) * 1000)
       const rows = app.getAppMetrics().map((p) => ({

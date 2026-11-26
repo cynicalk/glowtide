@@ -22,6 +22,96 @@ test('"Artist - Title (Official Video)" splits and cleans', () => {
   assert.deepEqual(parseYouTubeTitle('A – B [Lyric Video]', 'x'), { artist: 'A', title: 'B' })
 })
 
+test('film titles: "Song - Film | Cast | Singers" is read as the song, by its singers', () => {
+  // Kesariya showed as a song called "Brahmāstra" by "Kesariya"
+  assert.deepEqual(
+    parseYouTubeTitle(
+      'Kesariya - Brahmāstra | Ranbir Kapoor | Alia Bhatt | Pritam | Arijit Singh | Amitabh',
+      'Sony Music India'
+    ),
+    { artist: 'Pritam, Arijit Singh, Amitabh', title: 'Kesariya' }
+  )
+  assert.deepEqual(
+    parseYouTubeTitle(
+      'Kesariya - Official Lyric|Brahmāstra|Ranbir, Alia |Pritam, Arijit Singh, Amitabh',
+      'Sony Music India'
+    ),
+    { artist: 'Pritam, Arijit Singh, Amitabh', title: 'Kesariya' }
+  )
+  assert.deepEqual(
+    parseYouTubeTitle('Aashiqui 2: Tum Hi Ho 8K Full Song | Aditya Roy Kapur | Arijit', 'T-Series'),
+    { artist: 'Aditya Roy Kapur, Arijit', title: 'Tum Hi Ho' }
+  )
+  assert.deepEqual(
+    parseYouTubeTitle('Tum Hi Ho (Lyrics)|Arijit Singh|Aashiqui 2|@tseries', 'T-Series'),
+    {
+      artist: 'Arijit Singh',
+      title: 'Tum Hi Ho'
+    }
+  )
+  // the singer first
+  assert.deepEqual(
+    parseYouTubeTitle(
+      'Arijit Singh - Apna Bana Le | Varun Dhawan, Kriti Sanon | Sachin-Jigar, Arijit Singh',
+      'Zee Music Company'
+    ),
+    { artist: 'Arijit Singh', title: 'Apna Bana Le' }
+  )
+  assert.deepEqual(
+    parseYouTubeTitle(
+      'Arijit Singh - Apna Bana Le | Varun Dhawan, Kriti Sanon | Sachin-Jigar | Love Song',
+      'Soulful Arijit Singh Songs'
+    ),
+    { artist: 'Arijit Singh', title: 'Apna Bana Le' }
+  )
+  // the film's name before the song, and "(Lyrical Video)"
+  assert.equal(
+    parseYouTubeTitle(
+      'Jawan: Chaleya (Lyrical Video) | Shah Rukh Khan | Anirudh | Arijit',
+      'T-Series'
+    ).title,
+    'Chaleya'
+  )
+  // the show's name first
+  assert.deepEqual(
+    parseYouTubeTitle(
+      'Coke Studio | Season 14 | Pasoori | Ali Sethi, Shae Gill',
+      'Coke Studio Pakistan'
+    ),
+    { artist: 'Ali Sethi, Shae Gill', title: 'Pasoori' }
+  )
+  // "Song - Official Video": the song first, the channel the artist
+  assert.deepEqual(parseYouTubeTitle('Apna Bana Le - Official Video', 'Sachin-Jigar'), {
+    artist: 'Sachin-Jigar',
+    title: 'Apna Bana Le'
+  })
+})
+
+test('"Artist - Song" stays as it was, and the channel decides which side is the artist', () => {
+  // packaging after a pipe doesn't make it a film title
+  assert.deepEqual(
+    parseYouTubeTitle('The Weeknd - Blinding Lights | Official Video', 'TheWeekndVEVO'),
+    {
+      artist: 'The Weeknd',
+      title: 'Blinding Lights'
+    }
+  )
+  assert.deepEqual(parseYouTubeTitle('Coldplay - Yellow | Lyrics', 'Lyric Vibes'), {
+    artist: 'Coldplay',
+    title: 'Yellow'
+  })
+  // the channel is the left side: Artist - Song, even with names after a pipe
+  assert.deepEqual(parseYouTubeTitle("Drake - God's Plan | Scorpion", 'DrakeVEVO'), {
+    artist: 'Drake',
+    title: "God's Plan"
+  })
+  // the channel is the right side: Song - Artist
+  assert.deepEqual(parseYouTubeTitle('Blinding Lights - The Weeknd', 'The Weeknd'), {
+    artist: 'The Weeknd',
+    title: 'Blinding Lights'
+  })
+})
+
 test('no dash: channel name, VEVO suffix removed and words split', () => {
   assert.deepEqual(parseYouTubeTitle('Track (Audio)', 'BandNameVEVO'), {
     artist: 'Band Name',

@@ -4636,3 +4636,15 @@ html[data-route='showcase'] body {
   height: 100%;
   background: var(--glow);
 }
+
+/* what the keyboard is on, in the YouTube lists and the ⋯ menu */
+.yt-row .row-text:focus-visible,
+.menu-pop button:focus-visible,
+.pl-head .t[role='button']:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--glow) 70%, white);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.menu-pop button:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+}

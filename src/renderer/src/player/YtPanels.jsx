@@ -30,6 +30,35 @@ function useQuery(kind, arg, deps = []) {
   return res.key === key ? res.data : undefined
 }
 
+/** Enter or Space on something that acts as a button (and not the player's own keys). */
+function pressed(e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return false
+  e.preventDefault()
+  return true
+}
+
+/** Up / Down (and Home / End) between the menu's items, from the one focused now. */
+function menuKeys(e, menu, close) {
+  const items = [...(menu?.querySelectorAll('button, input') || [])]
+  const i = items.indexOf(document.activeElement)
+  const go = (n) => {
+    e.preventDefault()
+    items[(n + items.length) % items.length]?.focus()
+  }
+  if (e.key === 'ArrowDown') go(i + 1)
+  else if (e.key === 'ArrowUp') go(i < 0 ? items.length - 1 : i - 1)
+  else if (e.key === 'Home') go(0)
+  else if (e.key === 'End') go(items.length - 1)
+  else if (e.key === 'Escape' || e.key === 'Tab') {
+    // Escape closes the menu only, not the page it's on
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    close()
+  }
+}
+
 function Loading() {
   return <div className="muted pad">Loading…</div>
 }
@@ -44,7 +73,13 @@ function Row({ thumb, title, sub, active, onPlay, onQueue, square, song, ownId, 
       ) : (
         <div className="thumb-ph" />
       )}
-      <div className="row-text" onClick={onPlay} role="button" tabIndex={0}>
+      <div
+        className="row-text"
+        onClick={onPlay}
+        onKeyDown={(e) => pressed(e) && onPlay?.()}
+        role="button"
+        tabIndex={0}
+      >
         <div className="t">{title}</div>
         {sub && <div className="s">{sub}</div>}
       </div>
@@ -72,32 +107,65 @@ function SongMenu({ song, ownId, index }) {
   const [naming, setNaming] = useState(false)
   const [name, setName] = useState('')
   const box = useRef(null)
+  const trigger = useRef(null)
+  const menu = useRef(null)
   useEffect(() => {
     if (!open) return
     const away = (e) => !box.current?.contains(e.target) && setOpen(false)
     document.addEventListener('mousedown', away)
-    return () => document.removeEventListener('mousedown', away)
+    // opened: the first item has the keys (Up / Down move, Escape closes)
+    const t = setTimeout(() => menu.current?.querySelector('button')?.focus(), 0)
+    return () => {
+      document.removeEventListener('mousedown', away)
+      clearTimeout(t)
+    }
   }, [open])
-  const done = (p) => {
-    p.then?.(() => {})
+  // closed by a key: back to the ⋯ it was opened from
+  const close = (refocus = false) => {
     setOpen(false)
     setNaming(false)
     setName('')
+    if (refocus) setTimeout(() => trigger.current?.focus(), 0)
+  }
+  const done = (p) => {
+    p.then?.(() => {})
+    close(true)
   }
   return (
     <div className="song-menu" ref={box}>
       <button
+        ref={trigger}
         className="rd sm ghost"
         aria-label="More"
+        aria-haspopup="menu"
+        aria-expanded={open}
         title="Play next, add to a playlist…"
         onClick={() => setOpen(!open)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' && !open) {
+            e.preventDefault()
+            setOpen(true)
+          }
+        }}
       >
         <MoreHorizontal size={13} />
       </button>
       {open && (
-        <div className="menu-pop" role="menu">
-          <button onClick={() => done(api.control('queueNext', song))}>Play next</button>
-          <button onClick={() => done(api.control('queue', song))}>Add to queue</button>
+        <div
+          className="menu-pop"
+          role="menu"
+          ref={menu}
+          onKeyDown={(e) => {
+            if (naming && e.target.tagName === 'INPUT' && e.key !== 'Escape') return
+            menuKeys(e, menu.current, () => close(e.key === 'Escape'))
+          }}
+        >
+          <button role="menuitem" onClick={() => done(api.control('queueNext', song))}>
+            Play next
+          </button>
+          <button role="menuitem" onClick={() => done(api.control('queue', song))}>
+            Add to queue
+          </button>
           <OwnLists
             onPick={(id) => done(api.control('ytPlaylist', { op: 'add', id, song }))}
             skip={ownId}
@@ -113,16 +181,21 @@ function SongMenu({ song, ownId, index }) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && name.trim())
                   done(api.control('ytPlaylist', { op: 'new', name: name.trim(), song }))
-                if (e.key === 'Escape') setNaming(false)
+                if (e.key === 'Escape') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setNaming(false)
+                }
               }}
             />
           ) : (
-            <button onClick={() => setNaming(true)}>
+            <button role="menuitem" onClick={() => setNaming(true)}>
               <Plus size={12} /> New playlist…
             </button>
           )}
           {ownId && Number.isInteger(index) && (
             <button
+              role="menuitem"
               className="danger"
               onClick={() => done(api.control('ytPlaylist', { op: 'remove', id: ownId, index }))}
             >
@@ -144,7 +217,7 @@ function OwnLists({ onPick, skip }) {
     <>
       <div className="menu-sect">Add to playlist</div>
       {lists.slice(0, 12).map((p) => (
-        <button key={p.id} onClick={() => onPick(p.id)}>
+        <button key={p.id} role="menuitem" onClick={() => onPick(p.id)}>
           {p.name}
         </button>
       ))}
@@ -615,8 +688,11 @@ function ListView({ list, state, onBack }) {
         ) : (
           <span
             className="t"
-            title={list.own ? 'Click to rename' : undefined}
+            title={list.own ? 'Click (or Enter) to rename' : undefined}
+            role={list.own ? 'button' : undefined}
+            tabIndex={list.own ? 0 : undefined}
             onClick={() => list.own && (setName(shown), setRenaming(true))}
+            onKeyDown={(e) => list.own && pressed(e) && (setName(shown), setRenaming(true))}
           >
             {shown}
           </span>
@@ -765,16 +841,19 @@ export function YtQueue({ state }) {
     <>
       <div className="sect">
         Track {q.index + 1} of {q.items.length}
-        {upcoming.length > 1 && ' · drag ⋮⋮ to reorder'}
+        {upcoming.length > 1 && ' · drag ⋮⋮ or Alt+↑↓ to reorder · Delete removes'}
       </div>
       {!upcoming.length && (
         <div className="muted pad">Nothing after this song. Press + beside any song to add it.</div>
       )}
       {upcoming.map((v, i) => {
         const at = first + i
+        // keyed by the song (and which time it comes), not its place: a song moved by the
+        // keyboard keeps its row, and the focus with it
+        const nth = upcoming.slice(0, i).filter((x) => x.videoId === v.videoId).length
         return (
           <div
-            key={v.videoId + at}
+            key={`${v.videoId}:${nth}`}
             className={`row yt-row q-row ${over === at && from !== at ? 'drop' : ''}`}
             onDragOver={(e) => {
               if (from === null) return
@@ -808,8 +887,34 @@ export function YtQueue({ state }) {
               className="row-text"
               role="button"
               tabIndex={0}
-              title="Play it now"
+              title="Play it now · Alt+↑↓ moves it · Delete takes it out"
+              aria-label={`${v.name || `Video ${at + 1}`}: Enter plays it, Alt+Up or Down moves it, Delete takes it out`}
               onClick={() => api.control('queueJump', at)}
+              onKeyDown={(e) => {
+                if (pressed(e)) return api.control('queueJump', at)
+                const last = first + upcoming.length - 1
+                if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                  e.preventDefault()
+                  const to = e.key === 'ArrowUp' ? at - 1 : at + 1
+                  if (to >= first && to <= last) api.control('queueMove', { from: at, to })
+                } else if (!e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                  // between the songs to come
+                  e.preventDefault()
+                  const row = e.currentTarget.closest('.q-row')
+                  const to =
+                    e.key === 'ArrowUp' ? row.previousElementSibling : row.nextElementSibling
+                  to?.querySelector('.row-text')?.focus()
+                } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.preventDefault()
+                  // the focus goes on to the next song (or back to the one before)
+                  const row = e.currentTarget.closest('.q-row')
+                  const near = row.nextElementSibling?.classList.contains('q-row')
+                    ? row.nextElementSibling
+                    : row.previousElementSibling
+                  near?.querySelector('.row-text')?.focus()
+                  api.control('queueRemove', at)
+                }
+              }}
             >
               {/* Titles of a pasted playlist aren't known until each video loads. */}
               <div className="t">{v.name || `Video ${at + 1}`}</div>

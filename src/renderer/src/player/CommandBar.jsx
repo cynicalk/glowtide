@@ -190,8 +190,9 @@ export default function CommandBar() {
   const parsed = useMemo(() => parseCommand(text), [text])
   const source = state?.source
   const query = parsed.query
-  // YouTube's catalogue, from any source, once Google is signed in
-  const ytOK = source === 'youtube' || !!state?.google
+  // YouTube's catalogue, from any source (the official search when Google is signed in,
+  // YouTube Music's own otherwise)
+  const ytOK = true
 
   // Spotify: search as you type (10 results a type, the most Spotify now allows)
   useEffect(() => {
@@ -491,8 +492,7 @@ export default function CommandBar() {
         )}
         {query && !searchable && !parsed.command && !parsed.suggestions.length && (
           <div className="cmd-empty">
-            Searching for songs needs Spotify, or a Google sign-in for YouTube (Library). Commands
-            work with any app.
+            Searching for songs needs Spotify or YouTube Music. Commands work with any app.
           </div>
         )}
       </div>

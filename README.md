@@ -60,9 +60,11 @@ Open the command bar with **Ctrl+Alt+G** and type, or press **Ctrl+Alt+V** and s
 - "Play Blinding Lights by The Weeknd" · "Add Levitating to the queue"
 
 Songs come from Spotify when it's connected, and from **YouTube** when Spotify doesn't have the
-song (or can't play it, as on a Free account), once you've signed in with Google. Typed searches
-show YouTube too: press Enter on **Search YouTube for …**. Say "switch to Spotify" or "switch to
-YouTube" to change where songs come from.
+song (or can't play it, as on a Free account). Typed searches show YouTube too: press Enter on
+**Search YouTube for …**. Say "switch to Spotify" or "switch to YouTube" to change where songs
+come from. YouTube songs are found with the official YouTube search when you've signed in with
+Google, and otherwise (or once its daily allowance is used up) with YouTube Music's own search;
+either way they play in YouTube's official player.
 
 Turn on **"Hey Glow"** (Settings → App → Voice) and just say it, hands-free. The music
 dips while you talk. Your voice is understood **on your PC**, and nothing you say is saved

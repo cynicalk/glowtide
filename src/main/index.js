@@ -67,6 +67,7 @@ import { createCallDucker } from './calls'
 import { createHeadphoneWatch } from './headphones'
 import { createRemote, fetchAllowed } from './remote'
 import { createVoice, microphones, VOICE_SCHEME } from './voice'
+import { searchMusic } from './innertube'
 
 // where the share card may fetch a cover from: the music services' picture hosts
 const CARD_COVER_HOSTS =
@@ -919,13 +920,26 @@ async function spotifyControl(action, arg) {
 async function query(kind, arg) {
   if (kind === 'demoTracks') return demo.tracks.map(({ palette, ...t }) => t) // eslint-disable-line no-unused-vars
   try {
+    // YouTube search: the official API when Google is signed in; YouTube Music's own search
+    // as the backup (no sign-in, no quota), and when the official one fails
+    if (kind === 'ytSearch') {
+      if (googleAuth.isConnected()) {
+        try {
+          return await yt.search(arg)
+        } catch (e) {
+          const found = await searchMusic(arg).catch(() => null)
+          if (found?.length) return found
+          throw e
+        }
+      }
+      return await searchMusic(arg)
+    }
     if (kind.startsWith('yt')) {
       if (!googleAuth.isConnected())
         return { error: 'Sign in with Google to load your YouTube library.', needsGoogle: true }
       if (kind === 'ytPlaylists') return await yt.playlists()
       if (kind === 'ytPlaylistItems') return await yt.playlistItems(arg)
       if (kind === 'ytLiked') return await yt.likedMusic()
-      if (kind === 'ytSearch') return await yt.search(arg)
       return null
     }
     if (state.source !== 'spotify') return { error: 'Connect Spotify first.' }

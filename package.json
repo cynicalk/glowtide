@@ -1,6 +1,6 @@
 {
   "name": "glowtide",
-  "version": "1.0.39",
+  "version": "1.0.40",
   "description": "A music companion for Windows: album-coloured edge glow and word-by-word lyrics for any music app, YouTube Music or Spotify",
   "main": "./out/main/index.js",
   "author": "cynicalk",

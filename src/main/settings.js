@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS = {
   // how YouTube is searched: 'innertube' (YouTube's own search: no sign-in, no daily limit) or
   // 'official' (the YouTube Data API: Google sign-in, a daily quota); the other is the backup
   ytSearch: 'innertube',
+  // YouTube in the player: 'cover' (the song's art, with the video small in a corner) or 'video'
+  ytView: 'cover',
   clientId: '', // Spotify
   googleClientId: '',
   googleClientSecret: '', // a Google "desktop app" secret is not confidential by design

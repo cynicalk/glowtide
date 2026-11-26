@@ -717,7 +717,7 @@ function onYtMessage(raw) {
     // Metadata from our own API calls is cleaner; a pasted link has only an id, so parse the title.
     const meta = ytMeta.get(m.videoId)
     const parsed = meta?.name
-      ? { artist: meta.artist, title: meta.name }
+      ? { artist: meta.artist || meta.artists, title: meta.name }
       : parseYouTubeTitle(m.title, m.author)
     const track = {
       id: `yt:${m.videoId}`,

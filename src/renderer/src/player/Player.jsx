@@ -29,7 +29,8 @@ import {
   Expand,
   ImageIcon,
   Share2,
-  ChartColumn
+  ChartColumn,
+  Video
 } from 'lucide-react'
 import { api, fmtTime, useColours, useDisplays, useGlowtide, usePosition } from '../lib/store'
 import { lineIndexAt } from '../../../shared/lyrics.mjs'
@@ -409,6 +410,7 @@ function NowPlaying({
   const repeatNext = { off: 'context', context: 'track', track: 'off' }[playback?.repeat || 'off']
   const synced = state.lyricsStatus === 'synced' && lyrics.length > 0
   const yt = state.source === 'youtube'
+  const ytCover = yt && !!track?.cover && settings.ytView !== 'video'
   // Free Spotify: Spotify won't take remote control, so Glowtide follows along instead.
   const followOnly = state.source === 'spotify' && state.spotifyPlan === 'free'
   const sys = state.source === 'system'
@@ -479,7 +481,25 @@ function NowPlaying({
         <div className="np-card">
           <div className="np-left">
             {yt ? (
-              <YouTubeStage state={state} onOpenLibrary={() => setPanel('library')} />
+              // Cover: the song's art, like Spotify's, with the video small in its corner (YouTube's
+              // player has to stay on screen, at least 200x200). The player keeps its place in the
+              // page either way, so switching never reloads it or stops the song.
+              <div className={`yt-wrap ${ytCover ? 'as-cover' : ''}`}>
+                {ytCover && (
+                  <img className="yt-art" src={track.cover} alt={`${track.name} cover`} />
+                )}
+                <YouTubeStage state={state} onOpenLibrary={() => setPanel('library')} />
+                {track && (
+                  <button
+                    className="yt-view"
+                    title={ytCover ? 'Show the video' : 'Show the cover'}
+                    onClick={() => api.setSettings({ ytView: ytCover ? 'video' : 'cover' })}
+                  >
+                    {ytCover ? <Video size={14} /> : <ImageIcon size={14} />}
+                    {ytCover ? 'Video' : 'Cover'}
+                  </button>
+                )}
+              </div>
             ) : track?.cover ? (
               <div
                 className={`cover ${playing ? 'moving' : ''}`}

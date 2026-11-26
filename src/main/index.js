@@ -1694,32 +1694,94 @@ function showCommand({ listen = false } = {}) {
 
 // ---------- the mini player beside the tray (Settings → App → Mini player) ----------
 const MINI_H = 56
+// how big it is: everything in it grows together (the page is zoomed to match)
+const MINI_SCALE = { small: 0.8, medium: 1, large: 1.3, xl: 1.6 }
 let miniPlace = ''
 
-/** Wide enough for the song and the buttons chosen. */
+/** Wide enough for the song and the buttons chosen, at the size chosen. */
 function miniSize() {
   const m = loadSettings().mini || {}
   const extra = ['like', 'shuffle', 'repeat'].filter((k) => m[k]).length
-  return { width: 300 + 34 * extra, height: MINI_H }
+  const k = MINI_SCALE[m.size] || 1
+  return { width: Math.round((300 + 34 * extra) * k), height: Math.round(MINI_H * k) }
 }
 
-/** Just above the taskbar (or below a top taskbar), at the clock's end, on the main display. */
+/**
+ * Where you dragged it (kept on a screen, whatever the screens are now), or else just above
+ * the taskbar (below a top taskbar), at the clock's end, on the main display.
+ */
 function placeMini() {
   if (!miniWin || miniWin.isDestroyed()) return
-  const d = screen.getPrimaryDisplay()
-  const wa = d.workArea
   const { width, height } = miniSize()
-  const top = wa.y > d.bounds.y // the taskbar is at the top
-  const b = {
-    x: Math.round(wa.x + wa.width - width - 12),
-    y: Math.round(top ? wa.y + 10 : wa.y + wa.height - height - 10),
-    width,
-    height
+  const pos = loadSettings().mini?.pos
+  let b
+  if (pos?.moved && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+    const wa = screen.getDisplayMatching({ x: pos.x, y: pos.y, width, height }).workArea
+    const fit = (v, lo, size, room) => Math.round(Math.max(lo, Math.min(v, lo + room - size)))
+    b = {
+      x: fit(pos.x, wa.x, width, wa.width),
+      y: fit(pos.y, wa.y, height, wa.height),
+      width,
+      height
+    }
+  } else {
+    const d = screen.getPrimaryDisplay()
+    const wa = d.workArea
+    const top = wa.y > d.bounds.y // the taskbar is at the top
+    b = {
+      x: Math.round(wa.x + wa.width - width - 12),
+      y: Math.round(top ? wa.y + 10 : wa.y + wa.height - height - 10),
+      width,
+      height
+    }
   }
   const key = JSON.stringify(b)
   if (key === miniPlace) return
   miniPlace = key
   miniWin.setBounds(b)
+}
+
+/** Dragged somewhere: remembered there. */
+function onMiniMoved() {
+  if (!miniWin || miniWin.isDestroyed()) return
+  const b = miniWin.getBounds()
+  const key = JSON.stringify(b)
+  if (key === miniPlace) return // where Glowtide put it
+  miniPlace = key
+  setSettings({ mini: { pos: { x: b.x, y: b.y, moved: true } } })
+}
+
+/** Right-click on the mini player: its size, its place, the player. */
+function miniMenu() {
+  if (!miniWin || miniWin.isDestroyed()) return
+  const m = loadSettings().mini || {}
+  const size = (id, label) => ({
+    label,
+    type: 'radio',
+    checked: (m.size || 'medium') === id,
+    click: () => setSettings({ mini: { size: id } })
+  })
+  Menu.buildFromTemplate([
+    {
+      label: 'Open the player',
+      click: () => {
+        player?.show()
+        player?.focus()
+      }
+    },
+    { type: 'separator' },
+    size('small', 'Small'),
+    size('medium', 'Medium'),
+    size('large', 'Large'),
+    size('xl', 'Extra large'),
+    { type: 'separator' },
+    {
+      label: 'Back to the corner',
+      enabled: !!m.pos?.moved,
+      click: () => setSettings({ mini: { pos: { moved: false } } })
+    },
+    { label: 'Turn off the mini player', click: () => setSettings({ mini: { enabled: false } }) }
+  ]).popup({ window: miniWin })
 }
 
 /** Shown while it's on and a song is loaded, hidden while a full-screen app covers it. */
@@ -1752,6 +1814,12 @@ function syncMini() {
       webPreferences: { ...prefs }
     })
     miniWin.setAlwaysOnTop(true, 'pop-up-menu')
+    miniWin.on('moved', onMiniMoved)
+    // a right-click where it's dragged by would open Windows' own window menu: ours instead
+    miniWin.on('system-context-menu', (e) => {
+      e.preventDefault()
+      miniMenu()
+    })
     miniWin.on('closed', () => {
       miniWin = null
       miniPlace = ''
@@ -1923,6 +1991,7 @@ function registerIpc() {
     player?.focus()
   })
   handle('quick:close', () => quickWin?.hide())
+  handle('mini:menu', () => miniMenu())
   handle('command:close', () => commandWin?.hide())
   // voice: the speech model, and the music turned down while you speak
   handle('voice:status', () => voice?.status() ?? null)

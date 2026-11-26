@@ -3553,6 +3553,11 @@ html[data-route='mini'] #root {
   box-shadow: 0 0 14px -4px color-mix(in srgb, var(--glow) 70%, transparent);
   color: var(--text);
   user-select: none;
+  /* dragged by anything that isn't a button (Windows moves the window) */
+  -webkit-app-region: drag;
+}
+.mini button {
+  -webkit-app-region: no-drag;
 }
 .mini-art {
   flex: none;

@@ -796,10 +796,34 @@ export default function SettingsPanel({ state, settings, onClose }) {
               </div>
             </div>
           )}
+          {settings.mini?.enabled && (
+            <div className="srow">
+              <span>Size</span>
+              <Seg
+                value={settings.mini.size || 'medium'}
+                options={[
+                  ['small', 'Small'],
+                  ['medium', 'Medium'],
+                  ['large', 'Large'],
+                  ['xl', 'Extra large']
+                ]}
+                onChange={(v) => set({ mini: { size: v } })}
+              />
+            </div>
+          )}
+          {settings.mini?.enabled && settings.mini.pos?.moved && (
+            <div className="srow">
+              <span>Where it sits</span>
+              <button className="pill" onClick={() => set({ mini: { pos: { moved: false } } })}>
+                Back to the corner
+              </button>
+            </div>
+          )}
           <p className="fine">
             The cover, the song and previous / play / next, just above the taskbar on your main
-            display. Click the cover for the player. It hides while nothing plays and while a game
-            or video fills the screen.
+            display. Drag it by the song to put it anywhere; it stays where you leave it.
+            Right-click it to change its size. Click the cover for the player. It hides while
+            nothing plays and while a game or video fills the screen.
           </p>
         </Fold>
       )}

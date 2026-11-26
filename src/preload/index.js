@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('glowtide', {
   installUpdate: () => ipcRenderer.invoke('update:install'),
   quit: () => ipcRenderer.invoke('app:quit'),
   showPlayer: () => ipcRenderer.invoke('player:show'),
+  miniMenu: () => ipcRenderer.invoke('mini:menu'),
   closeQuick: () => ipcRenderer.invoke('quick:close'),
   closeCommand: () => ipcRenderer.invoke('command:close'),
   onCommandOpen: on('command:open'),

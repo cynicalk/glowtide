@@ -1,16 +1,26 @@
+import { useEffect } from 'react'
 import { Heart, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from 'lucide-react'
 import { api, useColours, useGlowtide } from '../lib/store'
+
+// as the main process sizes its window (main/index.js MINI_SCALE)
+const SCALE = { small: 0.8, medium: 1, large: 1.3, xl: 1.6 }
 
 const REPEAT_NEXT = { off: 'context', context: 'track', track: 'off' }
 
 /**
  * The mini player beside the tray: the cover (a click opens the player), the song, and
  * previous / play / next, with like, shuffle and repeat if chosen in Settings → App. It
- * never takes focus from the app you're in.
+ * never takes focus from the app you're in. Drag it anywhere by the song; right-click it for
+ * its size and to put it back by the clock.
  */
 export default function MiniPlayer() {
   const { state, settings } = useGlowtide()
   const colours = useColours(state, settings)
+  const scale = SCALE[settings?.mini?.size] || 1
+  // everything grows with the window: the whole page is zoomed
+  useEffect(() => {
+    document.documentElement.style.zoom = String(scale)
+  }, [scale])
   if (!state || !settings) return null
   const t = state.track
   const pb = state.playback
@@ -26,7 +36,14 @@ export default function MiniPlayer() {
       (!!state.spotifyBridge &&
         ['play', 'pause', 'next', 'previous', 'seek', 'shuffle', 'repeat'].includes(a)))
   return (
-    <div className="mini" style={{ '--glow': colours?.glow || '#7c5cff' }}>
+    <div
+      className="mini"
+      style={{ '--glow': colours?.glow || '#7c5cff' }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        api.miniMenu()
+      }}
+    >
       <button
         className="mini-art"
         aria-label="Open the player"
@@ -35,7 +52,8 @@ export default function MiniPlayer() {
       >
         {t?.thumb || t?.cover ? <img src={t.thumb || t.cover} alt="" /> : null}
       </button>
-      <div className="mini-text" title={t ? `${t.name} — ${t.artists}` : ''}>
+      {/* drag it by the song (and the space around) */}
+      <div className="mini-text">
         <div className="mini-title">{t?.name || 'Nothing playing'}</div>
         <div className="mini-artist">{t?.artists || ''}</div>
       </div>
@@ -44,8 +62,14 @@ export default function MiniPlayer() {
           <button
             className={`mb ${state.liked ? 'on' : ''}`}
             aria-label="Like"
-            title={state.source === 'spotify' ? 'Like' : 'Like · with Spotify'}
-            disabled={state.source !== 'spotify' || state.liked == null}
+            title={
+              state.source === 'spotify' || state.source === 'youtube'
+                ? 'Like'
+                : 'Like · with Spotify or YouTube'
+            }
+            disabled={
+              (state.source !== 'spotify' && state.source !== 'youtube') || state.liked == null
+            }
             onClick={() => api.control('like', !state.liked)}
           >
             <Heart size={14} fill={state.liked ? 'currentColor' : 'none'} />

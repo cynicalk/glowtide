@@ -73,7 +73,15 @@ export const DEFAULT_SETTINGS = {
   fps: 30, // the glow and lyrics overlay: 30 (lighter) or 60 (smoother)
   shortcuts: DEFAULT_SHORTCUTS, // global shortcuts, Electron accelerators ('' = none)
   // the mini player beside the tray: on or off, and which extra buttons it shows
-  mini: { enabled: false, like: false, shuffle: false, repeat: false },
+  // size: 'small' | 'medium' | 'large' | 'xl'; pos: where you dragged it (moved: false, by the clock)
+  mini: {
+    enabled: false,
+    like: false,
+    shuffle: false,
+    repeat: false,
+    size: 'medium',
+    pos: { x: 0, y: 0, moved: false }
+  },
   // behind the player (and the full-screen view, if asked): the blurred cover, flowing
   // colours, or your own picture or video (copied into the settings folder)
   background: { kind: 'cover', opacity: 70, fullscreen: false, file: '', version: 0 },

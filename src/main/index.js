@@ -1510,9 +1510,9 @@ let drag = null
 function stopDrag() {
   if (!drag) return
   clearInterval(drag.timer)
-  const { win } = drag
+  const { win, moved } = drag
   drag = null
-  if (win === miniWin) onMiniMoved()
+  if (win === miniWin && moved) onMiniMoved(true)
 }
 function dragWindow(win, phase) {
   if (!win || win.isDestroyed()) return
@@ -1526,6 +1526,8 @@ function dragWindow(win, phase) {
     timer: setInterval(() => {
       if (win.isDestroyed() || Date.now() > until) return stopDrag()
       const p = screen.getCursorScreenPoint()
+      if (p.x === c.x && p.y === c.y && !drag.moved) return // a click, not a drag
+      drag.moved = true
       win.setPosition(Math.round(x + p.x - c.x), Math.round(y + p.y - c.y))
     }, 16)
   }
@@ -1794,6 +1796,8 @@ function miniSize() {
  */
 function placeMini() {
   if (!miniWin || miniWin.isDestroyed()) return
+  // being dragged: it goes where the pointer takes it (this runs with every song update)
+  if (drag?.win === miniWin) return
   const { width, height } = miniSize()
   const pos = loadSettings().mini?.pos
   let b
@@ -1823,13 +1827,15 @@ function placeMini() {
   miniWin.setBounds(b)
 }
 
-/** Dragged somewhere: remembered there. */
-function onMiniMoved() {
+/** Dragged somewhere: remembered there. force: a drag Glowtide ran (see dragWindow). */
+function onMiniMoved(force = false) {
   if (!miniWin || miniWin.isDestroyed()) return
   const b = miniWin.getBounds()
   const key = JSON.stringify(b)
-  if (key === miniPlace) return // where Glowtide put it
+  if (key === miniPlace && !force) return // where Glowtide put it
   miniPlace = key
+  const pos = loadSettings().mini?.pos
+  if (pos?.moved && pos.x === b.x && pos.y === b.y) return
   setSettings({ mini: { pos: { x: b.x, y: b.y, moved: true } } })
 }
 

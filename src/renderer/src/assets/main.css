@@ -4415,10 +4415,11 @@ html[data-route='showcase'] body {
   opacity: 1;
 }
 .player.max .yt-wrap.as-cover {
-  width: min(56vw, 70vh, 820px);
+  /* as big as any other cover maximised: room for the song, the bar and the buttons */
+  width: min(52vh, 40vw, 620px);
 }
 .player.max .yt-wrap.as-cover {
-  --yt-size: 260px;
+  --yt-size: 220px; /* YouTube asks for at least 200 */
 }
 /* the grip that moves the video in the cover view, on its top edge (the video can't be
    dragged itself: the pointer belongs to YouTube's player there) */

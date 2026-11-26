@@ -9,8 +9,13 @@ export function dragHandlers() {
   return {
     onPointerDown: (e) => {
       if (e.button !== 0 || e.target.closest('button, input, a')) return
-      e.currentTarget.setPointerCapture(e.pointerId)
       api.dragWindow('start')
+      try {
+        // the release comes here even if the pointer runs ahead of the window
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } catch {
+        /* the window follows the pointer, so the release still lands on it */
+      }
     },
     onPointerUp: end,
     onPointerCancel: end,

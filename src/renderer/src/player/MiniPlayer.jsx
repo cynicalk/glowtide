@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { Heart, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from 'lucide-react'
-import { api, useColours, useGlowtide } from '../lib/store'
+import { api, useColours, useGlowtide, usePosition } from '../lib/store'
 import { dragHandlers } from '../lib/drag'
+import { lineIndexAt } from '../../../shared/lyrics.mjs'
 
 // as the main process sizes its window (main/index.js MINI_SCALE)
 const SCALE = { small: 0.8, medium: 1, large: 1.3, xl: 1.6 }
@@ -15,7 +16,7 @@ const REPEAT_NEXT = { off: 'context', context: 'track', track: 'off' }
  * its size and to put it back by the clock.
  */
 export default function MiniPlayer() {
-  const { state, settings } = useGlowtide()
+  const { state, settings, lyrics } = useGlowtide()
   const colours = useColours(state, settings)
   const scale = SCALE[settings?.mini?.size] || 1
   // everything grows with the window: the whole page is zoomed
@@ -57,7 +58,7 @@ export default function MiniPlayer() {
       {/* drag it by the song (and the space around) */}
       <div className="mini-text">
         <div className="mini-title">{t?.name || 'Nothing playing'}</div>
-        <div className="mini-artist">{t?.artists || ''}</div>
+        <MiniSub state={state} lyrics={lyrics} on={!!m.lyric} />
       </div>
       <div className="mini-btns">
         {m.like && (
@@ -127,6 +128,29 @@ export default function MiniPlayer() {
           </button>
         )}
       </div>
+      {m.progress !== false && t && <MiniProgress state={state} />}
     </div>
+  )
+}
+
+/** A thin bar along the bottom: how far into the song. */
+function MiniProgress({ state }) {
+  const d = state.track?.durationMs || 0
+  const pos = usePosition(state.playback, d, 1000)
+  const pct = d ? Math.min(100, (pos / d) * 100) : 0
+  return (
+    <div className="mini-progress" aria-hidden="true">
+      <i style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
+
+/** Under the song: the line being sung (if chosen, and the song has timed lyrics), or the artist. */
+function MiniSub({ state, lyrics, on }) {
+  const synced = on && state.lyricsStatus === 'synced' && lyrics?.length > 0
+  const pos = usePosition(state.playback, state.track?.durationMs, synced ? 250 : 60000)
+  const line = synced ? lyrics[lineIndexAt(lyrics, pos + (state.lyricsOffsetMs || 0))]?.text : null
+  return (
+    <div className={`mini-artist ${line ? 'lyric' : ''}`}>{line || state.track?.artists || ''}</div>
   )
 }

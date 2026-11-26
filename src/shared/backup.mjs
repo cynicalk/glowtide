@@ -50,7 +50,7 @@ export function makeBackup({
     offsets: offsets || {},
     plays: plays || [],
     favs: favs || [],
-    ytLibrary: ytLibrary || { liked: [], lists: [], recent: [] }
+    ytLibrary: ytLibrary || { liked: [], lists: [], recent: [], own: [] }
   }
 }
 
@@ -131,7 +131,8 @@ export function readBackup(raw) {
   const ytLibrary = {
     liked: Array.isArray(yl.liked) ? yl.liked.slice(0, 2000) : [],
     lists: Array.isArray(yl.lists) ? yl.lists.slice(0, 300) : [],
-    recent: Array.isArray(yl.recent) ? yl.recent.slice(0, 50) : []
+    recent: Array.isArray(yl.recent) ? yl.recent.slice(0, 50) : [],
+    own: Array.isArray(yl.own) ? yl.own.slice(0, 100) : []
   }
 
   return {

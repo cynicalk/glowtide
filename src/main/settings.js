@@ -15,6 +15,8 @@ export const DEFAULT_SETTINGS = {
   ytView: 'cover',
   // where you dragged the video in the cover view: how far from its corner, in pixels
   ytFloat: { x: 0, y: 0 },
+  // where you dragged the small player (YouTube, minimised); moved: false, by the clock
+  smallPos: { x: 0, y: 0, moved: false },
   // minimising while YouTube plays: 'small' (a small video window in the corner, still playing)
   // or 'pause' (minimised, and YouTube pauses: its terms don't allow play with the video hidden)
   ytMinimize: 'small',
@@ -85,7 +87,9 @@ export const DEFAULT_SETTINGS = {
     shuffle: false,
     repeat: false,
     size: 'medium',
-    pos: { x: 0, y: 0, moved: false }
+    pos: { x: 0, y: 0, moved: false },
+    progress: true, // a thin bar under it, how far into the song
+    lyric: false // the line being sung, in place of the artist
   },
   // behind the player (and the full-screen view, if asked): the blurred cover, flowing
   // colours, or your own picture or video (copied into the settings folder)

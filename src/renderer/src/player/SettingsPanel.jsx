@@ -810,6 +810,31 @@ export default function SettingsPanel({ state, settings, onClose }) {
           )}
           {settings.mini?.enabled && (
             <div className="srow">
+              <span>Also show</span>
+              <div className="seg small">
+                {[
+                  ['progress', 'Progress bar'],
+                  ['lyric', 'Lyric line']
+                ].map(([k, label]) => (
+                  <button
+                    key={k}
+                    className={settings.mini[k] ? 'on' : ''}
+                    aria-pressed={!!settings.mini[k]}
+                    title={
+                      k === 'lyric'
+                        ? 'The line being sung, in place of the artist (songs with timed lyrics)'
+                        : 'A thin bar along the bottom: how far into the song'
+                    }
+                    onClick={() => set({ mini: { [k]: !settings.mini[k] } })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {settings.mini?.enabled && (
+            <div className="srow">
               <span>Size</span>
               <Seg
                 value={settings.mini.size || 'medium'}

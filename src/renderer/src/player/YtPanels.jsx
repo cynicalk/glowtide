@@ -7,7 +7,11 @@ import {
   ExternalLink,
   ListPlus,
   Bookmark,
-  BookmarkCheck
+  BookmarkCheck,
+  MoreHorizontal,
+  Plus,
+  X,
+  GripVertical
 } from 'lucide-react'
 import { api } from '../lib/store'
 import { parseYouTubeLink } from '../../../shared/youtube.mjs'
@@ -30,11 +34,11 @@ function Loading() {
   return <div className="muted pad">Loading…</div>
 }
 
-function Row({ thumb, title, sub, active, onPlay, onQueue, square }) {
+function Row({ thumb, title, sub, active, onPlay, onQueue, square, song, ownId, index }) {
   // a picture YouTube won't serve: the plain square instead of a broken image
   const [failed, setFailed] = useState(null)
   return (
-    <div className={`row ${active ? 'active' : ''}`} onDoubleClick={onPlay}>
+    <div className={`row yt-row ${active ? 'active' : ''}`} onDoubleClick={onPlay}>
       {thumb && failed !== thumb ? (
         <img src={thumb} alt="" className={square ? '' : 'wide'} onError={() => setFailed(thumb)} />
       ) : (
@@ -54,12 +58,102 @@ function Row({ thumb, title, sub, active, onPlay, onQueue, square }) {
           <ListPlus size={13} />
         </button>
       )}
+      {song && <SongMenu song={song} ownId={ownId} index={index} />}
     </div>
   )
 }
 
-/** Songs: click one to play the list from it; the + adds it to the queue. */
-function TrackList({ items, state, empty = 'Nothing here' }) {
+/**
+ * The ⋯ beside a song: play it next, add it to the queue or to one of your playlists (or a
+ * new one), or take it out of the playlist it's in.
+ */
+function SongMenu({ song, ownId, index }) {
+  const [open, setOpen] = useState(false)
+  const [naming, setNaming] = useState(false)
+  const [name, setName] = useState('')
+  const box = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e) => !box.current?.contains(e.target) && setOpen(false)
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [open])
+  const done = (p) => {
+    p.then?.(() => {})
+    setOpen(false)
+    setNaming(false)
+    setName('')
+  }
+  return (
+    <div className="song-menu" ref={box}>
+      <button
+        className="rd sm ghost"
+        aria-label="More"
+        title="Play next, add to a playlist…"
+        onClick={() => setOpen(!open)}
+      >
+        <MoreHorizontal size={13} />
+      </button>
+      {open && (
+        <div className="menu-pop" role="menu">
+          <button onClick={() => done(api.control('queueNext', song))}>Play next</button>
+          <button onClick={() => done(api.control('queue', song))}>Add to queue</button>
+          <OwnLists
+            onPick={(id) => done(api.control('ytPlaylist', { op: 'add', id, song }))}
+            skip={ownId}
+          />
+          {naming ? (
+            <input
+              className="field"
+              autoFocus
+              placeholder="Playlist name"
+              value={name}
+              maxLength={100}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && name.trim())
+                  done(api.control('ytPlaylist', { op: 'new', name: name.trim(), song }))
+                if (e.key === 'Escape') setNaming(false)
+              }}
+            />
+          ) : (
+            <button onClick={() => setNaming(true)}>
+              <Plus size={12} /> New playlist…
+            </button>
+          )}
+          {ownId && Number.isInteger(index) && (
+            <button
+              className="danger"
+              onClick={() => done(api.control('ytPlaylist', { op: 'remove', id: ownId, index }))}
+            >
+              Remove from this playlist
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** "Add to …" for each of your playlists (not the one the song is in). */
+function OwnLists({ onPick, skip }) {
+  const mine = useQuery('ytMine', null, [])
+  const lists = (mine?.own || []).filter((p) => p.id !== skip)
+  if (!lists.length) return null
+  return (
+    <>
+      <div className="menu-sect">Add to playlist</div>
+      {lists.slice(0, 12).map((p) => (
+        <button key={p.id} onClick={() => onPick(p.id)}>
+          {p.name}
+        </button>
+      ))}
+    </>
+  )
+}
+
+/** Songs: click one to play the list from it; + adds it to the queue, ⋯ for the rest. */
+function TrackList({ items, state, empty = 'Nothing here', ownId }) {
   if (!items?.length) return <div className="muted pad">{empty}</div>
   return items.map((v, i) => (
     <Row
@@ -70,6 +164,9 @@ function TrackList({ items, state, empty = 'Nothing here' }) {
       active={state.track?.videoId === v.videoId}
       onPlay={() => api.control('playItems', { items, index: i })}
       onQueue={() => api.control('queue', v)}
+      song={v}
+      ownId={ownId}
+      index={i}
     />
   ))
 }
@@ -299,9 +396,55 @@ function AccountLikedList({ state }) {
 function Playlists({ state, settings, onOpen }) {
   const mine = useMine(state)
   const [setup, setSetup] = useState(false)
+  const [naming, setNaming] = useState(false)
+  const [name, setName] = useState('')
   if (mine === undefined) return <Loading />
+  const create = async () => {
+    const r = await api.control('ytPlaylist', { op: 'new', name: name.trim() })
+    setNaming(false)
+    setName('')
+    if (r?.id) onOpen({ id: r.id, playlistId: r.id, name: name.trim(), own: true })
+  }
   return (
     <>
+      <div className="sect sect-row">
+        <span>Your playlists</span>
+        {!naming && (
+          <button className="pill" onClick={() => setNaming(true)}>
+            <Plus size={12} /> New playlist
+          </button>
+        )}
+      </div>
+      {naming && (
+        <div className="paste-row">
+          <input
+            className="field"
+            autoFocus
+            placeholder="Name it, then press Enter"
+            value={name}
+            maxLength={100}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && name.trim()) create()
+              if (e.key === 'Escape') setNaming(false)
+            }}
+          />
+        </div>
+      )}
+      {mine.own.map((p) => (
+        <Row
+          key={p.id}
+          square
+          thumb={p.songs[0]?.thumb}
+          title={p.name}
+          sub={`${p.songs.length} ${p.songs.length === 1 ? 'song' : 'songs'}`}
+          onPlay={() => onOpen({ id: p.id, playlistId: p.id, name: p.name, own: true })}
+        />
+      ))}
+      {!mine.own.length && !naming && (
+        <div className="muted pad">Make one with New playlist, or from the ⋯ beside any song.</div>
+      )}
+      <div className="sect">Saved from YouTube</div>
       {mine.lists.length ? (
         <ListRows lists={mine.lists} onOpen={onOpen} />
       ) : (
@@ -360,23 +503,68 @@ function Recent({ state }) {
 /** An album's or playlist's songs, with Play and Save (to Library → Playlists). */
 function ListView({ list, state, onBack }) {
   const id = list.playlistId || list.id
-  const d = useQuery('ytListSongs', { playlistId: id, mine: !!list.mine })
+  // your own playlist changes as you edit it: asked again with the library
+  const d = useQuery('ytListSongs', { playlistId: id, mine: !!list.mine }, [
+    list.own ? state.ytLibRev : 0
+  ])
   const mine = useMine(state)
   const saved = !!mine?.lists?.some((p) => p.id === id)
   const items = d?.items || []
+  const [renaming, setRenaming] = useState(false)
+  const [name, setName] = useState(list.name)
+  const [sure, setSure] = useState(false)
+  const shown = (list.own && d?.name) || list.name
   return (
     <>
       <div className="pl-head">
         <button className="rd sm" aria-label="Back" onClick={onBack}>
           <ChevronLeft size={14} />
         </button>
-        <span className="t">{list.name}</span>
+        {renaming ? (
+          <input
+            className="field"
+            autoFocus
+            value={name}
+            maxLength={100}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => setRenaming(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && name.trim()) {
+                api.control('ytPlaylist', { op: 'rename', id, name: name.trim() })
+                setRenaming(false)
+              }
+              if (e.key === 'Escape') setRenaming(false)
+            }}
+          />
+        ) : (
+          <span
+            className="t"
+            title={list.own ? 'Click to rename' : undefined}
+            onClick={() => list.own && (setName(shown), setRenaming(true))}
+          >
+            {shown}
+          </span>
+        )}
         {items.length > 0 && (
           <button className="pill" onClick={() => api.control('playItems', { items, index: 0 })}>
             <Play size={12} /> Play
           </button>
         )}
-        {!list.mine && (
+        {list.own && (
+          <button
+            className={`pill ${sure ? 'danger' : ''}`}
+            title="Delete this playlist"
+            onClick={() => {
+              if (!sure) return setSure(true)
+              api.control('ytPlaylist', { op: 'delete', id })
+              onBack()
+            }}
+            onMouseLeave={() => setSure(false)}
+          >
+            {sure ? 'Delete?' : 'Delete'}
+          </button>
+        )}
+        {!list.mine && !list.own && (
           <button
             className={`pill ${saved ? 'on' : ''}`}
             title={saved ? 'Saved in Library → Playlists · click to remove' : 'Save to Library'}
@@ -398,7 +586,12 @@ function ListView({ list, state, onBack }) {
         <TrackList
           items={items}
           state={state}
-          empty="YouTube didn't list its songs. It may be private."
+          ownId={list.own ? id : undefined}
+          empty={
+            list.own
+              ? 'No songs yet. Use the ⋯ beside any song, then Add to playlist.'
+              : "YouTube didn't list its songs. It may be private."
+          }
         />
       )}
     </>
@@ -476,30 +669,87 @@ export function YtSearch({ state, settings }) {
   )
 }
 
+/**
+ * What's coming up, to change: click a song to play it now, drag it (by its handle) to
+ * another place, × to take it out. + and ⋯ (Play next) beside any song add to it.
+ */
 export function YtQueue({ state }) {
   const q = state.ytQueue
-  if (!q?.items?.length)
+  const [from, setFrom] = useState(null) // the place being dragged
+  const [over, setOver] = useState(null)
+  if (!q?.items?.length || q.index < 0)
     return (
       <div className="muted pad">
-        Nothing lined up. Press + beside any song in Search or Library to add it.
+        Nothing lined up. Press + beside any song in Search or Library to add it, or ⋯ → Play next.
       </div>
     )
-  const upcoming = q.items.slice(q.index + 1, q.index + 41)
+  const first = q.index + 1 // play-order place of the first song to come
+  const upcoming = q.items.slice(first, first + 100)
   return (
     <>
       <div className="sect">
         Track {q.index + 1} of {q.items.length}
+        {upcoming.length > 1 && ' · drag ⋮⋮ to reorder'}
       </div>
-      {upcoming.map((v, i) => (
-        <div key={v.videoId + i} className="row">
-          <img src={`https://i.ytimg.com/vi/${v.videoId}/default.jpg`} alt="" className="wide" />
-          <div className="row-text">
-            {/* Titles of a pasted playlist aren't known until each video loads. */}
-            <div className="t">{v.name || `Video ${q.index + i + 2}`}</div>
-            <div className="s">{v.artists || 'Title shows when it plays'}</div>
+      {!upcoming.length && (
+        <div className="muted pad">Nothing after this song. Press + beside any song to add it.</div>
+      )}
+      {upcoming.map((v, i) => {
+        const at = first + i
+        return (
+          <div
+            key={v.videoId + at}
+            className={`row yt-row q-row ${over === at && from !== at ? 'drop' : ''}`}
+            onDragOver={(e) => {
+              if (from === null) return
+              e.preventDefault()
+              setOver(at)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (from !== null && from !== at) api.control('queueMove', { from, to: at })
+              setFrom(null)
+              setOver(null)
+            }}
+          >
+            <span
+              className="q-grip"
+              draggable
+              title="Drag to move"
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                setFrom(at)
+              }}
+              onDragEnd={() => {
+                setFrom(null)
+                setOver(null)
+              }}
+            >
+              <GripVertical size={13} />
+            </span>
+            <img src={`https://i.ytimg.com/vi/${v.videoId}/default.jpg`} alt="" className="wide" />
+            <div
+              className="row-text"
+              role="button"
+              tabIndex={0}
+              title="Play it now"
+              onClick={() => api.control('queueJump', at)}
+            >
+              {/* Titles of a pasted playlist aren't known until each video loads. */}
+              <div className="t">{v.name || `Video ${at + 1}`}</div>
+              <div className="s">{v.artists || 'Title shows when it plays'}</div>
+            </div>
+            <button
+              className="rd sm ghost"
+              aria-label="Remove from the queue"
+              title="Remove from the queue"
+              onClick={() => api.control('queueRemove', at)}
+            >
+              <X size={13} />
+            </button>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </>
   )
 }

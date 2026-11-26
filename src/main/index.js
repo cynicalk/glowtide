@@ -530,6 +530,32 @@ async function refreshSpotifyPlan() {
   }
 }
 
+// Spotify open on this PC, yet Spotify's servers know of no device at all: the app has lost
+// its connection (or is in Offline mode), so there's nothing for Glowtide to see or control.
+const SPOTIFY_OFFLINE =
+  "Spotify is open on this PC but isn't connected to Spotify, so Glowtide can't see or control it. Quit Spotify from its tray icon (right-click → Quit) and open it again, and check File → Offline mode is off."
+let offlineCheckAt = 0
+// Windows' own tool by its full path, never whatever "tasklist" is found first
+const TASKLIST_EXE = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tasklist.exe')
+function spotifyAppRunning() {
+  const r = spawnSync(TASKLIST_EXE, ['/FI', 'IMAGENAME eq Spotify.exe', '/NH', '/FO', 'CSV'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 3000
+  })
+  return /"Spotify\.exe"/i.test(r.stdout || '')
+}
+/** Nothing playing as far as Spotify's servers know: is that because the app is offline? */
+async function checkSpotifyOffline() {
+  if (Date.now() - offlineCheckAt < 20000) return // now and then, not every poll
+  offlineCheckAt = Date.now()
+  const d = await spotify.devices().catch(() => null)
+  if (!d) return
+  const offline = !d.devices?.length && spotifyAppRunning()
+  if (offline) state.error = SPOTIFY_OFFLINE
+  else if (state.error === SPOTIFY_OFFLINE) state.error = null
+}
+
 let pollTimer = null
 async function poll() {
   clearTimeout(pollTimer)
@@ -576,9 +602,11 @@ async function poll() {
           sendLyrics()
         }
       }
+      if (!p) await checkSpotifyOffline()
+      else if (state.error === SPOTIFY_OFFLINE) state.error = null
       // Errors clear once their cause is gone: "no active device" as soon as Spotify reports
       // one (it was opened or picked), anything else except Premium on the next good poll.
-      if (state.error) {
+      if (state.error && state.error !== SPOTIFY_OFFLINE) {
         const deviceErr = /device/i.test(state.error)
         if (deviceErr ? !!p?.device : !/Premium/i.test(state.error)) state.error = null
         // Spotify only reports an *active* device once something plays; opening the app
@@ -899,8 +927,51 @@ async function playOnYouTube(arg) {
   return r?.error ? r : { ok: true, note }
 }
 
+/** Your own playlists in Glowtide: new, add, remove a song, rename, delete. */
+function ownPlaylist(arg) {
+  const op = arg?.op
+  let r = null
+  if (op === 'new') r = ytLibrary.newList(arg.name, arg.song)
+  else if (op === 'add') r = ytLibrary.addTo(arg.id, arg.song)
+  else if (op === 'remove') r = ytLibrary.removeFrom(arg.id, arg.index)
+  else if (op === 'rename') r = ytLibrary.rename(arg.id, arg.name)
+  else if (op === 'delete') r = ytLibrary.deleteList(arg.id)
+  if (!r) return { error: "That playlist couldn't be changed." }
+  state.ytLibRev = ytLibrary.rev()
+  broadcast()
+  return { ok: true, id: typeof r === 'string' ? r : undefined }
+}
+
+const QUEUE_EDITS = { queueNext: 1, queueRemove: 1, queueMove: 1, queueJump: 1 }
+/** Edits to the YouTube queue: play next, remove, move, jump to (play-order positions). */
+function ytQueueEdit(action, arg) {
+  const at = (v) => (Number.isInteger(v) && v >= 0 && v < 1000 ? v : null)
+  if (action === 'queueNext') {
+    const song = cleanSong(arg)
+    if (!song) return { error: "That isn't a YouTube song." }
+    if (!ytMeta.has(song.videoId) || song.name) ytMeta.set(song.videoId, song)
+    if (!state.track) return control('playItems', { items: [song], index: 0 })
+    ytCommand('next-up', { videoId: song.videoId })
+  } else if (action === 'queueRemove') {
+    if (at(arg) === null) return { error: 'Bad position.' }
+    ytCommand('remove', { at: arg })
+  } else if (action === 'queueMove') {
+    if (at(arg?.from) === null || at(arg?.to) === null) return { error: 'Bad position.' }
+    ytCommand('move', { from: arg.from, to: arg.to })
+  } else if (action === 'queueJump') {
+    if (at(arg) === null) return { error: 'Bad position.' }
+    ytCommand('jump', { at: arg })
+  }
+  return { ok: true }
+}
+
 async function control(action, arg) {
   if (action === 'playYouTube') return playOnYouTube(arg)
+  if (action === 'ytPlaylist') return ownPlaylist(arg)
+  if (QUEUE_EDITS[action]) {
+    if (state.source !== 'youtube') return { error: 'That works while YouTube plays.' }
+    return ytQueueEdit(action, arg)
+  }
   if (state.source === 'system') {
     const c = state.caps || {}
     const allowed = {
@@ -1071,6 +1142,14 @@ async function query(kind, arg) {
     // playlists, which may be private, from your account first when you're signed in
     if (kind === 'ytListSongs') {
       const id = typeof arg?.playlistId === 'string' ? arg.playlistId : ''
+      const mineHere = ytLibrary.ownList(id)
+      if (mineHere)
+        return {
+          items: mineHere.songs,
+          total: mineHere.songs.length,
+          name: mineHere.name,
+          own: true
+        }
       if (!/^[\w-]{2,64}$/.test(id)) return { error: "That isn't a YouTube playlist." }
       const official = async () =>
         googleAuth.isConnected()
@@ -1477,16 +1556,28 @@ function enterSmallPlayer() {
   if (player.isFullScreen()) player.setFullScreen(false)
   if (player.isMaximized()) player.unmaximize()
   smallFrom = player.getBounds()
-  const wa = screen.getDisplayMatching(smallFrom).workArea
-  // above the mini player when it's in its corner
-  const m = loadSettings().mini || {}
-  const lift = m.enabled && !m.pos?.moved && miniWin?.isVisible() ? miniSize().height + 8 : 0
   player.setMinimumSize(SMALL.width, SMALL.height)
-  player.setBounds({
-    x: Math.round(wa.x + wa.width - SMALL.width - 12),
-    y: Math.round(wa.y + wa.height - SMALL.height - 12 - lift),
-    ...SMALL
-  })
+  const saved = loadSettings().smallPos
+  if (saved?.moved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+    // where you last dragged it, kept on a screen
+    const wa = screen.getDisplayMatching({ ...SMALL, x: saved.x, y: saved.y }).workArea
+    const fit = (v, lo, size, room) => Math.round(Math.max(lo, Math.min(v, lo + room - size)))
+    player.setBounds({
+      x: fit(saved.x, wa.x, SMALL.width, wa.width),
+      y: fit(saved.y, wa.y, SMALL.height, wa.height),
+      ...SMALL
+    })
+  } else {
+    const wa = screen.getDisplayMatching(smallFrom).workArea
+    // above the mini player when it's in its corner
+    const m = loadSettings().mini || {}
+    const lift = m.enabled && !m.pos?.moved && miniWin?.isVisible() ? miniSize().height + 8 : 0
+    player.setBounds({
+      x: Math.round(wa.x + wa.width - SMALL.width - 12),
+      y: Math.round(wa.y + wa.height - SMALL.height - 12 - lift),
+      ...SMALL
+    })
+  }
   player.setAlwaysOnTop(true, 'floating')
   state.playerSmall = true
   broadcast()
@@ -1513,6 +1604,11 @@ function stopDrag() {
   const { win, moved } = drag
   drag = null
   if (win === miniWin && moved) onMiniMoved(true)
+  // the small player: there again next time
+  if (win === player && smallFrom && moved && !player.isDestroyed()) {
+    const [x, y] = player.getPosition()
+    setSettings({ smallPos: { x, y, moved: true } })
+  }
 }
 function dragWindow(win, phase) {
   if (!win || win.isDestroyed()) return
@@ -2657,6 +2753,8 @@ function scheduleSnapshot() {
       const named = [
         ['player', player],
         ['lyrics', lyricsWin],
+        ['mini', miniWin],
+        ['command', commandWin],
         ...glowWins.map((w, i) => [`glow${i}`, w]),
         ...(widgets ? widgets.windows() : []).map((w) => [w.widgetKind || 'stage', w])
       ]

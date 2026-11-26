@@ -225,6 +225,7 @@ const state = {
   // never covers Glowtide's settings or controls.
   playerFocused: false,
   playerMaximized: false,
+  playerSmall: false, // the small player in the corner (YouTube, minimised)
   // Another app fills a display (a game, a full-screen video): the overlays there step aside.
   fullscreenApp: false,
   // Glowtide's own full-screen view is open on the lyrics overlay's display: the overlay keeps
@@ -1122,6 +1123,7 @@ function syncYtBackground() {
 
 function setSource(src) {
   if (state.source === 'youtube' && src !== 'youtube') ytCommand('pause')
+  if (src !== 'youtube') leaveSmallPlayer()
   if (src === 'system') smtc.start()
   else smtc.stop()
   if (src !== 'system') {
@@ -1398,9 +1400,15 @@ function createPlayer() {
     thumbKey = ''
     syncThumbar()
   })
-  // Without a taskbar button, a minimised player would have nowhere to come back from:
-  // it goes to the tray instead.
+  // Minimised while YouTube plays: the small player in the corner instead, so the video stays
+  // on screen and the song plays on. Otherwise, without a taskbar button, a minimised player
+  // would have nowhere to come back from: it goes to the tray instead.
   player.on('minimize', () => {
+    if (wantsSmallPlayer()) {
+      player.restore()
+      enterSmallPlayer()
+      return
+    }
     if (!loadSettings().showInTaskbar) player.hide()
   })
   player.on('close', (e) => {
@@ -1410,8 +1418,12 @@ function createPlayer() {
     }
   })
   // YouTube's terms don't allow playing with the player hidden, so YouTube pauses with the window.
-  const pauseYt = () => state.source === 'youtube' && control('pause')
-  player.on('hide', pauseYt)
+  // (minimised into the small player, it plays on: the video is still on screen)
+  const pauseYt = () => state.source === 'youtube' && !smallFrom && control('pause')
+  player.on('hide', () => {
+    leaveSmallPlayer() // hidden is hidden, small player or not; it opens full next time
+    pauseYt()
+  })
   player.on('minimize', pauseYt)
   const setFocused = (on) => {
     if (state.playerFocused === on) return
@@ -1447,6 +1459,76 @@ function createPlayer() {
     return { action: 'deny' }
   })
   load(player, 'player')
+}
+
+// ---------- the small player: YouTube, minimised, still on screen ----------
+// YouTube can't play with its video hidden, so minimising while it plays turns the player into
+// a small window in the corner (the video, at least 200 x 200 as YouTube asks, and a strip
+// with the controls), on top of other windows, until it's opened again.
+const SMALL = { width: 356, height: 200 + 46 }
+let smallFrom = null // the player's place before it became small
+
+function wantsSmallPlayer() {
+  return state.source === 'youtube' && !!state.track && loadSettings().ytMinimize !== 'pause'
+}
+
+function enterSmallPlayer() {
+  if (!player || player.isDestroyed() || smallFrom) return
+  if (player.isFullScreen()) player.setFullScreen(false)
+  if (player.isMaximized()) player.unmaximize()
+  smallFrom = player.getBounds()
+  const wa = screen.getDisplayMatching(smallFrom).workArea
+  // above the mini player when it's in its corner
+  const m = loadSettings().mini || {}
+  const lift = m.enabled && !m.pos?.moved && miniWin?.isVisible() ? miniSize().height + 8 : 0
+  player.setMinimumSize(SMALL.width, SMALL.height)
+  player.setBounds({
+    x: Math.round(wa.x + wa.width - SMALL.width - 12),
+    y: Math.round(wa.y + wa.height - SMALL.height - 12 - lift),
+    ...SMALL
+  })
+  player.setAlwaysOnTop(true, 'floating')
+  state.playerSmall = true
+  broadcast()
+}
+
+function leaveSmallPlayer() {
+  if (!player || player.isDestroyed() || !smallFrom) return
+  const back = smallFrom
+  smallFrom = null
+  player.setAlwaysOnTop(false)
+  player.setMinimumSize(420, 580)
+  player.setBounds(back)
+  state.playerSmall = false
+  broadcast()
+}
+
+// ---------- moving a frameless window by dragging inside it ----------
+// Windows' own dragging doesn't reach the mini player (it never takes focus), so a window is
+// moved here: from the press to the release, it follows the pointer.
+let drag = null
+function stopDrag() {
+  if (!drag) return
+  clearInterval(drag.timer)
+  const { win } = drag
+  drag = null
+  if (win === miniWin) onMiniMoved()
+}
+function dragWindow(win, phase) {
+  if (!win || win.isDestroyed()) return
+  if (phase !== 'start') return stopDrag()
+  stopDrag()
+  const c = screen.getCursorScreenPoint()
+  const [x, y] = win.getPosition()
+  const until = Date.now() + 60000 // never left following the pointer
+  drag = {
+    win,
+    timer: setInterval(() => {
+      if (win.isDestroyed() || Date.now() > until) return stopDrag()
+      const p = screen.getCursorScreenPoint()
+      win.setPosition(Math.round(x + p.x - c.x), Math.round(y + p.y - c.y))
+    }, 16)
+  }
 }
 
 function overlayWindow(bounds, route, { exact = false } = {}) {
@@ -1887,7 +1969,14 @@ function rebuildTray() {
   })
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Show player', click: () => (player.show(), player.focus()) },
+      {
+        label: 'Show player',
+        click: () => {
+          leaveSmallPlayer()
+          player.show()
+          player.focus()
+        }
+      },
       { type: 'separator' },
       src('system', 'Any app'),
       src('spotify', 'Spotify'),
@@ -1986,12 +2075,14 @@ function registerIpc() {
     app.quit()
   })
   handle('player:show', () => {
+    leaveSmallPlayer()
     quickWin?.hide()
     player?.show()
     player?.focus()
   })
   handle('quick:close', () => quickWin?.hide())
   handle('mini:menu', () => miniMenu())
+  handle('win:drag', (e, phase) => dragWindow(BrowserWindow.fromWebContents(e.sender), phase))
   handle('command:close', () => commandWin?.hide())
   // voice: the speech model, and the music turned down while you speak
   handle('voice:status', () => voice?.status() ?? null)
@@ -2371,8 +2462,16 @@ function registerIpc() {
     }))
   })
   handle('window', (_, action) => {
-    if (action === 'minimize') player?.minimize()
+    if (action === 'minimize') {
+      if (wantsSmallPlayer()) enterSmallPlayer()
+      else player?.minimize()
+    }
+    if (action === 'unsmall') {
+      leaveSmallPlayer()
+      player?.focus()
+    }
     if (action === 'maximize') {
+      leaveSmallPlayer()
       if (player?.isFullScreen()) player.setFullScreen(false)
       else if (player?.isMaximized()) player.unmaximize()
       else player?.maximize()
@@ -2860,6 +2959,7 @@ else {
     tray.on('click', () => toggleQuick())
     tray.on('double-click', () => {
       quickWin?.hide()
+      leaveSmallPlayer()
       player.show()
       player.focus()
     })

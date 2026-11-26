@@ -57,6 +57,7 @@ import StatsPanel from './StatsPanel'
 import YouTubeStage from './YouTubeStage'
 import { SearchPanel, LibraryPanel, QueuePanel, DevicesPanel } from './Panels'
 import { YtSearch, YtLibrary, YtQueue } from './YtPanels'
+import SmallPlayerBar from './SmallPlayerBar'
 import { SystemInfo, SystemApps } from './SystemPanels'
 
 const LYRIC_STATUS = {
@@ -93,7 +94,7 @@ export default function Player() {
 
   return (
     <div
-      className={`player ${fade} ${state.playerMaximized ? 'max' : ''} ${settings.hints === false ? 'no-hints' : ''}`}
+      className={`player ${fade} ${state.playerMaximized ? 'max' : ''} ${state.playerSmall ? 'small' : ''} ${settings.hints === false ? 'no-hints' : ''}`}
       style={{
         '--glow': colours.glow,
         '--lyr': colours.lyrics,
@@ -103,6 +104,7 @@ export default function Player() {
       }}
     >
       {screen === 'player' && !settings.tourDone && <Tour settings={settings} />}
+      {state.playerSmall && <SmallPlayerBar state={state} />}
       <TitleBar
         tag={screen === 'player' ? tag : null}
         maximized={state.playerMaximized}

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Heart, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from 'lucide-react'
 import { api, useColours, useGlowtide } from '../lib/store'
+import { dragHandlers } from '../lib/drag'
 
 // as the main process sizes its window (main/index.js MINI_SCALE)
 const SCALE = { small: 0.8, medium: 1, large: 1.3, xl: 1.6 }
@@ -39,6 +40,7 @@ export default function MiniPlayer() {
     <div
       className="mini"
       style={{ '--glow': colours?.glow || '#7c5cff' }}
+      {...dragHandlers()}
       onContextMenu={(e) => {
         e.preventDefault()
         api.miniMenu()

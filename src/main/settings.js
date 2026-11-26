@@ -13,6 +13,9 @@ export const DEFAULT_SETTINGS = {
   ytSearch: 'innertube',
   // YouTube in the player: 'cover' (the song's art, with the video small in a corner) or 'video'
   ytView: 'cover',
+  // minimising while YouTube plays: 'small' (a small video window in the corner, still playing)
+  // or 'pause' (minimised, and YouTube pauses: its terms don't allow play with the video hidden)
+  ytMinimize: 'small',
   clientId: '', // Spotify
   googleClientId: '',
   googleClientSecret: '', // a Google "desktop app" secret is not confidential by design

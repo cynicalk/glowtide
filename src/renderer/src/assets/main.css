@@ -3553,11 +3553,8 @@ html[data-route='mini'] #root {
   box-shadow: 0 0 14px -4px color-mix(in srgb, var(--glow) 70%, transparent);
   color: var(--text);
   user-select: none;
-  /* dragged by anything that isn't a button (Windows moves the window) */
-  -webkit-app-region: drag;
-}
-.mini button {
-  -webkit-app-region: no-drag;
+  /* dragged by anything that isn't a button (see dragWindow in the main process) */
+  cursor: grab;
 }
 .mini-art {
   flex: none;
@@ -4421,4 +4418,64 @@ html[data-route='showcase'] body {
 .player.max .yt-wrap.as-cover .yt-stage {
   width: 260px;
   height: 260px;
+}
+
+/* ---------- the small player: YouTube, minimised, still on screen ---------- */
+/* Everything but the video and the strip under it is hidden (not removed: the YouTube player
+   stays where it is, so it never reloads). */
+.player.small > *:not(.small-bar) {
+  visibility: hidden;
+}
+.player.small .yt-stage,
+.player.small .yt-stage * {
+  visibility: visible;
+}
+.player.small .yt-stage {
+  position: fixed !important;
+  inset: 0 0 46px 0 !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  transform: none !important;
+  z-index: 60;
+}
+.player.small .yt-empty {
+  display: none;
+}
+.small-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 46px;
+  z-index: 61;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px 0 12px;
+  background: #0d0b10;
+  border-top: 1px solid color-mix(in srgb, var(--glow) 35%, rgba(255, 255, 255, 0.08));
+  color: var(--text);
+  user-select: none;
+  cursor: grab;
+}
+.small-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.2;
+}
+.small-title,
+.small-artist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.small-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+.small-artist {
+  font-size: 10.5px;
+  color: var(--muted);
 }

@@ -753,12 +753,24 @@ export default function SettingsPanel({ state, settings, onClose }) {
             a day. The other one steps in if the chosen one can&apos;t answer. Songs play in
             YouTube&apos;s official player either way.
           </p>
-          {state.source === 'youtube' && (
-            <p className="fine">
-              YouTube plays in Glowtide’s window and pauses when the window is hidden or minimised.
-              YouTube’s terms don’t allow playing with the video hidden. YouTube may show ads.
-            </p>
-          )}
+          <div className="srow">
+            <span>Minimising while YouTube plays</span>
+            <Seg
+              value={settings.ytMinimize === 'pause' ? 'pause' : 'small'}
+              options={[
+                ['small', 'Small player'],
+                ['pause', 'Minimise and pause']
+              ]}
+              onChange={(v) => set({ ytMinimize: v })}
+            />
+          </div>
+          <p className="fine">
+            YouTube can’t play with its video hidden (its terms), so minimising Glowtide while it
+            plays turns it into a small player in the corner, on top of your other windows: the
+            video and the controls, and the song plays on. Drag its strip to move it; the ⤢ button
+            (or a double-click) brings the full player back. Hiding Glowtide to the tray still
+            pauses YouTube. YouTube may show ads.
+          </p>
         </Fold>
       )}
 

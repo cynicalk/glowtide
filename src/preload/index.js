@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('glowtide', {
   quit: () => ipcRenderer.invoke('app:quit'),
   showPlayer: () => ipcRenderer.invoke('player:show'),
   miniMenu: () => ipcRenderer.invoke('mini:menu'),
+  dragWindow: (phase) => ipcRenderer.invoke('win:drag', phase),
   closeQuick: () => ipcRenderer.invoke('quick:close'),
   closeCommand: () => ipcRenderer.invoke('command:close'),
   onCommandOpen: on('command:open'),

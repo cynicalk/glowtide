@@ -736,6 +736,23 @@ export default function SettingsPanel({ state, settings, onClose }) {
               <span className="acct muted">Links only · sign in from Library</span>
             )}
           </div>
+          <div className="srow">
+            <span>Search YouTube with</span>
+            <Seg
+              value={settings.ytSearch === 'official' ? 'official' : 'innertube'}
+              options={[
+                ['innertube', 'InnerTube'],
+                ['official', 'YouTube API']
+              ]}
+              onChange={(v) => set({ ytSearch: v })}
+            />
+          </div>
+          <p className="fine">
+            InnerTube is YouTube&apos;s own search: no sign-in and no daily limit. The YouTube API
+            is the official one: it needs the Google sign-in (Library) and allows about 100 searches
+            a day. The other one steps in if the chosen one can&apos;t answer. Songs play in
+            YouTube&apos;s official player either way.
+          </p>
           {state.source === 'youtube' && (
             <p className="fine">
               YouTube plays in Glowtide’s window and pauses when the window is hidden or minimised.

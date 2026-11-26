@@ -4324,3 +4324,11 @@ html[data-route='showcase'] body {
 .stats-fav .rd {
   color: var(--hi);
 }
+
+/* YouTube: another upload of a song being found, quietly */
+.finding {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}

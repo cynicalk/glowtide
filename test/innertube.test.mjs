@@ -122,3 +122,89 @@ test('the search goes to one address and reports trouble plainly', async () => {
     /Couldn't reach YouTube Music/
   )
 })
+
+test('YouTube video search: songs from videos, no live streams or long mixes', async () => {
+  const { parseVideoSearch } = await import('../src/shared/innertube.mjs')
+  const { parseYouTubeTitle } = await import('../src/shared/youtube.mjs')
+  const v = (videoId, title, channel, length) => ({
+    videoRenderer: {
+      videoId,
+      title: { runs: [{ text: title }] },
+      ownerText: { runs: [{ text: channel }] },
+      lengthText: length ? { simpleText: length } : undefined
+    }
+  })
+  const json = {
+    contents: {
+      twoColumnSearchResultsRenderer: {
+        primaryContents: {
+          sectionListRenderer: {
+            contents: [
+              {
+                itemSectionRenderer: {
+                  contents: [
+                    v(
+                      'AAAAAAAAAA1',
+                      'Some Artist - First Song (Official Video)',
+                      'SomeArtistVEVO',
+                      '3:30'
+                    ),
+                    v('BBBBBBBBBB2', 'A live stream', 'Radio', null),
+                    v('CCCCCCCCCC3', '10 hour mix', 'Mixes', '10:00:00'),
+                    v('bad', 'Bad id', 'X', '3:00')
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+  const songs = parseVideoSearch(json, parseYouTubeTitle)
+  assert.deepEqual(
+    songs.map((s) => s.videoId),
+    ['AAAAAAAAAA1']
+  )
+  assert.equal(songs[0].durationMs, 210000)
+  assert.equal(songs[0].name, 'First Song')
+  assert.equal(songs[0].artist, 'Some Artist')
+})
+
+test('another upload of a song that will not play', async () => {
+  const { pickAnotherUpload } = await import('../src/shared/innertube.mjs')
+  const r = (videoId, rawTitle, durationMs = 240000) => ({
+    videoId,
+    rawTitle,
+    name: rawTitle,
+    durationMs
+  })
+  const results = [
+    r('AAAAAAAAAA1', 'Kesariya - Brahmastra | Official Video'), // the one that failed
+    r('BBBBBBBBBB2', 'Kesariya - Live at the stadium'),
+    r('CCCCCCCCCC3', 'Some other song entirely'),
+    r('DDDDDDDDDD4', 'Kesariya - Brahmastra (Official Video)', 600000), // far too long
+    r('EEEEEEEEEE5', 'Kesariya - Brahmastra | Official Lyric Video'),
+    r('FFFFFFFFFF6', 'Kesariya Brahmastra Arijit Singh')
+  ]
+  // the lyric upload first; not the one tried, the live one, another song, or a long one
+  const first = pickAnotherUpload(results, {
+    name: 'Kesariya',
+    durationMs: 240000,
+    tried: ['AAAAAAAAAA1']
+  })
+  assert.equal(first?.videoId, 'EEEEEEEEEE5')
+  const second = pickAnotherUpload(results, {
+    name: 'Kesariya',
+    durationMs: 240000,
+    tried: ['AAAAAAAAAA1', 'EEEEEEEEEE5']
+  })
+  assert.equal(second?.videoId, 'FFFFFFFFFF6')
+  assert.equal(pickAnotherUpload(results, { name: 'Unrelated title', tried: [] }), null)
+  assert.equal(pickAnotherUpload([], { name: 'Kesariya' }), null)
+  // a live song may take a live upload
+  const live = pickAnotherUpload([r('BBBBBBBBBB2', 'Kesariya - Live at the stadium')], {
+    name: 'Kesariya (Live)'
+  })
+  assert.equal(live?.videoId, 'BBBBBBBBBB2')
+})

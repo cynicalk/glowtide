@@ -62,9 +62,9 @@ Open the command bar with **Ctrl+Alt+G** and type, or press **Ctrl+Alt+V** and s
 Songs come from Spotify when it's connected, and from **YouTube** when Spotify doesn't have the
 song (or can't play it, as on a Free account). Typed searches show YouTube too: press Enter on
 **Search YouTube for …**. Say "switch to Spotify" or "switch to YouTube" to change where songs
-come from. YouTube songs are found with the official YouTube search when you've signed in with
-Google, and otherwise (or once its daily allowance is used up) with YouTube Music's own search;
-either way they play in YouTube's official player.
+come from. YouTube songs are found with YouTube's own search (no sign-in, no daily limit), or
+with the official YouTube API if you choose it in Settings → App → Music source; either way
+they play in YouTube's official player.
 
 Turn on **"Hey Glow"** (Settings → App → Voice) and just say it, hands-free. The music
 dips while you talk. Your voice is understood **on your PC**, and nothing you say is saved
@@ -220,10 +220,11 @@ Uninstall from Windows Settings → Apps; your settings folder stays unless you 
 - **Spotify:** controlling playback needs Premium. Spotify limits apps like this one to 10
   search results per type, and to the songs of playlists you made yourself; other playlists
   still play.
-- **YouTube:** some videos can't be played outside YouTube (Glowtide skips them, and the
-  song's YouTube Music upload usually works). YouTube may show ads. It pauses while
-  Glowtide's window is hidden, as YouTube's rules require. Each search uses 1% of your free
-  daily allowance.
+- **YouTube:** some uploads can't be played outside YouTube; Glowtide quietly finds another
+  upload of the same song (often a lyric or audio video). YouTube may show ads. It pauses
+  while Glowtide's window is hidden or minimised, as YouTube's rules require. The player runs
+  on a small public page, [cynicalk.github.io/glowtide-player](https://github.com/cynicalk/glowtide-player),
+  because YouTube won't play most music on a page served from your own PC.
 - **Word-by-word timing** comes from a community database of about 3,500 songs. For other
   songs the line timing is real and the word timing within a line is estimated (Glowtide
   says so).

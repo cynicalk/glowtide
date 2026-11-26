@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { api } from '../lib/store'
 
 /**
- * Frames the local page that hosts YouTube's official player and relays messages:
+ * Frames the page that hosts YouTube's official player (on GitHub Pages: see main/ytHost.js)
+ * and relays messages:
  * player state -> main process, commands from main -> player.
  * The video is shown, never hidden: YouTube's terms require a visible player.
  */
@@ -30,8 +31,11 @@ export default function YouTubeStage({ state, onOpenLibrary }) {
       <iframe
         ref={frame}
         title="YouTube player"
-        src={`${origin}/yt`}
+        src={state.ytPageUrl}
         allow="autoplay; encrypted-media; picture-in-picture"
+        // a page on the web: it may run its scripts and the player, open YouTube links (in the
+        // browser, see the player window's link handler) and go full screen, nothing more
+        sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"
         referrerPolicy="strict-origin-when-cross-origin"
       />
       {!state.track && (

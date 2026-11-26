@@ -42,7 +42,7 @@ import { loadSettings, updateSettings } from './settings'
 import { REDIRECT_URI } from './oauth'
 import { createSpotify, createSpotifyAuth, slimTrack } from './spotify'
 import { createGoogleAuth, createYouTube } from './youtube'
-import { startYtHost, YT_HOST_ORIGIN } from './ytHost'
+import { YT_HOST_ORIGIN, YT_PAGE_URL } from './ytHost'
 import { fetchLyrics, myLyrics, lyricsCandidates } from './lyricsSource'
 import { choose as chooseLyrics } from './lyricChoice'
 import { saveMyLrc, removeMyLrc, myLrc } from './myLyrics'
@@ -67,7 +67,8 @@ import { createCallDucker } from './calls'
 import { createHeadphoneWatch } from './headphones'
 import { createRemote, fetchAllowed } from './remote'
 import { createVoice, microphones, VOICE_SCHEME } from './voice'
-import { searchMusic } from './innertube'
+import { searchMusic, searchVideos } from './innertube'
+import { pickAnotherUpload } from '../shared/innertube.mjs'
 
 // where the share card may fetch a cover from: the music services' picture hosts
 const CARD_COVER_HOSTS =
@@ -205,6 +206,7 @@ const state = {
   google: false,
   ytReady: false,
   ytHostOrigin: YT_HOST_ORIGIN,
+  ytPageUrl: YT_PAGE_URL,
   ytQueue: null,
   track: null,
   palette: null,
@@ -596,7 +598,82 @@ async function poll() {
   pollTimer = setTimeout(poll, delay)
 }
 
-function onYtMessage(m) {
+// A song YouTube won't play in Glowtide (its owner allows it only on YouTube, or it never
+// started): another upload of the same song is found and played in its place, up to three,
+// before Glowtide says so and moves on. The player page waits a few seconds for it.
+const REFUSED = new Set([100, 101, 150, 'stalled'])
+const altTried = new Map() // the song's first upload -> the uploads tried for it
+const altOf = new Map() // an upload played in another's place -> that first upload
+async function playAnotherUpload(videoId, code) {
+  const origin = altOf.get(videoId) || videoId
+  const tried = altTried.get(origin) || [origin]
+  if (!tried.includes(videoId)) tried.push(videoId)
+  altTried.set(origin, tried)
+  const meta = ytMeta.get(origin) || ytMeta.get(videoId)
+  const name = meta?.name || (state.track?.videoId === videoId ? state.track.name : '')
+  const artist = meta?.artists || meta?.artist || ''
+  const giveUp = () => {
+    const what = name ? `“${name}”` : 'this song'
+    state.error = `YouTube doesn't let ${what} play outside YouTube.`
+    if ((state.ytQueue?.items?.length || 0) > 1) {
+      state.error += ' Skipping to the next one.'
+      ytCommand('next')
+    }
+    ytErrorVideo = videoId
+    broadcast()
+  }
+  if (!name || tried.length > 3) return giveUp()
+  state.error = null
+  state.ytFinding = true
+  broadcast()
+  let alt = null
+  try {
+    const found = await searchVideos(`${name} ${artist}`.trim())
+    alt = pickAnotherUpload(found, { name, durationMs: meta?.durationMs || 0, tried })
+  } catch {
+    /* no search: nothing to try */
+  }
+  state.ytFinding = false
+  if (!alt) return giveUp()
+  if (process.env.GLOWTIDE_DEBUG)
+    console.log('[yt] another upload', videoId, code, '->', alt.videoId)
+  tried.push(alt.videoId)
+  altOf.set(alt.videoId, origin)
+  // shown, and looked up for lyrics, as the song it stands in for
+  ytMeta.set(alt.videoId, {
+    ...(meta || {}),
+    ...alt,
+    name,
+    artists: artist || alt.artists,
+    artist: artist || alt.artist
+  })
+  ytCommand('replace', { from: videoId, videoId: alt.videoId })
+  broadcast()
+}
+
+/** What the player page says, checked: it's a page on the web, so nothing is taken on trust. */
+const YT_ID = /^[\w-]{11}$/
+function cleanYtMessage(m) {
+  if (!m || typeof m !== 'object' || typeof m.type !== 'string') return null
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  return {
+    type: m.type,
+    videoId: typeof m.videoId === 'string' && YT_ID.test(m.videoId) ? m.videoId : null,
+    title: typeof m.title === 'string' ? m.title.slice(0, 300) : '',
+    author: typeof m.author === 'string' ? m.author.slice(0, 200) : '',
+    duration: Math.max(0, num(m.duration)),
+    time: Math.max(0, num(m.time)),
+    state: Number.isInteger(m.state) ? m.state : null,
+    code: Number.isInteger(m.code) || m.code === 'stalled' ? m.code : null,
+    playlist: Array.isArray(m.playlist)
+      ? m.playlist.filter((id) => typeof id === 'string' && YT_ID.test(id)).slice(0, 200)
+      : null,
+    index: Number.isInteger(m.index) ? m.index : -1
+  }
+}
+
+function onYtMessage(raw) {
+  const m = cleanYtMessage(raw)
   if (process.env.GLOWTIDE_DEBUG)
     console.log('[yt]', m?.type, m?.state ?? '', m?.code ?? '', m?.videoId ?? '', m?.title ?? '')
   if (state.source !== 'youtube' || !m) return
@@ -605,8 +682,10 @@ function onYtMessage(m) {
     return broadcast()
   }
   if (m.type === 'error') {
+    // refused by its owner (or never started): another upload of the song, quietly
+    if (REFUSED.has(m.code) && m.videoId) return void playAnotherUpload(m.videoId, m.code)
     state.error = YT_ERRORS[m.code] || `YouTube player error ${m.code}`
-    // The host page skips ahead only inside a playlist; say so only then.
+    // The player page skips ahead only inside a list; say so only then.
     if ((state.ytQueue?.items?.length || 0) > 1) state.error += ' Skipping to the next one.'
     ytErrorVideo = m.videoId || null
     return broadcast()
@@ -920,17 +999,17 @@ async function spotifyControl(action, arg) {
 async function query(kind, arg) {
   if (kind === 'demoTracks') return demo.tracks.map(({ palette, ...t }) => t) // eslint-disable-line no-unused-vars
   try {
-    // YouTube search: the official API when Google is signed in; YouTube Music's own search
-    // as the backup (no sign-in, no quota), and when the official one fails
+    // YouTube search: the one chosen in Settings first (YouTube's own search, InnerTube: no
+    // sign-in, no quota; or the official API: Google sign-in, a daily quota), the other behind
+    // it, and YouTube Music's own search last
     if (kind === 'ytSearch') {
-      if (googleAuth.isConnected()) {
-        try {
-          return await yt.search(arg)
-        } catch (e) {
-          const found = await searchMusic(arg).catch(() => null)
-          if (found?.length) return found
-          throw e
-        }
+      const official = async () =>
+        googleAuth.isConnected() ? await yt.search(arg).catch(() => null) : null
+      const own = () => searchVideos(arg).catch(() => null)
+      const order = loadSettings().ytSearch === 'official' ? [official, own] : [own, official]
+      for (const search of order) {
+        const found = await search()
+        if (found?.length) return found
       }
       return await searchMusic(arg)
     }
@@ -959,6 +1038,17 @@ async function query(kind, arg) {
   return null
 }
 
+/**
+ * While YouTube plays in the player window, Chromium mustn't treat the window as in the
+ * background when other windows cover it: it would hold back the next song (and stall the
+ * one playing) until the window came to the front. Covered isn't hidden: hidden or
+ * minimised, YouTube still pauses, as its terms want.
+ */
+function syncYtBackground() {
+  if (player && !player.isDestroyed())
+    player.webContents.setBackgroundThrottling(state.source !== 'youtube')
+}
+
 function setSource(src) {
   if (state.source === 'youtube' && src !== 'youtube') ytCommand('pause')
   if (src === 'system') smtc.start()
@@ -970,6 +1060,7 @@ function setSource(src) {
   }
   state.source = src
   state.demo = src === 'demo'
+  syncYtBackground()
   state.error = null
   if (src !== 'demo') updateSettings({ source: src })
   clearTrack()
@@ -1226,6 +1317,7 @@ function createPlayer() {
     webPreferences: { ...prefs, autoplayPolicy: 'no-user-gesture-required' }
   })
   player.setSkipTaskbar(!loadSettings().showInTaskbar)
+  syncYtBackground()
   // Started with Windows: Glowtide waits in the tray (the glow and lyrics still run) until it's opened.
   player.on('ready-to-show', () => {
     if (!startedAtLogin) player.show()
@@ -2577,15 +2669,10 @@ else {
     state.google = googleAuth.load()
     state.source = DEV && process.env.GLOWTIDE_DEMO === '1' ? 'demo' : s.source
     state.demo = state.source === 'demo'
+    syncYtBackground()
     state.systemSelected = s.systemApp || 'auto'
     smtc.select(state.systemSelected)
     if (state.source === 'system') smtc.start()
-
-    try {
-      await startYtHost()
-    } catch (e) {
-      state.error = `YouTube player couldn't start (${e.message}).`
-    }
 
     // Edge glow reacts to what the PC is playing: system audio loopback, never the
     // microphone, and only for Glowtide's own pages (see security.js).

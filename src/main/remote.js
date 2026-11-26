@@ -25,7 +25,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { REMOTE_HTML, REMOTE_JS, REMOTE_CSS } from './remotePage.js'
 
-export const REMOTE_PORT = 43823 // 43821 is the sign-in redirect, 43822 the YouTube player
+export const REMOTE_PORT = 43823 // 43821 is the sign-in redirect
 const CODE_MS = 3 * 60000
 const MAX_TRIES = 5
 const MAX_PHONES = 10

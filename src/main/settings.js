@@ -8,6 +8,9 @@ import { DEFAULT_SHORTCUTS } from '../shared/shortcuts.mjs'
 export const DEFAULT_SETTINGS = {
   source: null, // 'system' | 'spotify' | 'youtube' | 'demo' | null (not chosen yet)
   systemApp: 'auto', // which app's media session "Any app" follows
+  // how YouTube is searched: 'innertube' (YouTube's own search: no sign-in, no daily limit) or
+  // 'official' (the YouTube Data API: Google sign-in, a daily quota); the other is the backup
+  ytSearch: 'innertube',
   clientId: '', // Spotify
   googleClientId: '',
   googleClientSecret: '', // a Google "desktop app" secret is not confidential by design

@@ -659,6 +659,11 @@ function NowPlaying({
               />
             )}
             {state.error && <div className="error">{state.error}</div>}
+            {state.ytFinding && !state.error && (
+              <div className="finding" role="status">
+                Finding a version of this song that plays…
+              </div>
+            )}
           </div>
           {open && synced && settings.lyrics.style === 'messages' ? (
             <div className="pl-lyrics pl-msgs">

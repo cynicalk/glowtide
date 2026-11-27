@@ -74,7 +74,8 @@ export async function runRecord(c, dir) {
     },
     lyrics: { style: 'stack', backdrop: 'none', size: 110, showClock: false, spacing: 100 },
     colour: { lyricsOwn: false },
-    mini: { enabled: false, like: true, shuffle: false, repeat: true },
+    // medium: the mini player's size zooms the page it's in, and here that page is shared
+    mini: { enabled: false, like: true, shuffle: false, repeat: true, size: 'medium' },
     widgets: { stage: { style: 'ring', theme: 'album' } }
   })
 
@@ -143,9 +144,15 @@ export async function runRecord(c, dir) {
     }
   ]
 
+  // GLOWTIDE_RECORD_ONLY=<words in a caption>, GLOWTIDE_RECORD_SECS=<n>: one scene, for longer
+  const only = process.env.GLOWTIDE_RECORD_ONLY?.toLowerCase()
+  const secs = Number(process.env.GLOWTIDE_RECORD_SECS) || 0
+  const chosen = only ? scenes.filter((s) => s.caption.toLowerCase().includes(only)) : scenes
+  if (secs) for (const s of chosen) s.secs = secs
+
   const timeline = { fps: FPS, width: W, height: H, scenes: [] }
   let n = 0
-  for (const s of scenes) {
+  for (const s of chosen) {
     if (s.setup) await s.setup()
     await wait(600) // settle: nothing half-drawn in the first frame
     const start = n
@@ -164,6 +171,10 @@ export async function runRecord(c, dir) {
     timeline.scenes.push({ start, end: n, caption: s.caption })
   }
   timeline.frames = n
+  if (process.env.GLOWTIDE_RECORD_PROBE)
+    timeline.probe = await show.webContents.executeJavaScript(
+      `(() => { const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return [s, Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)] }; return { iw: innerWidth, ih: innerHeight, dpr: devicePixelRatio, u: getComputedStyle(document.querySelector('.lyr')).getPropertyValue('--u'), rects: ['.showcase', '.sc-layer', '.lyr', '.lyr-stage', '.sky-drift', '.fig:not(.gone)', '.fig:not(.gone) svg.sky:not(.sky-glow)', '.fig:not(.gone) .sky-star i'].map(r), path: document.querySelector('.fig:not(.gone) .sky-edge:not(.glow)')?.getBoundingClientRect().toJSON() } })()`
+    )
   writeFileSync(join(dir, 'timeline.json'), JSON.stringify(timeline, null, 1))
   clearInterval(ticker)
   for (const w of wins) if (!w.isDestroyed()) w.destroy()

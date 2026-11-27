@@ -328,12 +328,12 @@ html[data-route='stage'] body {
 /* a completed figure glows a little brighter for a moment */
 .fig.complete .sky-edge:not(.glow) {
   animation:
-    edge-draw 0.6s cubic-bezier(0.3, 0, 0.2, 1) var(--d, 0s) forwards,
-    edge-glow 2.4s ease-in-out 0.6s;
+    edge-draw 1.1s cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0s) forwards,
+    edge-glow 2.4s ease-in-out 1.1s;
 }
 @keyframes edge-glow {
   40% {
-    opacity: 1;
+    opacity: 0.9;
   }
 }
 /* the background stars drift slowly the other way, for depth */

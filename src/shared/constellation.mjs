@@ -21,37 +21,27 @@ export const FAMOUS = new Set(
   )
 )
 
-// A star's colour from its B-V colour index: hot blue-white through white and yellow to
-// cool orange-red. A little stronger than the eye sees them, so the difference shows.
-const STAR_COLOURS = [
-  [-0.3, [155, 178, 255]],
-  [0, [202, 216, 255]],
-  [0.3, [244, 244, 255]],
-  [0.6, [255, 244, 228]],
-  [0.9, [255, 226, 184]],
-  [1.2, [255, 206, 150]],
-  [1.5, [255, 182, 112]],
-  [1.9, [255, 150, 84]]
-]
-/** CSS colour for a B-V index; white when it isn't known. */
-export function starColour(bv) {
-  if (!Number.isFinite(bv)) return '#ffffff'
-  const t = STAR_COLOURS
-  if (bv <= t[0][0]) return `rgb(${t[0][1].join(',')})`
-  for (let i = 1; i < t.length; i++) {
-    if (bv <= t[i][0]) {
-      const k = (bv - t[i - 1][0]) / (t[i][0] - t[i - 1][0])
-      const c = t[i - 1][1].map((v, j) => Math.round(v + (t[i][1][j] - v) * k))
-      return `rgb(${c.join(',')})`
-    }
-  }
-  return `rgb(${t.at(-1)[1].join(',')})`
-}
-
 /** A star's radius (sky units) from its magnitude: the brighter, the bigger. */
 export function starRadius(star) {
   if (Number.isFinite(star.mag)) return Math.min(8.6, Math.max(3.4, 7.4 - 0.85 * star.mag))
   return star.m === 1 ? 6 : star.m === 2 ? 4.8 : 3.8
+}
+
+/**
+ * The path of a line between two stars, stopped short of each so the stars sit in a little
+ * clear space, as on a star chart. The gap grows with the star; on a short line each end
+ * gives up at most a third of it, so the line never disappears.
+ */
+export function edgePath(p, q) {
+  const dx = q.x - p.x
+  const dy = q.y - p.y
+  const len = Math.hypot(dx, dy)
+  if (!len) return `M${p.x} ${p.y}L${q.x} ${q.y}`
+  const gap = (s) => Math.min(len / 3, starRadius(s) * 1.5 + 6)
+  const a = gap(p) / len
+  const b = 1 - gap(q) / len
+  const r = (n) => Math.round(n * 10) / 10
+  return `M${r(p.x + dx * a)} ${r(p.y + dy * a)}L${r(p.x + dx * b)} ${r(p.y + dy * b)}`
 }
 
 export function seedOf(s) {

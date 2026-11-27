@@ -14,7 +14,7 @@ import {
   constellationAt,
   rand,
   seedOf,
-  starColour,
+  edgePath,
   starRadius,
   VIEW
 } from '../../../shared/constellation.mjs'
@@ -275,7 +275,7 @@ function FigureView({ sky, labelPx, gone }) {
       if (!shown(sky.stars[a]) || !shown(sky.stars[b])) return null
       const p = sky.stars[a]
       const q = sky.stars[b]
-      return { a, b, i, d: `M${p.x} ${p.y}L${q.x} ${q.y}` }
+      return { a, b, i, d: edgePath(p, q) }
     })
     .filter(Boolean)
   return (
@@ -332,9 +332,9 @@ function FigureView({ sky, labelPx, gone }) {
           />
         ))}
       </svg>
-      {/* Stars are small glowing spheres, each on its own layer like the words, so each can
-          twinkle at its own pace without the sky repainting. Each is its real size and
-          colour: Betelgeuse orange, Rigel blue-white. */}
+      {/* Stars are small glowing points, each on its own layer like the words, so each can
+          twinkle at its own pace without the sky repainting. Each is its real size (the
+          brighter, the bigger), all in one colour: the lyric colour, nearly white. */}
       {sky.stars.map((s, i) => {
         if (!shown(s)) return null
         return (
@@ -344,7 +344,6 @@ function FigureView({ sky, labelPx, gone }) {
             style={{
               transform: skyOffset(s.x, s.y),
               '--d': `${delay(i)}s`,
-              '--star': starColour(s.bv),
               '--r': starRadius(s),
               '--tw': `${2.2 + ((i * 37) % 23) / 10}s`,
               '--tp': `${-((i * 53) % 31) / 10}s`

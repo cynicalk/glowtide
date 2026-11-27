@@ -6,7 +6,7 @@ import {
   pickConstellation,
   placeStars,
   seedOf,
-  starColour,
+  edgePath,
   starRadius,
   FAMOUS,
   VIEW
@@ -239,12 +239,17 @@ test('every figure knows where it is in the sky', () => {
   assert.ok(Math.abs(ori[0] - 83) < 6 && Math.abs(ori[1] - 5) < 8, 'Orion sits on the equator')
 })
 
-test('stars take their real colour and brightness', () => {
-  const rgb = (s) => s.match(/\d+/g).map(Number)
-  const [r1, , b1] = rgb(starColour(-0.03)) // Rigel: blue-white
-  const [r2, , b2] = rgb(starColour(1.85)) // Betelgeuse: orange
-  assert.ok(b1 > r1 && r2 > b2)
-  assert.equal(starColour(null), '#ffffff')
+test('lines stop short of their stars, and never vanish on a short line', () => {
+  const ends = (d) => d.match(/-?[\d.]+/g).map(Number)
+  const [x1, y1, x2, y2] = ends(edgePath({ x: 0, y: 0, mag: 1 }, { x: 300, y: 0, mag: 4 }))
+  assert.ok(x1 > 0 && x2 < 300 && y1 === 0 && y2 === 0, 'a gap at each end')
+  assert.ok(x1 > 300 - x2, 'the brighter star gets the wider gap')
+  const [a, , b] = ends(edgePath({ x: 0, y: 0, mag: -1 }, { x: 12, y: 0, mag: -1 }))
+  assert.ok(b - a >= 4 - 0.01, 'a third of a short line is left')
+  assert.equal(edgePath({ x: 5, y: 5 }, { x: 5, y: 5 }), 'M5 5L5 5')
+})
+
+test('stars take their real brightness', () => {
   assert.ok(starRadius({ mag: -1.46 }) > starRadius({ mag: 4 }), 'Sirius outshines a faint star')
   const ori = placeStars(CONSTELLATIONS.find((c) => c.id === 'Ori'))
   const bright = ori.reduce((a, s) => (s.mag < a.mag ? s : a))
